@@ -5,13 +5,14 @@ import { type ReactNode, Suspense } from 'react';
 import { CookieBanner } from '@/components/legal/CookieBanner';
 import { Footer } from '@/components/shell/Footer';
 import { Header } from '@/components/shell/Header';
+import { LolaFab } from '@/components/shell/LolaFab';
 import { SignedOutNotice } from '@/components/shell/SignedOutNotice';
 import { SupportChat } from '@/components/shell/SupportChat';
 import { accountQueries, cartQueries, siteQueries } from '@/lib/api/queries';
 import { serverApi } from '@/lib/api/server';
 import { getQueryClient } from '@/lib/query/getQueryClient';
 
-/** Storefront chrome: announcement bar, header, department bar, footer and the first-visit cookie banner (not used by /signin and /signup). */
+/** Storefront chrome: announcement bar, header, department bar, footer, the Lola launcher and the first-visit cookie banner (not used by /signin, /signup and /checkout). */
 export async function ShopChrome({ children }: { children: ReactNode }) {
   const api = await serverApi();
   const qc = getQueryClient();
@@ -39,6 +40,7 @@ export async function ShopChrome({ children }: { children: ReactNode }) {
       </main>
       <Footer />
       <SupportChat />
+      <LolaFab />
       <CookieBanner />
     </HydrationBoundary>
   );

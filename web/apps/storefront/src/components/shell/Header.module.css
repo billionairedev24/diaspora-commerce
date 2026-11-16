@@ -42,8 +42,6 @@
 .locText { display: flex; flex-direction: column; line-height: 1.1; }
 .locSmall { font-size: var(--at-text-xs); color: var(--at-color-header-muted); }
 .locMain { font-size: var(--at-text-md); font-weight: var(--at-weight-bold); white-space: nowrap; max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
-.lolaLabel { font-size: var(--at-text-md); font-weight: var(--at-weight-bold); white-space: nowrap; }
-.sparkle { color: var(--at-gold-500); }
 .search { flex: 1 1 auto; min-width: 260px; }
 
 .cartIcon { position: relative; display: flex; padding: 6px 8px 0 0; }
@@ -96,7 +94,7 @@
 
 /* ≤1100px: hide secondary labels (deliver-to text, "Lola") — header stays one row down to ~900px. */
 @media (max-width: 1100px) {
-  .locText, .lolaLabel { display: none; }
+  .locText { display: none; }
   .locBtn { align-items: center; }
 }
 
@@ -116,7 +114,6 @@
 /* Phones: the first row is logo, deliver-to, account and cart (Lola stays one tap away in the department bar). */
 @media (max-width: 599px) {
   .bar { column-gap: var(--at-space-1); }
-  .lolaBtn { display: none; }
 }
 
 /* Touch screens: 44px targets in the department bar (the bar itself scrolls sideways with a finger). */

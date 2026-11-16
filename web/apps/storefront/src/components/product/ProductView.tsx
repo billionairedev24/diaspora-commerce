@@ -2,7 +2,7 @@
 
 import { accountQueries, hasDeliveryWindow, type Offer, pickerDimensions, productQueries, selectedSize } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { Button, CheckCircle, FulfilmentBadge, ImagePlaceholder, MapPin, Price, QuantityStepper, Sparkle, Stars } from '@afrotransact/ui';
+import { Button, CheckCircle, FulfilmentBadge, ImagePlaceholder, MapPin, Price, QuantityStepper, Stars } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -11,7 +11,6 @@ import { useRef, useState } from 'react';
 import { PdpPreorderBanner, PdpPreorderBox, PdpStandardDelivery } from '@/components/preorder/PdpPreorder';
 import { ProductReviews } from '@/components/reviews/ProductReviews';
 import { LocationPicker } from '@/components/shell/LocationPicker';
-import { LolaSheet } from '@/components/shell/LolaSheet';
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { siteQueries } from '@/lib/api/queries';
@@ -63,7 +62,6 @@ export function ProductView({ atin }: { atin: string }) {
   const [qty, setQty] = useState(1);
   const [locOpen, setLocOpen] = useState(false);
   const locRef = useRef<HTMLButtonElement>(null);
-  const [lolaOpen, setLolaOpen] = useState(false);
   const availability = useAvailability(data?.product.preorderEligible);
 
   if (!data) return <p className={styles.notFound}>{t('pdp.notFound')}</p>;
@@ -303,15 +301,11 @@ export function ProductView({ atin }: { atin: string }) {
             <dt>{t('pdp.payment')}</dt>
             <dd>{t('pdp.secure')}</dd>
           </dl>
-          <Button variant="neutral" size="sm" icon={<Sparkle weight="fill" className={styles.sparkle} aria-hidden />} onClick={() => setLolaOpen(true)}>
-            {t('pdp.askLola')}
-          </Button>
         </aside>
       </div>
       {pre && <PdpPreorderBanner live={pre} />}
       <ProductReviews atin={p.atin} title={p.title} />
       <LocationPicker open={locOpen} onOpenChange={setLocOpen} anchorRef={locRef} />
-      <LolaSheet open={lolaOpen} onOpenChange={setLolaOpen} />
     </div>
   );
 }

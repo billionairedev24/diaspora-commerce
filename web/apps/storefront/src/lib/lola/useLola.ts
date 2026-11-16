@@ -80,7 +80,8 @@ export function applyLolaEvent(m: LolaMessage, e: LolaEvent, t: Translator<Messa
       };
     }
     case 'error':
-      return { ...m, error: e.data.detail ?? t('lola.failed'), streaming: false };
+      // A stream that fails (AI budget reached, gateway down) is said plainly; there is never a made-up answer.
+      return { ...m, error: t('lola.unavailable'), streaming: false };
     default:
       return m;
   }
@@ -129,8 +130,13 @@ export function useLola() {
       );
     } catch (e) {
       if (isApiError(e) && e.status === 401) setNeedsSignIn(true);
-      const msg = isApiError(e) ? (e.status === 401 ? t('lola.signIn') : e.message) : t('lola.failed');
-      if (!(e instanceof DOMException && e.name === 'AbortError')) update(answerId, (m) => ({ ...m, error: msg }));
+      // 429 (the AI cap is reached), 5xx and a network failure (the gateway is down) all read the same.
+      const down = !isApiError(e) || e.status === 429 || e.status >= 500;
+      const msg = isApiError(e) && e.status === 401 ? t('lola.signIn') : down ? t('lola.unavailable') : isApiError(e) ? e.message : t('lola.failed');
+      if (!(e instanceof DOMException && e.name === 'AbortError')) {
+        update(answerId, (m) => ({ ...m, error: msg }));
+        setSuggestions([t('lola.chip1'), t('lola.chip2'), t('lola.chip3')]);
+      }
     } finally {
       update(answerId, (m) => ({ ...m, streaming: false }));
       setBusy(false);

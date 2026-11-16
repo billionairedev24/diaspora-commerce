@@ -8,7 +8,6 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { type ReactNode } from 'react';
 
-import { useLolaLauncher } from '@/components/shell/LolaLauncher';
 import { type MessageKey, useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { accountQueries, membershipQueries, shopperQueries } from '@/lib/api/queries';
@@ -35,7 +34,6 @@ export function AccountHome() {
   const t = useT();
   const at = useAccountT();
   const fmt = useFormatters();
-  const lola = useLolaLauncher();
   const api = browserApi();
   const me = useQuery(accountQueries.me(api));
   const credit = useInfiniteQuery(creditQueries.account(api));
@@ -103,8 +101,7 @@ export function AccountHome() {
       title: 'acct.group.help',
       entries: [
         { id: 'help', href: '/account/help', title: 'hub.help', sub: 'hub.helpSub' },
-        { id: 'help-center', href: '/help', title: 'acct.helpCenter', sub: 'acct.helpCenterSub' },
-        { id: 'lola', title: 'hub.lola', sub: 'hub.lolaSub', action: () => lola.open() }
+        { id: 'help-center', href: '/help', title: 'acct.helpCenter', sub: 'acct.helpCenterSub' }
       ]
     }
   ];

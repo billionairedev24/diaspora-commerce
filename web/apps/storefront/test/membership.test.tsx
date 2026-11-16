@@ -207,7 +207,7 @@ describe('the member badge (S323)', () => {
       user: { id: 'u1', firstName: 'Adaeze', lastName: 'Nwosu', email: 'adaeze@example.com', initials: 'AN', roles: ['customer'], backOffices: [] },
       counts: { orders: 2, returns: 1, addresses: 2, paymentMethods: 3 }
     };
-    renderWithProviders(<AccountMenu me={ada} onAskLola={vi.fn()} memberTier="Plus" inline defaultOpen />);
+    renderWithProviders(<AccountMenu me={ada} memberTier="Plus" inline defaultOpen />);
     expect(screen.getByTestId('member-badge')).toHaveTextContent('Plus member');
   });
 });

@@ -3,8 +3,9 @@ import { useRef, useState } from 'react';
 import { expect, screen, waitFor, within } from 'storybook/test';
 
 import { Button } from '../button/Button';
-import { Package, SignOut, Sparkle, User } from '../icons';
+import { ChatCircleDots, Package, SignOut, Sparkle, User } from '../icons';
 import { mobile, rtl } from '../stories.helpers';
+import { ChatPanel } from './ChatPanel';
 import { Dialog, Sheet } from './Dialog';
 import { Menu, MenuGroup, MenuItem, MenuSeparator } from './Menu';
 import { Popover } from './Popover';
@@ -65,6 +66,41 @@ function SheetDemo() {
   );
 }
 export const SheetStory: Story = { name: 'Sheet', render: () => <SheetDemo /> };
+
+function ChatPanelDemo() {
+  const [open, setOpen] = useState(true);
+  return (
+    <>
+      <button type="button" aria-label="Chat with Lola" aria-expanded={open} onClick={() => setOpen(true)} style={{ position: 'fixed', insetBlockEnd: 16, insetInlineEnd: 16, width: 56, height: 56, borderRadius: 999, border: 0, background: 'var(--at-color-action-primary)', color: 'var(--at-color-action-primary-text)' }}>
+        <ChatCircleDots size={30} weight="fill" aria-hidden />
+      </button>
+      <ChatPanel open={open} onOpenChange={setOpen} title="Lola" description="Your AfroTransact shopping assistant" closeLabel="Close chat">
+        <p>Hi, I am Lola. What are we shopping for?</p>
+      </ChatPanel>
+    </>
+  );
+}
+export const ChatPanelStory: Story = {
+  name: 'Chat panel',
+  render: () => <ChatPanelDemo />,
+  play: async ({ canvas, userEvent, step }) => {
+    const panel = await screen.findByRole('dialog', { name: 'Lola' });
+    await step('Esc closes it and focus goes back to the launcher', async () => {
+      await userEvent.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      await expect(canvas.getByRole('button', { name: 'Chat with Lola' })).toHaveFocus();
+    });
+    await step('reopens; focus stays inside', async () => {
+      await userEvent.click(canvas.getByRole('button', { name: 'Chat with Lola' }));
+      const reopened = await screen.findByRole('dialog', { name: 'Lola' });
+      await userEvent.tab();
+      await expect(reopened).toContainElement(document.activeElement as HTMLElement);
+    });
+    void panel;
+  }
+};
+export const ChatPanelMobile: Story = { name: 'Chat panel (mobile)', ...mobile, render: () => <ChatPanelDemo /> };
+export const ChatPanelRtl: Story = { name: 'Chat panel (RTL)', ...rtl, render: () => <ChatPanelDemo /> };
 
 export const MenuStory: Story = {
   name: 'Menu',

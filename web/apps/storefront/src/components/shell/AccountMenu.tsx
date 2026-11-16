@@ -50,7 +50,6 @@ const ICONS: Record<AccountMenuIcon, ReactNode> = {
 
 export interface AccountMenuProps {
   me: Me | undefined;
-  onAskLola: () => void;
   /** The tier name of a member ("Plus"), shown as a badge under the name. */
   memberTier?: string | null;
   /** Render the menu inline (tests). */
@@ -59,7 +58,7 @@ export interface AccountMenuProps {
 }
 
 /** Circular avatar with a dropdown: "Welcome, Guest" (sign in / create account) or the signed-in account menu. */
-export function AccountMenu({ me, onAskLola, inline, defaultOpen, memberTier }: AccountMenuProps) {
+export function AccountMenu({ me, inline, defaultOpen, memberTier }: AccountMenuProps) {
   const t = useT();
   const router = useRouter();
   const pathname = usePathname();
@@ -102,8 +101,7 @@ export function AccountMenu({ me, onAskLola, inline, defaultOpen, memberTier }: 
             count={item.count}
             href={item.external ? item.href : undefined}
             onSelect={() => {
-              if (item.action === 'lola') onAskLola();
-              else if (item.href && !item.external) router.push(item.href);
+              if (item.href && !item.external) router.push(item.href);
             }}
           >
             {t(item.label)}
