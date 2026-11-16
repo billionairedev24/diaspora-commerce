@@ -65,6 +65,7 @@ class AvalaraTaxCalculator implements ProviderTaxCalculator, AutoCloseable {
     private final ProviderFallback fallback;
     private final Clock clock;
 
+    /** The constructor Spring uses: with two constructors and none marked, the container finds no default one and the service does not start. */
     @Autowired
     AvalaraTaxCalculator(TaxReturnsProperties props, InHouseTaxCalculator rules, TaxTelemetry telemetry, Clock clock) {
         this(props.tax().avalara(), props.tax().avalara().configured()

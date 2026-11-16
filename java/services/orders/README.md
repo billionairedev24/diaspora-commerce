@@ -90,6 +90,23 @@ reservation itself was refused), void the order (`CANCELLED` + reason, `orders.o
 `orders.market-disabled`, `orders.delivery-*`, `503 orders.upstream-unavailable`). Same key with a different body ⇒
 `409 orders.idempotency-key-reused`.
 
+### Forced failure of a saga step (local-only fault injection)
+
+Only in the `local` profile, default off, no production class touched (a Temporal worker interceptor, `config/LocalCheckoutFaults.java`;
+it does not exist under `dev`, `uat` or `prod`, proven by `LocalCheckoutFaultsTest`). Set the variables, then restart orders:
+
+| Variable | Meaning |
+|---|---|
+| `AT_ORDERS_FAULT_INJECTION_ENABLED=true` | the switch (default false) |
+| `AT_ORDERS_FAULT_INJECTION_FAIL_BEFORE=CreatePayment` | activity names failed before they run: `Reserve`, `ReserveRunSlot`, `RedeemCoupon`, `CreatePayment`, `PersistPending`, `Place` (comma separated) |
+| `AT_ORDERS_FAULT_INJECTION_FAIL_AFTER=CreatePayment` | failed after they ran (the work is done and the answer is lost) |
+| `AT_ORDERS_FAULT_INJECTION_KIND=UNAVAILABLE` or `REJECTED` | retryable (default: 5 attempts, then `orders.upstream-unavailable`) or not (`orders.upstream-rejected`) |
+| `AT_ORDERS_FAULT_INJECTION_TIMES=1` | how many calls fail (default all) |
+
+Orders logs a WARN line when it is on and one per injected failure. After a forced failure check that the stock is back, the PaymentIntent is
+cancelled (or never created), the coupon is released and the order is `CANCELLED` with the code. Unset the variables and restart when done.
+Proven on Temporal's in-JVM test environment only, not against a real Temporal server.
+
 ## Shipment state machine (S059)
 
 `placed → confirmed → packed → ready → picked_up → in_transit → out_for_delivery → delivered`, plus
