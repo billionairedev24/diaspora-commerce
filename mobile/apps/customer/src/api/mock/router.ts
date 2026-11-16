@@ -28,7 +28,7 @@ function mockCreditEntries() {
 const TAX_RATE = 0.0825;
 
 /** Launch shipping: one flat delivery fee, no carrier named, no express (listing rules D16). */
-function promiseOf(p: FixtureProduct): DeliveryPromise {
+function promiseOf(): DeliveryPromise {
   const fee = LAUNCH_SHIPPING.flatFeeMinor;
   // The mock has no handling time or ship-from to date a package from, so (like the real BFF) it carries no date.
   return { days: 0, label: '', prefix: 'Delivery', free: false, feeMinor: fee, cutoff: null, basis: 'NONE', reason: 'NO_ORIGIN' };
@@ -42,7 +42,7 @@ export function summaryOf(p: FixtureProduct): ProductSummary {
     atin: p.atin, title: p.title, brand: p.sellerName, community: p.community, department: p.department, unit: p.unit, rating: p.rating, reviewCount: p.reviewCount,
     imageUrl: null, offerId: `of_${p.atin}`, priceMinor: p.priceMinor, listPriceMinor: null, currency: 'USD', sellerName: p.sellerName, sellerKind: p.sellerKind,
     sellerCity: p.sellerCity, fulfilment: p.fulfilment, availableQty: p.stock, inStock: p.stock > 0, lowStock: p.stock > 0 && p.stock <= 5, stockStatus: stockStatus(p.stock),
-    delivery: promiseOf(p), offerCount: 1, minOfferPriceMinor: p.priceMinor, sponsor: null
+    delivery: promiseOf(), offerCount: 1, minOfferPriceMinor: p.priceMinor, sponsor: null
   };
 }
 
@@ -59,7 +59,7 @@ function detailOf(p: FixtureProduct): ProductDetail {
   return {
     sizeChart: p.sized ? DRESS_SIZE_CHART : null,
     product: { atin: p.atin, title: p.title, brand: p.sellerName, community: p.community, department: p.department, unit: p.unit, origin: p.sellerCity, bullets: [p.description, p.bestBefore], rating: p.rating, reviewCount: p.reviewCount, images: [{ url: null, alt: p.title }], variants: variantsOf(p) },
-    buyBox: { offerId: `of_${p.atin}`, seller: seller(p), priceMinor: p.priceMinor, listPriceMinor: null, currency: 'USD', fulfilment: p.fulfilment, availableQty: p.stock, stockStatus: stockStatus(p.stock), delivery: promiseOf(p) },
+    buyBox: { offerId: `of_${p.atin}`, seller: seller(p), priceMinor: p.priceMinor, listPriceMinor: null, currency: 'USD', fulfilment: p.fulfilment, availableQty: p.stock, stockStatus: stockStatus(p.stock), delivery: promiseOf() },
     otherOffers: [],
     shipsFrom: p.fulfilment === 'AFROTRANSACT' ? `Shipped by AfroTransact · ${p.shipsFrom}` : `Shipped by ${p.sellerName} · ${p.shipsFrom}`,
     soldBy: p.sellerName,
@@ -108,7 +108,7 @@ function buildCart(): Cart {
       fulfilment: g.p.fulfilment,
       heading: fba ? `Shipped by AfroTransact · ${g.p.shipsFrom}` : `Shipped by ${g.p.sellerName} · ${g.p.shipsFrom}`,
       shipsFrom: g.p.shipsFrom,
-      delivery: promiseOf(g.p),
+      delivery: promiseOf(),
       deliveryOptions: deliveryOptions(g.p, subtotal),
       lines,
       itemCount: lines.reduce((a, l) => a + l.quantity, 0),
