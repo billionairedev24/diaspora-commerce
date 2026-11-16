@@ -17,7 +17,9 @@ Photos: SEED_IMAGES_DIR (your files, named after product slugs or keywords) → 
 Pexels (PEXELS_API_KEY) → Unsplash (UNSPLASH_ACCESS_KEY) → Wikimedia Commons (no key; CC0 / public domain / CC BY /
 CC BY-SA only). Credits: .local/seed/ATTRIBUTION.md. SEED_OFFLINE=1 never downloads.
 
-Service URLs default to infra/local/PORTS.md (CATALOG_URL, OFFERS_URL, INVENTORY_URL, MEDIA_URL, CONTENT_URL,
+Service URLs: STACK=monolith (the default) uses core's single entry, CORE_URL/modules/<module> (:8120), and afrotransact-go
+(:8200: media, geo, BFF flat; cart, search, carrier-gateway under /modules/<name>); STACK=services uses the per-service ports of
+infra/local/PORTS.md. Every one is overridable (CATALOG_URL, OFFERS_URL, INVENTORY_URL, MEDIA_URL, CONTENT_URL,
 DELIVERY_RUNS_URL, SELLER_URL, BOOKINGS_URL, SEARCH_URL; for ops ORDERS_URL, PAYMENTS_URL, RETAIL_URL, FULFILMENT_URL,
 TRUST_OPS_URL, TAX_RETURNS_URL, CART_URL, GEO_URL). Auth: SEED_TOKEN, or SEED_CLIENT_ID / SEED_CLIENT_SECRET
 (client credentials at AUTH_ISSUER_URL); none is needed locally, where services run with security off.
@@ -46,7 +48,7 @@ ENV_NAME_VARIABLES = ("APP_ENV", "ENVIRONMENT", "DEPLOY_ENV", "SPRING_PROFILES_A
 SEEDED_URL_VARIABLES = ("CATALOG_URL", "OFFERS_URL", "INVENTORY_URL", "MEDIA_URL", "CONTENT_URL", "DELIVERY_RUNS_URL",
                         "SELLER_URL", "BOOKINGS_URL", "SEARCH_URL", "ORDERS_URL", "PAYMENTS_URL", "RETAIL_URL",
                         "FULFILMENT_URL", "TRUST_OPS_URL", "TAX_RETURNS_URL", "CART_URL", "GEO_URL",
-                        "CARRIER_GATEWAY_URL", "AUTH_ISSUER_URL", "SEED_TOKEN_URL")
+                        "CARRIER_GATEWAY_URL", "AUTH_ISSUER_URL", "SEED_TOKEN_URL", "BFF_URL", "CORE_URL")
 LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1", "host.docker.internal")
 # Only the shared dev cluster's hosts may ever receive demo data (with SEED_ALLOW_REMOTE=1). The trial environment (test.) never does. Hosts are flat, one label below the zone
 # (infra/cloudflare/hosts.json): dev.<zone> (storefront) and <role>-dev.<zone>. The apex, api., auth., uat, the 8-day trial (test, which runs
@@ -127,6 +129,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.if_empty:
         try:
             if not seeder.catalog_is_empty():
+                lost = seeder.missing_products() if "products" in steps else []
+                if lost:
+                    print(f"seed: {len(lost)} demo product(s) are missing from the catalog ({', '.join(p.key for p in lost[:6])}"
+                          f"{'...' if len(lost) > 6 else ''}): seeding them again (sellers, products, ads, ops)")
+                    return seeder.run(tuple(s for s in ("sellers", "size-charts", "products", "ads", "ops") if s in steps))
                 if "ops" in steps and seeder.ops_missing():
                     print("seed: the catalog has products but no operations data yet (purchase orders, orders, "
                           "dispatch): seeding it (--only ops)")

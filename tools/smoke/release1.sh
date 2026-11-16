@@ -13,7 +13,7 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-STACK="${STACK:-monolith}"
+STACK="${STACK:-services}"
 for tool in curl jq; do command -v "$tool" >/dev/null || { echo "smoke: $tool is required" >&2; exit 2; }; done
 
 # Web apps may have moved off their default ports (.local/web-ports: STOREFRONT_PORT=3000 ...).

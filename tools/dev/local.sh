@@ -1330,7 +1330,9 @@ case "${1:-}" in
     mobile_up; links ;;
   docs) mkdir -p "$LOGS" "$PIDS" "$STATE"; docs_up; storybook_up ;;
   logs) [[ -n "${2:-}" ]] || { echo "usage: $0 logs <service>" >&2; exit 2; }; tail -n 200 -f "$LOGS/$2.log" ;;
-  seed) shift; python3 "$ROOT/tools/seed/seed.py" "$@" ;;
+  seed) shift
+    load_secrets  # .local/secrets.env: a Stripe test key lets the seeder confirm its demo payments (tools/seed/seedlib/stripe_test.py)
+    python3 "$ROOT/tools/seed/seed.py" "$@" ;;
   repair-orgs) cmd_repair_orgs ;;
   reindex) shift; cmd_reindex "$@" ;;
   restart) [[ -n "${2:-}" ]] || { echo "usage: $0 restart <service>" >&2; exit 2; }

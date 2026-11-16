@@ -24,6 +24,7 @@ from typing import Any
 
 from . import dataset as D
 from . import ops_dataset as O
+from . import stripe_test as ST
 from .http import ApiError, Http
 from .users import SignedIn
 
@@ -64,12 +65,22 @@ def items_of(page: Any) -> list[dict[str, Any]]:
     return []
 
 
+class SeedCause(Exception):
+    """A reason an order scenario cannot be placed, shared by every order it hits: `key` groups them (one summary line per
+    cause), `hint` is the exact fix."""
+
+    def __init__(self, key: str, message: str, hint: str = ""):
+        super().__init__(message)
+        self.key, self.message, self.hint = key, message, hint
+
+
 class OpsSeeder:
     """Seeds the operations dataset. `svc` maps service names to Http clients; `signed_in` gives test users' tokens."""
 
     def __init__(self, svc: dict[str, Http], signed_in: SignedIn | None, find_product: Callable[[str], Any],
                  log: Callable[[str], None], add: Callable[[str, str], None], problem: Callable[[str], None],
-                 sleep: Callable[[float], None] = time.sleep, wait: float = 1.0, up: dict[str, bool] | None = None):
+                 sleep: Callable[[float], None] = time.sleep, wait: float = 1.0, up: dict[str, bool] | None = None,
+                 env: dict[str, str] | None = None, stripe_send: ST.Sender = ST._send):
         self.svc, self.users, self.find_product = svc, signed_in, find_product
         self.up = up
         self.log, self.add, self.problem, self.sleep, self.wait = log, add, problem, sleep, wait
@@ -79,6 +90,11 @@ class OpsSeeder:
         self.orders: dict[str, dict[str, Any]] = {}  # order key -> order view
         self.offer_ids: dict[tuple[str, str], str] = {}
         self._local_payments: bool | None = None
+        self.env = env or {}
+        self.stripe_send = stripe_send
+        self.chosen: dict[tuple[str, int], str] = {}  # (order key, package index) -> the delivery option sent
+        self.unplaced: set[str] = set()  # order keys that could not be placed: later steps leave them out
+        self._pay_note = ""
 
     # ------------------------------------------------------------------------------------------------ helpers
     def product(self, key: str) -> dict[str, Any]:
@@ -500,6 +516,10 @@ class OpsSeeder:
     def all_orders(self) -> list[O.Order]:
         return list(O.ORDERS) + [O.SELLER_PICKUP["order"]]
 
+    def live_orders(self) -> list[O.Order]:
+        """The orders that exist (the ones place_orders could not place are reported once there, not at every step)."""
+        return [o for o in self.all_orders() if o.key not in self.unplaced]
+
     def _offer_id(self, line: O.Line) -> str:
         p = next(x for x in D.PRODUCTS if x.key == line.product)
         seller = D.SELLER_BY_KEY[line.seller or p.seller]
@@ -591,20 +611,70 @@ class OpsSeeder:
     def place_orders(self) -> None:
         self.log("  · Orders: the test customers check out")
         self.part("seller pickup offer", self._seller_pickup_offer)
+        causes: dict[str, tuple[str, str, list[str]]] = {}  # cause key -> (message, hint, order keys)
+
+        def blame(key: str, message: str, hint: str, order: O.Order) -> None:
+            causes.setdefault(key, (message, hint, []))[2].append(order.key)
+            self.unplaced.add(order.key)
+
         for order in self.all_orders():
             try:
                 found = self._find_order(order)
                 if found is None:
+                    unfit = self._purchasable(order)
+                    if unfit:
+                        raise unfit
                     found = self._checkout(order)
                     self.add("orders", "placed")
                 else:
                     self.add("orders", "existing")
                 self.orders[order.key] = found
+            except SeedCause as c:
+                blame(c.key, c.message, c.hint, order)
             except (ApiError, ValueError) as e:
-                self.problem(f"order {order.key}: {e}")
+                msg = re.sub(r"AT-\d{4}-\w+", "<order>", str(e))
+                blame("other: " + msg[:120], msg, "", order)
+        # ONE line per cause, not one per order.
+        for message, hint, keys in causes.values():
+            self.problem(f"{len(keys)} order(s) not placed ({', '.join(keys)}): {message}" + (f". Fix: {hint}" if hint else ""))
+        if self.unplaced:
+            self.add("orders", "not placed (see the problems above)", len(self.unplaced))
         if self.orders:
-            self.log("    payments: " + ("the local test stand-in (no Stripe key)" if self.local_payments()
-                                         else "Stripe test mode"))
+            self.log("    payments: " + (self._pay_note or ("the local test stand-in (no Stripe key)" if self.local_payments()
+                                                          else "Stripe test mode")))
+
+    # What an order scenario needs before it can be placed: every product bought is live, taxed and offered.
+    def _purchasable(self, order: O.Order) -> SeedCause | None:
+        for pkg in order.packages:
+            for line in pkg.lines:
+                p = next(x for x in D.PRODUCTS if x.key == line.product)
+                seller = D.SELLER_BY_KEY[line.seller or p.seller]
+                found = self.find_product(p.title)
+                if not found:
+                    return SeedCause(
+                        f"missing:{line.product}", f"{p.title} ({line.product}) is not in the catalog, so the orders that "
+                        "contain it cannot be placed (its create was refused or skipped)",
+                        f"make seed ARGS=\"--only products\" and read the first problem it prints for {line.product}")
+                if found.get("status") != "LIVE":
+                    return SeedCause(
+                        f"not-live:{line.product}", f"{p.title} is {found.get('status')}, not LIVE (moderation or the tax "
+                        "gate holds it)", "approve it in the staff console (Catalog), or make seed ARGS=\"--only products\" "
+                        "(it approves demo products and their tax review)")
+                held = [v.get("atin") for v in found.get("variants") or [] if v.get("taxStatus") not in (None, "READY")]
+                if held:
+                    return SeedCause(
+                        f"tax:{line.product}", f"{p.title} has a tax status other than READY ({', '.join(map(str, held))}): "
+                        "checkout cannot charge it", "make seed ARGS=\"--only products\" (the tax review step approves "
+                        "RESOLVED demo variants); a decision that is not RESOLVED needs a person in Staff > Sales tax")
+                try:
+                    self._offer_id(line)
+                except ValueError:
+                    return SeedCause(
+                        f"offer:{line.product}:{seller.key}", f"{seller.name} has no ACTIVE offer for {p.title} "
+                        f"({line.product}): the product exists but its offer was not created or is withdrawn",
+                        "make seed ARGS=\"--only products\" (creates the offers and stock), then check "
+                        ".local/logs/offers.log")
+        return None
 
     def local_payments(self) -> bool:
         """True when payments run on the local test stand-in (no Stripe key; its PaymentIntents are pi_localtest_…),
@@ -618,6 +688,49 @@ class OpsSeeder:
                     self._local_payments = str(p.get("stripePaymentIntentId") or "").startswith("pi_localtest_")
                     break
         return bool(self._local_payments)
+
+    def _delivery_options(self, h: dict[str, str]) -> dict[str, dict[str, Any]]:
+        """What the checkout offers this cart per package (the BFF's summary, as the storefront reads it): package id ->
+        {"keys": [delivery option keys], "pickup": first pickup point id}. {} when the BFF cannot say."""
+        bff = self.svc.get("bff")
+        if bff is None or (self.up is not None and not self.up.get("bff", True)):
+            return {}
+        try:
+            summary = bff.get("/v1/checkout/summary", headers=dict(h, Accept="application/json")) or {}
+        except ApiError:
+            return {}
+        out = {}
+        for p in summary.get("packages") or []:
+            points = p.get("pickupPoints") or []
+            out[p.get("packageId")] = {"keys": [o.get("key") for o in p.get("deliveryOptions") or []],
+                                       "pickup": (points[0] or {}).get("id") if points else None}
+        return out
+
+    def choose_option(self, pkg: O.Package, offered: dict[str, Any] | None) -> tuple[str, str | None]:
+        """The delivery option to send for a scenario package, from what the checkout offers (`offered`: keys and a pickup
+        point; None when unknown). A parcel scenario ("carrier") uses the carrier only where it is offered (seller carrier
+        shipping is off at launch) and AfroTransact delivery otherwise; "afrotransact_delivery" and "pickup" must be offered;
+        "door" is the pre-order option. Raises SeedCause naming what is allowed."""
+        keys = [k for k in (offered or {}).get("keys") or [] if k]
+        known = offered is not None and bool(keys)
+        want = pkg.option
+        if want == "door":
+            return "door", None
+        if want in ("carrier", "express"):
+            want = "carrier" if (not known or "carrier" in keys) and "carrier" in keys else "afrotransact_delivery"
+        if want == "pickup":
+            point = (offered or {}).get("pickup")
+            if not point:
+                raise SeedCause("pickup:none", "the checkout offers no pickup point for this package",
+                                "turn on the seller's customer pickup in Seller Center, or run the pickups step "
+                                "(make seed ARGS=\"--only pickups\")")
+            return "pickup", point
+        if known and want not in keys:
+            raise SeedCause(f"delivery-options:{want}:{','.join(sorted(keys))}",
+                            f"the checkout does not offer '{want}' for this cart (it offers: {', '.join(keys)})",
+                            "the scenario's delivery option no longer exists: update tools/seed/seedlib/ops_dataset.py "
+                            "(see docs/engineering/delivery-fulfilment.md)")
+        return want, None
 
     def _checkout(self, order: O.Order) -> dict[str, Any]:
         h = self.headers(order.customer)
@@ -635,18 +748,25 @@ class OpsSeeder:
                 pkg_atins.append(atin)
             atins_by_pkg.append(pkg_atins)
         cart = self.svc["cart"].get("/v1/cart", params=loc, headers=h) or cart
+        offered = self._delivery_options(h)
         selections = []
-        for pkg, atins in zip(order.packages, atins_by_pkg):
+        for i, (pkg, atins) in enumerate(zip(order.packages, atins_by_pkg)):
             cp = next((c for c in cart.get("packages") or []
                        if any(ln.get("variantAtin") in atins for ln in c.get("lines") or [])), None)
             if cp is None:
-                raise ValueError(f"{order.key}: the cart has no package for {atins}")
+                raise ValueError(f"the cart has no package for {atins}")
             if order.preorder and not cp["packageId"].startswith("preorder:"):
-                raise ValueError(f"{order.key}: not a pre-order at {address.get('city')} (is the window open?)")
-            selections.append({"packageId": cp["packageId"], "option": pkg.option})
+                raise SeedCause("preorder-closed", f"not a pre-order at {address.get('city')}: the window is not open",
+                                "make seed ARGS=\"--only preorders\"")
+            option, point = self.choose_option(pkg, offered.get(cp["packageId"]) if offered else None)
+            self.chosen[(order.key, i)] = option
+            sel = {"packageId": cp["packageId"], "option": option}
+            if point:
+                sel["pickupLocationId"] = point
+            selections.append(sel)
         body = {"addressId": address["id"], "deliverySelections": selections, "lines": lines,
                 "attribution": {"src": O.SEED_SOURCE, "cr": order.key}}
-        key = f"seed-ops:{order.key}:{stable(repr(lines), 6)}"
+        key = f"seed-ops:{order.key}:{stable(repr(lines) + repr(selections), 6)}"
         for attempt in range(1, 4):
             # The same key replays the same checkout; one that failed (e.g. a service was down) keeps failing under
             # its key, so a new attempt gets a numbered one.
@@ -655,22 +775,54 @@ class OpsSeeder:
                     h, **{"Idempotency-Key": key if attempt == 1 else f"{key}:{attempt}"}))
                 break
             except ApiError as e:
+                if e.code == "orders.invalid-delivery-selection":
+                    raise SeedCause("selection:" + str((e.body or {}).get("detail") if isinstance(e.body, dict) else e),
+                                    "orders refused the delivery selection (" + ", ".join(sel["option"] for sel in selections)
+                                    + "): " + str((e.body or {}).get("detail") if isinstance(e.body, dict) else e),
+                                    "the checkout rules changed: see CheckoutActivitiesImpl.method() and "
+                                    "docs/engineering/delivery-fulfilment.md, then update the scenario in ops_dataset.py") from None
                 if attempt == 3 or e.status not in (409, 422) or e.code == "orders.idempotency-key-reused":
                     raise
         number = view["orderNumber"]
+        stripe_done = False
         for _ in range(10):
             if view.get("status") in ("placed", "failed", "cancelled"):
                 break
             if view.get("status") == "awaiting_payment":
-                view = self.svc["orders"].post(f"/v1/checkout/{number}/confirm", headers=h)  # the test card
+                if not stripe_done:
+                    self._pay_with_test_card(view)
+                    stripe_done = True
+                view = self.svc["orders"].post(f"/v1/checkout/{number}/confirm", headers=h)
             else:
                 self.sleep(self.wait)
                 view = self.svc["orders"].get(f"/v1/checkout/{number}", headers=h)
         if view.get("status") != "placed":
-            raise ValueError(f"{order.key}: checkout {number} ended {view.get('status')} "
-                             f"({view.get('failureMessage') or view.get('reason') or ''})")
+            raise SeedCause(f"payment:{view.get('status')}",
+                            f"checkout ended {view.get('status')} ({view.get('failureMessage') or view.get('reason') or 'no reason given'})",
+                            "payments is in Stripe test mode and the card was not confirmed: put STRIPE_SECRET_KEY (sk_test_) "
+                            "in .local/secrets.env and run make seed (it confirms with pm_card_visa), or run `stripe listen`, "
+                            "or remove the key to use the local stand-in")
         self.log(f"    {number} {order.key}: placed by {order.customer.split('@')[0]}")
         return self.poll(f"order {number}", lambda: self._find_order(order), timeout=20) or view
+
+    def _pay_with_test_card(self, view: dict[str, Any]) -> None:
+        """Stripe TEST mode: confirms the order's PaymentIntent with pm_card_visa (what the storefront does with Stripe.js),
+        so orders can continue without the webhook. The local stand-in (pi_localtest_) needs nothing."""
+        pi = ST.intent_id(view.get("paymentClientSecret") or view.get("clientSecret"))
+        if not pi or ST.is_local_stand_in(pi):
+            return
+        key = ST.test_key(self.env)
+        if key is None:
+            raise SeedCause("payment:no-key", f"payments is in Stripe test mode ({pi[:12]}…) but the seeder has no Stripe "
+                            "test key to confirm it", "put STRIPE_SECRET_KEY=sk_test_… in .local/secrets.env and run make seed "
+                            "(a live key is never used), or run `stripe listen --forward-to localhost:8105/v1/webhooks/stripe`")
+        try:
+            ST.confirm(key, pi, self.stripe_send)
+        except ST.StripeTestError as e:
+            raise SeedCause("payment:stripe", f"confirming the test payment failed: {e}",
+                            "check the key is a Stripe TEST key of the account payments uses, and that api.stripe.com is reachable") from None
+        self._pay_note = "Stripe test mode: the seeder confirms each demo payment with Stripe's test card pm_card_visa"
+        self.add("payments", "confirmed with the Stripe test card")
 
     # ------------------------------------------------------------------------------------------------ fulfilment
     def _order_view(self, order: O.Order) -> dict[str, Any]:
@@ -700,7 +852,7 @@ class OpsSeeder:
         self.log("  · Fulfilment: the FC picks and packs, carriers move parcels, sellers pack their own")
         self._ensure_local_connected_accounts()
         tasks = self._tasks()
-        for order in self.all_orders():
+        for order in self.live_orders():
             try:
                 view = self._order_view(order)
                 for pkg in order.packages:
@@ -727,6 +879,10 @@ class OpsSeeder:
             return
         rank = SHIP_ORDER.index
         local = pkg.option == "afrotransact_delivery"
+        # Parcels go by carrier only where checkout offered it (seller carrier shipping is off at launch): else AfroTransact
+        # delivers or the seller ships, and no carrier label or tracking event exists.
+        method = str(s.get("deliveryMethod") or "").upper()
+        by_carrier = method == "CARRIER" if method else self.chosen.get((order.key, order.packages.index(pkg)), pkg.option) == "carrier"
         stop_at = min(rank(want), rank("ready")) if local else rank(want)
         if s.get("fulfilmentType") == "SELLER_FULFILLED":
             actor = O.SELLER_FULFILMENT_ACTORS.get(s.get("sellerOrgId") or "")
@@ -755,7 +911,7 @@ class OpsSeeder:
                     "picked": {ln["variantAtin"]: ln["quantity"] for ln in task.get("lines") or []}})
             if task["status"] == "PICKED":
                 body: dict[str, Any] = {"weightLb": 2.5 * sum(ln["quantity"] for ln in task.get("lines") or [])}
-                if not local and pkg.tracking:
+                if by_carrier and not local and pkg.tracking:
                     body.update({"carrier": pkg.carrier, "trackingNumber": pkg.tracking})
                 task = fc.post(f"/v1/fc/tasks/{tid}/pack", body)
         if stop_at >= rank("ready") and task["status"] == "PACKED":
@@ -768,6 +924,8 @@ class OpsSeeder:
         for to in ("picked_up", "in_transit", "out_for_delivery", "delivered"):
             if rank(to) > stop_at:
                 break
+            if to == "in_transit" and not by_carrier:
+                continue  # only a carrier's tracking has an in-transit step
             if rank(status) < rank(to):
                 if to == "delivered" and order.settle_early:
                     self._settle_early(view, sid)
@@ -800,7 +958,7 @@ class OpsSeeder:
             self.add("fulfilment centres", "created")
         routes = items_of(fc.get("/v1/dispatch/routes", params={"limit": 200}))
         for key, (name, days, window, vehicle) in O.ROUTES.items():
-            orders = [o for o in self.all_orders() if any(p.route == key for p in o.packages)]
+            orders = [o for o in self.live_orders() if any(p.route == key for p in o.packages)]
             route = next((r for r in routes if r.get("name") == name and r.get("status") != "CANCELLED"), None)
             if route is None:
                 ids = []
@@ -902,7 +1060,7 @@ class OpsSeeder:
         """Puts the waiting return pickups of the seeded DRIVER_PICKUP returns on the returns route."""
         fc = self.svc["fulfilment"]
         numbers = set()
-        for order in self.all_orders():
+        for order in self.live_orders():
             if order.returns and order.returns[0][2] == "DRIVER_PICKUP":
                 _, rma = self._rma(order)
                 if rma:
@@ -959,7 +1117,7 @@ class OpsSeeder:
     # ------------------------------------------------------------------------------------------------ returns, claims
     def returns_and_claims(self) -> None:
         self.log("  · Returns and A-to-z claims")
-        for order in self.all_orders():
+        for order in self.live_orders():
             try:
                 if order.returns:
                     self._return(order)
@@ -1005,7 +1163,7 @@ class OpsSeeder:
     def finish_returns(self) -> None:
         """Driver-collected returns: received at the return centre, inspected, refunded."""
         tr = self.svc["tax-returns"]
-        for order in self.all_orders():
+        for order in self.live_orders():
             if not order.returns or order.returns[0][0] != "REFUNDED":
                 continue
             try:

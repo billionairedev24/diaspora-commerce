@@ -24,8 +24,9 @@ SCOPES = ("catalog:retail catalog:moderate offers:write inventory:receive conten
 class TokenProvider:
     """Caches one token until shortly before it expires. `log` gets one line on how auth was set up."""
 
-    def __init__(self, env: dict[str, str], log: Callable[[str], None]):
+    def __init__(self, env: dict[str, str], log: Callable[[str], None], identity_url: str = "http://localhost:8100"):
         self.env = env
+        self.identity_url = identity_url
         self.log = log
         self._token: str | None = None
         self._expires = 0.0
@@ -67,7 +68,7 @@ class TokenProvider:
         explicit = self.env.get("AUTH_TOKEN_URL", "").strip()
         if explicit:
             return explicit
-        return self.env.get("AUTH_ISSUER_URL", "http://localhost:8100").rstrip("/") + "/oauth2/token"
+        return (self.env.get("AUTH_ISSUER_URL") or self.identity_url).rstrip("/") + "/oauth2/token"
 
     def _fetch(self) -> None:
         cid, secret = self._client()
