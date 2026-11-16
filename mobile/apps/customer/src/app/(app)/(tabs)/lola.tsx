@@ -1,14 +1,16 @@
 /* Lola chat (design: LOLA): pinned header, messages scroll, composer + suggestion chips pinned above the tab bar. */
 import { useRouter } from 'expo-router';
-import { NotePencilIcon as NotePencil, PaperPlaneRightIcon as PaperPlaneRight, SparkleIcon as Sparkle } from 'phosphor-react-native';
+import { MicrophoneIcon as Microphone, MicrophoneSlashIcon as MicrophoneSlash, NotePencilIcon as NotePencil, PaperPlaneRightIcon as PaperPlaneRight, SparkleIcon as Sparkle, StopIcon as Stop } from 'phosphor-react-native';
 import { useRef, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { useSearch } from '@/api/queries';
 import { useAuth } from '@/auth/AuthProvider';
+import { mergeTranscript } from '@/domain/dictation';
 import { LOLA_PROMPTS, lolaGreeting, type LolaReply,lolaReply } from '@/domain/lola';
+import { useDictation } from '@/features/lola/useDictation';
 import { useQuantity } from '@/features/shop/cartHooks';
-import { useFormatters, useT } from '@/i18n';
+import { type MessageKey, useFormatters, useLocale, useT } from '@/i18n';
 import { c, sp, t } from '@/theme';
 import { AppText, Chip, IconButton } from '@/ui/primitives';
 import { Screen } from '@/ui/Screen';
@@ -28,7 +30,10 @@ export default function Lola() {
   const { user } = useAuth();
   const catalogue = useSearch('', 60);
   const [msgs, setMsgs] = useState<Msg[]>([]);
+  const locale = useLocale();
   const [draft, setDraft] = useState('');
+  const dictationBase = useRef('');
+  const dictation = useDictation(locale, (transcript) => setDraft(mergeTranscript(dictationBase.current, transcript)));
   const [typing, setTyping] = useState(false);
   const list = useRef<FlatList<Msg>>(null);
   const all: Msg[] = [{ id: 0, from: 'lola', text: lolaGreeting(user?.first ?? 'there') }, ...msgs];
@@ -36,6 +41,7 @@ export default function Lola() {
   const send = (text: string) => {
     const v = text.trim();
     if (!v || typing) return;
+    dictation.stop();
     setMsgs((m) => [...m, { id: Date.now(), from: 'me', text: v }]);
     setDraft('');
     setTyping(true);
@@ -45,6 +51,12 @@ export default function Lola() {
       list.current?.scrollToEnd({ animated: true });
     }, 700);
   };
+
+  const toggleMic = () => {
+    if (!dictation.listening) dictationBase.current = draft;
+    dictation.toggle();
+  };
+  const micMessage = dictation.listening ? tr('cu.lola.mic.listening') : dictation.reason ? tr(`cu.lola.mic.${dictation.reason}` as MessageKey) : '';
 
   const header = (
     <View style={styles.header}>
@@ -62,8 +74,19 @@ export default function Lola() {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: sp['2'] }}>
         {LOLA_PROMPTS.map((p) => <Chip key={p} label={p} onPress={() => send(p)} />)}
       </ScrollView>
+      {micMessage ? <AppText variant="caption" color={c.textMuted} accessibilityLiveRegion="polite">{micMessage}</AppText> : null}
       <View style={styles.composer}>
-        <TextInput value={draft} onChangeText={setDraft} onSubmitEditing={() => send(draft)} placeholder={tr('cu.lola.messageLola')} placeholderTextColor={c.textSubtle} accessibilityLabel={tr('cu.lola.messageLola')} returnKeyType="send" style={styles.input} />
+        <TextInput value={draft} onChangeText={(v) => { if (dictation.listening) dictation.stop(); setDraft(v); }} onSubmitEditing={() => send(draft)} placeholder={tr('cu.lola.placeholder')} placeholderTextColor={c.textSubtle} accessibilityLabel={tr('cu.lola.messageLola')} returnKeyType="send" style={styles.input} />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={dictation.listening ? tr('cu.lola.mic.stop') : tr('cu.lola.mic.start')}
+          accessibilityHint={dictation.unavailable && micMessage ? micMessage : undefined}
+          accessibilityState={{ selected: dictation.listening, disabled: dictation.unavailable }}
+          onPress={() => { if (!dictation.unavailable) toggleMic(); }}
+          style={[styles.send, { backgroundColor: dictation.listening ? c.danger : t.ink['100'], opacity: dictation.unavailable ? 0.5 : 1 }]}
+        >
+          {dictation.unavailable ? <MicrophoneSlash size={18} color={c.text} /> : dictation.listening ? <Stop size={18} weight="fill" color={c.textInverse} /> : <Microphone size={18} color={c.text} />}
+        </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={tr('cu.lola.send')} onPress={() => send(draft)} style={[styles.send, { backgroundColor: draft.trim() ? c.actionPrimary : t.ink['100'] }]}>
           <PaperPlaneRight size={18} weight="fill" color={c.text} />
         </Pressable>

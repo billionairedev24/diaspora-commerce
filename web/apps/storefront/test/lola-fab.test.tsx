@@ -63,7 +63,8 @@ describe('Lola launcher', () => {
     // Starter questions are real features: orders, delivery to a ZIP code, finding a product.
     expect(within(panel).getByRole('button', { name: 'Track my order' })).toBeInTheDocument();
     expect(within(panel).getByRole('button', { name: 'Delivery to my ZIP code' })).toBeInTheDocument();
-    expect(within(panel).getByRole('button', { name: 'Help me find a product' })).toBeInTheDocument();
+    // The third hint rotates daily through the other capabilities.
+    expect(within(panel).getAllByRole('button').map((b) => b.textContent)).toEqual(expect.arrayContaining([expect.stringMatching(/^(Help me find a product|Jollof for 20|Book knotless braids|Compare prices)$/)]));
     await user.click(within(panel).getByRole('button', { name: 'Close chat' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     await waitFor(() => expect(screen.getByTestId('lola-launcher')).toHaveFocus());

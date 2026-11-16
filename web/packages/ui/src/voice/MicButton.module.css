@@ -1,0 +1,20 @@
+.mic {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--at-size-touch);
+  height: var(--at-size-touch);
+  padding: 0;
+  border: 1px solid var(--at-color-border-strong);
+  border-radius: var(--at-radius-pill);
+  background: var(--at-color-surface);
+  color: var(--at-color-text);
+  font-size: var(--at-text-xl);
+  cursor: pointer;
+}
+.listening { background: var(--at-color-danger); border-color: var(--at-color-danger); color: var(--at-color-surface); }
+.unavailable { opacity: 0.5; cursor: not-allowed; }
+@media (prefers-reduced-motion: no-preference) {
+  .listening { animation: micpulse 1.4s ease-in-out infinite; }
+}
+@keyframes micpulse { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--at-color-danger) 25%, transparent); } }

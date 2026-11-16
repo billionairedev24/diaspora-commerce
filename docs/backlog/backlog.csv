@@ -1682,7 +1682,7 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Rows edited by staff are untouched by the migration
 - CI test fails if production seed data contains fixed community cells
 - ImagePlaceholder no longer shows a striped box for editorial cells on the home","E20","","High","5","home content seed spike","content","In Progress"
-"S424","Story","Seasonal calendar and relevance boosts","Staff-edited season windows (Diwali, Detty December, Eid, back to school) with department or keyword weights that boost module order and rail choice; copy is a locale map; a season never shows a module without eligible products.","- A season in its window raises the matching module's order in the preview and the live page
+"S424","Story","Seasonal calendar and relevance boosts","Staff-edited season windows (Christmas, Easter, Thanksgiving, Detty December, back to school) with department or keyword weights that boost module order and rail choice; copy is a locale map; a season never shows a module without eligible products.","- A season in its window raises the matching module's order in the preview and the live page
 - Outside the window there is no effect
 - Season copy exists for en with fallback and is shown only when the module is eligible
 - Preview as-of date shows next month's order","E20","","High","5","home content spike","content","In Progress"
@@ -2091,3 +2091,10 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Playwright for the order sheet at 1280 and 390 (alignment, axe) run in CI
 - Orders and identity integration tests (Testcontainers) run in CI
 - The seller's responsibility confirmation is stored server-side and a new seller defaults to Fulfilled by AfroTransact","E12","","Highest","8","delivery staff-console orders","delivery","In Review"
+"S499","Story","Lola voice dictation and capability hints","Lola's opening chips and placeholder show what she can do (no festival names); a microphone in the composer dictates with the browser's SpeechRecognition (web) and the OS recogniser (Expo customer app). No audio ever reaches AfroTransact; no transcription endpoint, no cost. Docs: docs/engineering/lola-voice.md.","- Opening chips and input placeholder are capability hints in en, fr, es, ar and yo, server, mocks and mobile; a test fails on festival names
+- Mic button dictates into the input with a live transcript, never auto-sends, Esc and a pause stop it
+- Unsupported browser, denied permission and errors show a one-line reason, mic disabled, typing still works
+- Accessible: aria-pressed, Listening live region, focus kept, reduced motion, RTL, 44px target
+- First-use privacy line in five languages; docs state AfroTransact keeps no audio
+- Mobile customer app dictation with expo-speech-recognition and permission strings; verified on a device
+- Spoken replies and hands-free voice mode documented as a later phase","E21","","Medium","5","ai web mobile voice","ai","In Review"

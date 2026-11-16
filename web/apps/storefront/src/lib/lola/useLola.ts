@@ -46,6 +46,18 @@ const store = {
 let seq = 0;
 const nextId = () => `m${(seq += 1)}`;
 
+const ROTATING_CHIP_KEYS = ['lola.chip3', 'lola.chip4', 'lola.chip5', 'lola.chip6'] as const;
+
+/**
+ * Opening suggestion chips: capability hints. "Track my order" and "Delivery to my ZIP code" always show; the third
+ * rotates daily through find a product, scale a recipe ("Jollof for 20"), book a service and compare prices. The page is
+ * stable within a day (no hydration mismatch) but the hints change (pure; exported for tests).
+ */
+export function openingChips(t: Translator<MessageKey>, now: Date = new Date()): string[] {
+  const day = Math.floor(now.getTime() / 86_400_000);
+  return [t('lola.chip1'), t('lola.chip2'), t(ROTATING_CHIP_KEYS[day % ROTATING_CHIP_KEYS.length] as MessageKey)];
+}
+
 /** Template message; the greeting's text is set in the shopper's language by useLola. */
 export const GREETING: LolaMessage = {
   id: 'greeting', role: 'lola', text: '', tools: [], products: [], proposals: [], handoff: null, streaming: false, error: null
@@ -95,7 +107,7 @@ export function applyLolaEvent(m: LolaMessage, e: LolaEvent, t: Translator<Messa
 export function useLola() {
   const t = useT();
   const [messages, setMessages] = useState<LolaMessage[]>(() => [{ ...GREETING, text: t('lola.greeting') }]);
-  const [suggestions, setSuggestions] = useState<string[]>([t('lola.chip1'), t('lola.chip2'), t('lola.chip3')]);
+  const [suggestions, setSuggestions] = useState<string[]>(() => openingChips(t));
   const [busy, setBusy] = useState(false);
   const [needsSignIn, setNeedsSignIn] = useState(false);
   const abort = useRef<AbortController | null>(null);
@@ -135,7 +147,7 @@ export function useLola() {
       const msg = isApiError(e) && e.status === 401 ? t('lola.signIn') : down ? t('lola.unavailable') : isApiError(e) ? e.message : t('lola.failed');
       if (!(e instanceof DOMException && e.name === 'AbortError')) {
         update(answerId, (m) => ({ ...m, error: msg }));
-        setSuggestions([t('lola.chip1'), t('lola.chip2'), t('lola.chip3')]);
+        setSuggestions(openingChips(t));
       }
     } finally {
       update(answerId, (m) => ({ ...m, streaming: false }));
