@@ -161,6 +161,28 @@ spec:
         - type: ExtensionRef
           extensionRef: {group: gateway.envoyproxy.io, kind: HTTPRouteFilter, name: deny-operational-paths}
 
+    # Release 1 (docs/runbooks/release-1-deploy.md, "Upstream wiring"): after a cutover these Services select a deployable's pods, which serve EVERY module
+    # of the deployable (core: each module flat and under /modules/<m>/; afrotransact-go: /modules/<m>/). Deny the module mount on every prefix and the PRIVATE
+    # mcp-server (POST /mcp, GET /v1/tools, the OAuth protected-resource metadata) on the prefixes that land on core. tools/release/upstreams.py checks both.
+    - matches:
+      - {path: {type: PathPrefix, value: /identity/modules}}
+      - {path: {type: PathPrefix, value: /bookings/modules}}
+      - {path: {type: PathPrefix, value: /fulfilment/modules}}
+      - {path: {type: PathPrefix, value: /media/modules}}
+      - {path: {type: PathPrefix, value: /notifications/modules}}
+      - {path: {type: PathPrefix, value: /carrier-gateway/modules}}
+      - {path: {type: PathPrefix, value: /identity/mcp}}
+      - {path: {type: PathPrefix, value: /identity/v1/tools}}
+      - {path: {type: PathPrefix, value: /identity/.well-known/oauth-protected-resource}}
+      - {path: {type: PathPrefix, value: /bookings/mcp}}
+      - {path: {type: PathPrefix, value: /bookings/v1/tools}}
+      - {path: {type: PathPrefix, value: /bookings/.well-known/oauth-protected-resource}}
+      - {path: {type: PathPrefix, value: /fulfilment/mcp}}
+      - {path: {type: PathPrefix, value: /fulfilment/v1/tools}}
+      - {path: {type: PathPrefix, value: /fulfilment/.well-known/oauth-protected-resource}}
+      filters:
+        - type: ExtensionRef
+          extensionRef: {group: gateway.envoyproxy.io, kind: HTTPRouteFilter, name: deny-operational-paths}
 ---
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: HTTPRouteFilter
@@ -192,6 +214,15 @@ spec:
       - {path: {type: PathPrefix, value: /healthz}}
       - {path: {type: PathPrefix, value: /openapi.yaml}}
       - {path: {type: PathPrefix, value: /v3/api-docs}}
+      filters:
+        - type: ExtensionRef
+          extensionRef: {group: gateway.envoyproxy.io, kind: HTTPRouteFilter, name: deny-operational-paths}
+    # Release 1: the auth host's Service selects core after the cutover; only identity's own paths are for the internet (see the api route above).
+    - matches:
+      - {path: {type: PathPrefix, value: /modules}}
+      - {path: {type: PathPrefix, value: /mcp}}
+      - {path: {type: PathPrefix, value: /v1/tools}}
+      - {path: {type: PathPrefix, value: /.well-known/oauth-protected-resource}}
       filters:
         - type: ExtensionRef
           extensionRef: {group: gateway.envoyproxy.io, kind: HTTPRouteFilter, name: deny-operational-paths}
