@@ -3,14 +3,17 @@ package com.afrotransact.orders.application;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import com.afrotransact.orders.domain.ActorKind;
 import com.afrotransact.orders.domain.CourierProof;
+import com.afrotransact.orders.domain.FulfilmentMode;
 import com.afrotransact.orders.domain.Order;
 import com.afrotransact.orders.domain.OrderLine;
 import com.afrotransact.orders.domain.OrderTotals;
@@ -20,6 +23,7 @@ import com.afrotransact.orders.domain.ShipmentStatus;
 import com.afrotransact.orders.domain.ShipmentTransitionPolicy;
 import com.afrotransact.orders.domain.StatusChange;
 import com.afrotransact.orders.port.HandoverCodeVault;
+import com.afrotransact.orders.port.StaffDirectory;
 import com.afrotransact.platform.web.error.ForbiddenActionException;
 import com.afrotransact.platform.web.error.NotFoundException;
 import org.springframework.stereotype.Component;
@@ -33,15 +37,17 @@ class OrderViews {
     private final ReturnWindowPolicy returnWindows;
     private final OrdersAccess access;
     private final OrdersSettings settings;
+    private final StaffDirectory staff;
     private final Clock clock;
 
     OrderViews(ShipmentTransitionPolicy policy, HandoverCodeVault vault, ReturnWindowPolicy returnWindows,
-               OrdersAccess access, OrdersSettings settings, Clock clock) {
+               OrdersAccess access, OrdersSettings settings, StaffDirectory staff, Clock clock) {
         this.policy = policy;
         this.vault = vault;
         this.returnWindows = returnWindows;
         this.access = access;
         this.settings = settings;
+        this.staff = staff;
         this.clock = clock;
     }
 
@@ -53,8 +59,9 @@ class OrderViews {
                 .collect(Collectors.groupingBy(StatusChange::shipmentId));
         OrderTotals totals = visible.size() == o.shipments().size() ? o.totals() : OrderTotals.ofShipments(visible);
         int count = o.shipments().size();
+        Map<String, String> names = staffNames(viewer, history);
         Function<Shipment, OrderView.ShipmentView> shipmentView = s -> shipment(o, s, count, viewer,
-                byShipment.getOrDefault(s.id(), List.of()));
+                byShipment.getOrDefault(s.id(), List.of()), names);
         boolean staff = viewer.kind() == Viewer.Kind.STAFF;
         return new OrderView(o.id(), o.number(), o.status().name().toLowerCase(Locale.ROOT),
                 viewer.kind() == Viewer.Kind.SELLER ? null : o.customerId(), o.placedAt(), o.createdAt(),
@@ -65,7 +72,33 @@ class OrderViews {
                 viewer.kind() == Viewer.Kind.SELLER ? null : o.origin().attribution());
     }
 
+    /** The names of the staff members behind the history, for staff viewers only; best effort, never fails a view. */
+    private Map<String, String> staffNames(Viewer viewer, List<StatusChange> history) {
+        if (viewer.kind() != Viewer.Kind.STAFF) {
+            return Map.of();
+        }
+        List<String> ids = history.stream().filter(h -> h.actorKind() == ActorKind.DELIVERY_STAFF
+                || h.actorKind() == ActorKind.PLATFORM_ADMIN || h.actorKind() == ActorKind.ADMIN_OVERRIDE
+                || h.actorKind() == ActorKind.FULFILMENT_OPS).map(StatusChange::actorId)
+                .filter(id -> id != null && !id.isBlank()).distinct().toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        try {
+            return staff.people(ids).stream().filter(p -> p.name() != null && !p.name().isBlank())
+                    .collect(Collectors.toMap(StaffDirectory.StaffPerson::id, StaffDirectory.StaffPerson::name,
+                            (a, b) -> a));
+        } catch (RuntimeException ex) {
+            return Map.of();
+        }
+    }
+
     OrderView.ShipmentView shipment(Order order, Shipment s, int count, Viewer viewer, List<StatusChange> history) {
+        return shipment(order, s, count, viewer, history, Map.of());
+    }
+
+    OrderView.ShipmentView shipment(Order order, Shipment s, int count, Viewer viewer, List<StatusChange> history,
+                                    Map<String, String> names) {
         List<String> nextActions = nextActions(order, s, viewer);
         String code = viewer.kind() == Viewer.Kind.CUSTOMER && s.handoverRequired() && s.handoverCodeSealed() != null
                 && !s.status().terminal() ? vault.reveal(s.id(), s.handoverCodeSealed()) : null;
@@ -88,10 +121,11 @@ class OrderViews {
                 s.pickupLocationId(), s.preferences(), s.perishable(), s.handoverRequired(), code, s.status().wire(),
                 units + (units == 1 ? " item" : " items"), s.itemsMinor(), s.shippingMinor(), s.taxMinor(),
                 s.totalMinor(), s.carrier(), s.trackingNumber(), s.promisedFrom(), s.promisedBy(), s.deliveredAt(),
-                s.captured(), cancellable, cancellableUntil, nextActions,
+                s.captured(), cancellable, cancellableUntil, nextActions, overrideActions(s, viewer),
                 s.lines().stream().map(OrderViews::line).toList(),
                 history.stream().map(h -> new OrderView.TimelineEntry(h.from() == null ? null : h.from().wire(),
-                        h.to().wire(), h.actorKind().name(), h.source().wire(), h.reason(), h.occurredAt(), proofOf(h.proof(), viewer.kind() == Viewer.Kind.STAFF))).toList(),
+                        h.to().wire(), h.actorKind().name(), h.source().wire(), h.reason(), h.occurredAt(), proofOf(h.proof(), viewer.kind() == Viewer.Kind.STAFF),
+                        names.get(h.actorId()))).toList(),
                 returnable, windowEnds, returnWindows.problemReportOnly(s), links,
                 s.localDelivery() == null ? null : new OrderView.LocalDeliveryView(
                         s.localDelivery().shipFromLocationId(), s.localDelivery().distanceMiles(),
@@ -140,25 +174,54 @@ class OrderViews {
     }
 
     private List<String> nextActions(Order order, Shipment s, Viewer viewer) {
-        ActorKind actor = switch (viewer.kind()) {
-            case CUSTOMER -> ActorKind.CUSTOMER;
-            case SELLER -> ActorKind.SELLER;
-            case STAFF -> {
-                if (order == null) {
-                    yield null;
-                }
-                try {
-                    yield access.transitionActor(order, s).kind();
-                } catch (ForbiddenActionException | NotFoundException ex) {
-                    yield null;
-                }
-            }
+        Set<ShipmentStatus> next = switch (viewer.kind()) {
+            case CUSTOMER -> policy.nextFor(s, ActorKind.CUSTOMER);
+            case SELLER -> policy.nextFor(s, ActorKind.SELLER);
+            case STAFF -> staffNext(order, s);
         };
-        if (actor == null) {
+        return sorted(next);
+    }
+
+    /**
+     * What this staff member may set now. By mode: AfroTransact-delivered shipments offer the delivery steps (to holders
+     * of delivery:manage; everything else there is cancelling), seller-shipped shipments only cancelling (the seller
+     * moves them, an override is separate), pickup shipments ready, collected and not collected.
+     */
+    private Set<ShipmentStatus> staffNext(Order order, Shipment s) {
+        Set<ShipmentStatus> out = EnumSet.noneOf(ShipmentStatus.class);
+        if (order != null) {
+            try {
+                out.addAll(policy.nextFor(s, access.transitionActor(order, s).kind()));
+            } catch (ForbiddenActionException | NotFoundException ex) {
+                // not an order-status role: only the delivery steps below may apply
+            }
+        }
+        if (!access.humanStaff()) {
+            return out;
+        }
+        if (s.fulfilmentMode().staffDelivers()) {
+            out.removeIf(to -> DeliverySteps.isStep(s, to));
+            if (access.holds(OrdersPermissions.DELIVERY_MANAGE)) {
+                out.addAll(policy.nextFor(s, ActorKind.DELIVERY_STAFF));
+            }
+        } else if (s.fulfilmentMode() == FulfilmentMode.SELLER_SHIPS) {
+            out.retainAll(EnumSet.of(ShipmentStatus.CANCELLED));
+        }
+        return out;
+    }
+
+    /** What an override may set (staff holding orders:override-shipment, on a seller-shipped shipment). */
+    private List<String> overrideActions(Shipment s, Viewer viewer) {
+        if (viewer.kind() != Viewer.Kind.STAFF || !access.humanStaff()
+                || !access.holds(OrdersPermissions.OVERRIDE_SHIPMENT)) {
             return List.of();
         }
-        return policy.nextFor(s, actor).stream().sorted(Comparator.comparingInt(ShipmentStatus::rank))
-                .map(ShipmentStatus::wire).toList();
+        return sorted(policy.nextFor(s, ActorKind.ADMIN_OVERRIDE));
+    }
+
+    private static List<String> sorted(Set<ShipmentStatus> statuses) {
+        return statuses.stream().sorted(Comparator.comparingInt(ShipmentStatus::rank)
+                .thenComparingInt(ShipmentStatus::ordinal)).map(ShipmentStatus::wire).toList();
     }
 
     private static OrderView.LineView line(OrderLine l) {

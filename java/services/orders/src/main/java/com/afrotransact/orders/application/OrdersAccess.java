@@ -272,6 +272,12 @@ class OrdersAccess {
         return new TransitionActor(ActorKind.ADMIN_OVERRIDE, actor.subject(), null);
     }
 
+    /** True when the current caller holds {@code permission} (a super admin holds them all). */
+    boolean holds(String permission) {
+        Actor actor = actors.current();
+        return superAdmin(actor) || actor.can(permission);
+    }
+
     /** True for a person at the staff console (a staff member or a super admin), not a seller, service or driver. */
     boolean humanStaff() {
         Actor actor = actors.current();

@@ -46,7 +46,10 @@ public record OrderView(String id, String orderNumber, String status, String cus
      * @param label            "Shipment 1 of 2 · Seller"
      * @param handoverCode     4-digit code to give the driver (only in the customer's own view)
      * @param cancellable      the customer may still cancel it (before packed)
-     * @param nextActions      statuses the viewer may move it to now
+     * @param nextActions      statuses the viewer may move it to now (a staff member sees the delivery steps of an
+     *                         AfroTransact-delivered shipment when they hold delivery:manage)
+     * @param overrideActions  statuses a staff member holding orders:override-shipment may force on a seller-shipped
+     *                         shipment (empty for everyone else)
      * @param timeline         status history, oldest first
      * @param returnable       delivered and inside the return window of at least one returnable line (a hint for
      *                         "Return or replace items"; tax-returns decides per line)
@@ -63,7 +66,7 @@ public record OrderView(String id, String orderNumber, String status, String cus
                                String items, long itemsMinor, long shippingMinor, long taxMinor, long totalMinor,
                                String carrier, String trackingNumber, LocalDate promisedFrom, LocalDate promisedBy,
                                Instant deliveredAt, boolean captured, boolean cancellable, Instant cancellableUntil,
-                               List<String> nextActions,
+                               List<String> nextActions, List<String> overrideActions,
                                List<LineView> lines, List<TimelineEntry> timeline, boolean returnable,
                                Instant returnWindowEndsAt, boolean problemReportOnly, ReturnLinks returns,
                                LocalDeliveryView localDelivery, PreorderView preorder,
@@ -135,9 +138,12 @@ public record OrderView(String id, String orderNumber, String status, String cus
                            String productType) {
     }
 
-    /** One status change. */
+    /**
+     * One status change. {@code actorName} is the staff member's name for a change made at the staff console and is
+     * only filled for staff viewers (customers and sellers never see staff names).
+     */
     public record TimelineEntry(String from, String to, String actorType, String source, String reason,
-                                Instant at, DeliveryProof proof) {
+                                Instant at, DeliveryProof proof, String actorName) {
     }
 
     /**
