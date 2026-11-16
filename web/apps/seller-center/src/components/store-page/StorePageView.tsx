@@ -82,6 +82,22 @@ function Segmented<T extends string | number>({ label, value, options, onChange,
   );
 }
 
+/** The preview could not be built. A missing store (404) is said in plain words; anything else uses the shared error state. Always offers Retry. */
+function PreviewError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+  if (isApiError(error) && error.status === 404) {
+    return (
+      <div role="alert" className="flex flex-col items-center gap-3 rounded-md border border-border bg-surface px-6 py-10 text-center" data-testid="store-preview-missing">
+        <strong className="text-lg">We could not show your preview</strong>
+        <p className="m-0 max-w-[60ch] text-sm text-muted">Your store page could not be found. Your changes are safe. Try again in a moment, and if it keeps happening contact support.</p>
+        <Button variant="neutral" size="sm" onClick={onRetry}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
+  return <ErrorState error={error} onRetry={onRetry} />;
+}
+
 /** Settings > Store page: the look of a seller's or provider's branded page, with a live preview, Publish and Unpublish. A provider's has its own sections (services, booking, schedule, team) and no product ones. */
 export function StorePageView() {
   const api = sellerApi();
@@ -461,8 +477,10 @@ export function StorePageView() {
         <h2 className="m-0 text-lg font-semibold">Preview</h2>
         <Segmented label="Preview size" value={width} options={[{ id: 'desktop' as const, name: 'Desktop' }, { id: 'mobile' as const, name: 'Phone' }]} onChange={setWidth} />
       </div>
-      <p className="m-0 text-xs text-muted">This is your real page with your unsaved changes. Buttons are switched off here.</p>
-      {preview.data ? <StorePagePreview preview={preview.data} config={draft} brandColour={brandColour} width={width} /> : preview.isError ? <ErrorState error={preview.error} onRetry={() => void preview.refetch()} /> : <Spinner />}
+      <p className="m-0 text-xs text-muted" data-testid="store-preview-note">
+        <strong>Preview, not published.</strong> This is your page as it looks now, with your unsaved changes. Buttons are switched off here.
+      </p>
+      {preview.data ? <StorePagePreview preview={preview.data} config={draft} brandColour={brandColour} width={width} /> : preview.isError ? <PreviewError error={preview.error} onRetry={() => void preview.refetch()} /> : <Spinner />}
     </div>
   );
 

@@ -787,7 +787,7 @@ const BusinessPageBody = z.object({ description: z.string().max(2000).default(''
 function businessPage(ctx: Ctx): BusinessPageSettings {
   const p = ctx.db.businessPage[ctx.org.id];
   const slug = ctx.org.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  return { name: ctx.org.name, slug: slug || null, description: p?.description || null, brandColor: p?.brandColor || null, logoUrl: p?.logoUrl || null,
+  return { name: ctx.org.name, slug: ctx.db.noPageAddress ? null : slug || null, description: p?.description || null, brandColor: p?.brandColor || null, logoUrl: p?.logoUrl || null,
     contactEmail: ctx.db.user.email, canEdit: allows(ctx.org.kind, ctx.role, 'team', 'EDIT') };
 }
 
@@ -2853,7 +2853,7 @@ export const sellerHandlers = [
     route((ctx) => {
       storeAccess(ctx, 'VIEW');
       const v = storePageView(ctx);
-      return buildStorefront({ kind: storeKind(ctx), providerKey: providerKeyForOrg(ctx.org.id), slug: v.slug!, name: v.name, logoUrl: v.logoUrl, description: ctx.db.businessPage[ctx.org.id]?.description || null, contactEmail: v.contactEmail, sinceYear: 2025, config: v.draft, preview: true }, ctx.now);
+      return buildStorefront({ kind: storeKind(ctx), providerKey: providerKeyForOrg(ctx.org.id), slug: v.slug ?? '', name: v.name, logoUrl: v.logoUrl, description: ctx.db.businessPage[ctx.org.id]?.description || null, contactEmail: v.contactEmail, sinceYear: 2025, config: v.draft, preview: true }, ctx.now);
     })
   ),
   http.get(`${W}/store-page/featured-search`, route((ctx) => { storeAccess(ctx, 'VIEW'); return { items: searchStoreProducts(storeSlug(ctx), new URL(ctx.request.url).searchParams.get('q') ?? '', ctx.now) }; })),

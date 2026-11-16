@@ -15,12 +15,28 @@ export function asRole(r: string | null): void {
   role = r;
 }
 
+let previewFailures = 0;
+
+/** The next `times` calls to the store page preview answer the BFF's 404 "Store not found" (a test of the error state and Retry). */
+export function failStorePreview(times: number): void {
+  previewFailures = times;
+}
+
 export function mockApi(): SellerApiClient {
   return createSellerApiClient({
     baseUrl: 'http://seller.test/api/bff',
     headers: role ? { cookie: `${MOCK_ROLE_COOKIE}=${role}` } : {},
     fetch: (req) => {
       seen(req);
+      if (previewFailures > 0 && new URL(req.url).pathname.endsWith('/store-page/preview')) {
+        previewFailures -= 1;
+        return Promise.resolve(
+          new Response(JSON.stringify({ status: 404, code: 'NOT_FOUND', title: 'Store not found', detail: 'There is no store at this address.' }), {
+            status: 404,
+            headers: { 'Content-Type': 'application/problem+json' }
+          })
+        );
+      }
       return handleSellerMockRequest(req);
     }
   });
