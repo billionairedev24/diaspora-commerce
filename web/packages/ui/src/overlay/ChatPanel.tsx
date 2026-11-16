@@ -17,6 +17,8 @@ export interface ChatPanelProps {
   /** Replaces the plain title row (avatar and name). The title stays available to screen readers. */
   header?: ReactNode;
   closeLabel?: string;
+  /** Called when Esc is pressed; `preventDefault()` keeps the panel open (the composer uses it to stop dictation first). */
+  onEscapeKeyDown?: (event: KeyboardEvent) => void;
   className?: string;
   children?: ReactNode;
 }
@@ -26,13 +28,13 @@ export interface ChatPanelProps {
  * Esc to close and focus returned to the launcher. From 641px it is a card (the page behind stays undimmed); on phones it is
  * a full-height sheet, safe-area aware. Placement uses logical properties, so it sits bottom-left in right-to-left languages.
  */
-export function ChatPanel({ open, onOpenChange, title, description, header, closeLabel = 'Close', className, children }: ChatPanelProps) {
+export function ChatPanel({ open, onOpenChange, title, description, header, closeLabel = 'Close', onEscapeKeyDown, className, children }: ChatPanelProps) {
   const returnFocus = useReturnFocus(open);
   return (
     <Root open={open} onOpenChange={onOpenChange} modal>
       <Portal>
         <Overlay className={styles.overlay} />
-        <Content className={cx(styles.panel, className)} onCloseAutoFocus={returnFocus} data-testid="chat-panel">
+        <Content className={cx(styles.panel, className)} onCloseAutoFocus={returnFocus} onEscapeKeyDown={onEscapeKeyDown} data-testid="chat-panel">
           <div className={styles.head}>
             {header}
             <Title className={header ? 'at-visually-hidden' : styles.title}>{title}</Title>

@@ -85,6 +85,8 @@ const config: ExpoConfig = {
     'expo-web-browser',
     ['expo-local-authentication', { faceIDPermission: 'Use Face ID to unlock AfroTransact and confirm payments over $100.' }],
     ['expo-notifications', { enableBackgroundRemoteNotifications: false }],
+    // Lola dictation: the phone's own speech recogniser (docs/engineering/lola-voice.md). Audio never reaches AfroTransact.
+    ['expo-speech-recognition', { microphonePermission: 'AfroTransact uses the microphone only while you dictate a message to Lola. No audio is stored.', speechRecognitionPermission: 'AfroTransact uses speech recognition to turn your dictation into text for Lola. Apple may process the audio; AfroTransact keeps none.' }],
     // Source maps + native debug symbols upload during EAS builds only when SENTRY_AUTH_TOKEN is set (CI secret);
     // SENTRY_ORG / SENTRY_PROJECT / SENTRY_URL name the (Sentry-compatible) project. Without a token nothing is uploaded.
     ['@sentry/react-native/expo', { organization: process.env.SENTRY_ORG, project: process.env.SENTRY_PROJECT, url: process.env.SENTRY_URL }],

@@ -1,14 +1,14 @@
 'use client';
 
 import { cartKeys, isApiError, type LolaProductCard, type LolaProposal } from '@afrotransact/api-client';
-import { useFormatters } from '@afrotransact/i18n/react';
-import { Button, buttonClassName, ChatPanel, CheckCircle, CircleNotch, Headset, PaperPlaneRight, Sparkle, useToast } from '@afrotransact/ui';
+import { useFormatters, useLocale } from '@afrotransact/i18n/react';
+import { Button, buttonClassName, ChatPanel, CheckCircle, CircleNotch, dictationLang, Headset, MicButton, PaperPlaneRight, Sparkle, useDictation, useToast } from '@afrotransact/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 
-import { useT } from '@/i18n/t';
+import { type MessageKey, useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { productHref, signInHref } from '@/lib/links';
 import { type LolaMessage, useLola } from '@/lib/lola/useLola';
@@ -20,6 +20,15 @@ interface ProposalLine {
   offerId?: string;
   quantity?: number;
 }
+
+const MIC_NOTICE_KEY = 'at_lola_mic_notice';
+const micNoticeSeen = (): boolean => {
+  try {
+    return localStorage.getItem(MIC_NOTICE_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
 
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
 
@@ -166,7 +175,16 @@ function Answer({ m, onSettle }: { m: LolaMessage; onSettle: (proposalId: string
 export function LolaSheet({ open, onOpenChange, prompt, onPromptSent }: { open: boolean; onOpenChange: (o: boolean) => void; prompt?: string | null; onPromptSent?: () => void }) {
   const t = useT();
   const { messages, suggestions, busy, needsSignIn, send, settle } = useLola();
+  const locale = useLocale();
   const [input, setInput] = useState('');
+  const [micNotice, setMicNotice] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dictationBase = useRef('');
+  const dictation = useDictation({
+    lang: dictationLang(locale),
+    onTranscript: (transcript) => setInput([dictationBase.current, transcript].filter(Boolean).join(' '))
+  });
+  const wasListening = useRef(false);
   const pathname = usePathname();
   const end = useRef<HTMLDivElement>(null);
 
@@ -180,8 +198,37 @@ export function LolaSheet({ open, onOpenChange, prompt, onPromptSent }: { open: 
     end.current?.scrollIntoView({ block: 'end' });
   }, [messages]);
 
+  // When dictation ends the text stays in the box for the shopper to edit; focus goes to it. It is never sent automatically.
+  useEffect(() => {
+    if (wasListening.current && !dictation.listening) inputRef.current?.focus();
+    wasListening.current = dictation.listening;
+  }, [dictation.listening]);
+  const stopDictation = dictation.stop;
+  useEffect(() => {
+    if (!open) stopDictation();
+  }, [open, stopDictation]);
+
+  const toggleMic = () => {
+    if (!dictation.listening) {
+      dictationBase.current = input.trim();
+      if (!micNoticeSeen()) setMicNotice(true);
+    }
+    dictation.toggle();
+  };
+  const dismissMicNotice = () => {
+    setMicNotice(false);
+    try {
+      localStorage.setItem(MIC_NOTICE_KEY, '1');
+    } catch {
+      /* the notice shows again next time */
+    }
+  };
+  const micReason = dictation.reason ? t(`lola.mic.${dictation.reason}` as MessageKey) : '';
+  const micMessage = dictation.listening ? t('lola.mic.listening') : micReason;
+
   const submit = (e: FormEvent) => {
     e.preventDefault();
+    dictation.stop();
     const text = input;
     setInput('');
     void send(text);
@@ -192,6 +239,13 @@ export function LolaSheet({ open, onOpenChange, prompt, onPromptSent }: { open: 
       open={open}
       onOpenChange={onOpenChange}
       closeLabel={t('lola.close')}
+      onEscapeKeyDown={(e) => {
+        // Esc first stops dictation; a second Esc closes the panel.
+        if (dictation.listening) {
+          e.preventDefault();
+          dictation.stop();
+        }
+      }}
       title={t('lola.title')}
       description={t('lola.subtitle')}
       header={
@@ -234,14 +288,38 @@ export function LolaSheet({ open, onOpenChange, prompt, onPromptSent }: { open: 
             ))}
           </div>
         )}
+        {micNotice && (
+          <p className={styles.micNotice} data-testid="mic-notice">
+            <span>{t('lola.mic.notice')}</span>
+            <button type="button" className={styles.micNoticeOk} onClick={dismissMicNotice}>
+              {t('lola.mic.noticeOk')}
+            </button>
+          </p>
+        )}
+        <p className={styles.micStatus} role="status" aria-live="polite" data-testid="mic-status">
+          {micMessage}
+        </p>
         <form className={styles.compose} onSubmit={submit}>
           <input
+            ref={inputRef}
             className={styles.input}
+            dir="auto"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              if (dictation.listening) dictation.stop();
+              setInput(e.target.value);
+            }}
             placeholder={t('lola.placeholder')}
             aria-label={t('lola.inputAria')}
             maxLength={4000}
+          />
+          <MicButton
+            listening={dictation.listening}
+            unavailable={dictation.unavailable}
+            onToggle={toggleMic}
+            startLabel={t('lola.mic.start')}
+            stopLabel={t('lola.mic.stop')}
+            reason={dictation.unavailable ? micReason : null}
           />
           <button type="submit" className={styles.send} disabled={busy || !input.trim()} aria-label={t('lola.send')}>
             <PaperPlaneRight weight="fill" aria-hidden />

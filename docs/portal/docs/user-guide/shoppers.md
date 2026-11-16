@@ -70,3 +70,10 @@ You can always choose pickup instead.
 - **Not delivered / wrong item:** open the order and start a return or claim.
 - **Dispute with a seller:** use *Report a problem* on the order; staff step in if you and the seller cannot agree.
 - **Anything else:** chat with Lola (the assistant) any time, or contact support on the Help Center page.
+
+### Talking to Lola
+
+Tap the microphone next to the message box and speak; your words appear in the box as you talk. Tap it again (or press Esc, or just pause)
+to stop, fix anything, then press Send: Lola never sends a dictated message for you. Your browser or device converts speech to text; with
+some browsers audio is sent to the browser vendor's speech service. AfroTransact keeps no audio. If your browser has no speech
+recognition (for example Firefox) or microphone access is blocked, the button is greyed out and says why; typing always works.

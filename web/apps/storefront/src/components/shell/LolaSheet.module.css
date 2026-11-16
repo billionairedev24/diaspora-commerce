@@ -34,3 +34,8 @@
 @keyframes lolaspin { to { transform: rotate(360deg); } }
 @keyframes lolablink { 50% { opacity: 0; } }
 @keyframes lolapulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+
+.micStatus { margin: 0; font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
+.micStatus:empty { display: none; }
+.micNotice { margin: 0; display: flex; gap: var(--at-space-2); align-items: center; justify-content: space-between; padding: var(--at-space-2) var(--at-space-3); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-sm); background: var(--at-color-surface-muted); font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
+.micNoticeOk { flex: none; min-height: var(--at-size-touch); padding: 0 var(--at-space-3); border: 0; background: transparent; color: var(--at-color-action-secondary); font: inherit; font-weight: var(--at-weight-semibold); cursor: pointer; }
