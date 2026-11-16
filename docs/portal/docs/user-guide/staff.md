@@ -14,6 +14,20 @@ applications waiting for review). Choose **7**, **30** or **90 days** at the top
 that is empty shows a short prompt instead of zeros, and a section whose data could not be loaded offers **Try again**.
 Reports with PDF, Excel and CSV export are below the sections.
 
+## Move an order's shipment (Orders & shipments)
+
+Open an order. Each shipment says who fulfils it, and **Set status** offers only what you can do:
+
+- **Fulfilled by AfroTransact** (AfroTransact collects it from the seller, or sends it from the warehouse, and delivers it). With the **delivery permission** you pick it up
+  (**Picked up from the seller**, with an optional note), optionally mark it in transit, out for delivery, then **Delivered**. Delivered asks for a **photo** (and, if you
+  like, who received it and a note) and the customer sees it on their order. If it cannot be delivered, record **Delivery failed** with a reason, then try again or **Return to the seller**.
+  These are the same steps as the **Delivery** page. You cannot skip a step; each change keeps your name, the time and your note.
+- **Seller pickup**: **Ready for pickup**, **Collected** (the customer's 4-digit code, or a reason) or **Not collected** (a reason).
+- **Seller ships**: the seller updates it. The menu says "Updated by the seller". Only people with the special override permission see **Override status**; it only moves forward and needs a reason.
+
+If a step is greyed, the reason is beside it: "You need the delivery permission", "Updated by the seller", "Not available for pickup orders" or "Finish earlier steps first".
+**Delivery dispatch** and **Delivery quotes** are marked "Not in use" while AfroTransact does not use drivers. See [delivery and fulfilment modes](../../../engineering/delivery-fulfilment.md).
+
 ## Review a seller application
 
 Open **Applications** and pick one. The page shows the business, documents, Stripe verification and the timeline.
