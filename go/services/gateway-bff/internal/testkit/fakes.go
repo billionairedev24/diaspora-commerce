@@ -104,6 +104,9 @@ type Options struct {
 	SellerPending bool
 	// SellerPublishableKey is the Stripe publishable key the BFF hands to Connect.js for the onboarding wizard.
 	SellerPublishableKey string
+	// SellerNoPageAddress makes the seller's and the provider's business page have no address yet (it is made when the payout
+	// account is set up), the state in which the store page preview must still work.
+	SellerNoPageAddress bool
 }
 
 // Upstreams is one httptest server playing every upstream the BFF calls.

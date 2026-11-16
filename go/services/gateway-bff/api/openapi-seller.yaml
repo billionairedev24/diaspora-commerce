@@ -688,7 +688,7 @@ paths:
       operationId: previewStorePage
       security: [{sessionCookie: []}]
       summary: The storefront built from the DRAFT, for the live preview
-      description: Same shape as the public `GET /v1/storefronts/{slug}`, but from the draft and for the signed-in organisation only (works before publishing). Not cached.
+      description: Same shape as the public `GET /v1/storefronts/{slug}`, but from the draft and for the signed-in organisation only (works before publishing and before the page address exists: `slug` is then empty; nothing is looked up by address, so another store is never reachable here). Not cached. 404 only when the organisation itself is not found.
       responses:
         '200': {description: Storefront, content: {application/json: {schema: {$ref: '#/components/schemas/Storefront'}}}}
         '401': {$ref: '#/components/responses/Problem'}

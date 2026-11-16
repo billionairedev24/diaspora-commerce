@@ -202,7 +202,9 @@ func (s *sellerStorePageImpl) Audit(ctx context.Context, c *domain.Caller) (doma
 	return out, nil
 }
 
-// Preview is the storefront built from the DRAFT, for the live preview and the quick check before Publish.
+// Preview is the storefront built from the DRAFT, for the live preview and the quick check before Publish. It is the caller's
+// own organisation only (resolved from the token, never from a parameter) and is never reachable by address; publishing still
+// needs the address (CanPublish).
 func (s *sellerStorePageImpl) Preview(ctx context.Context, c *domain.Caller) (domain.Storefront, error) {
 	sc, err := s.access(ctx, c, domain.LevelView)
 	if err != nil {
@@ -216,9 +218,8 @@ func (s *sellerStorePageImpl) Preview(ctx context.Context, c *domain.Caller) (do
 	if err != nil {
 		return domain.Storefront{}, mapErr("seller", err)
 	}
-	if bp.Slug == "" {
-		return domain.Storefront{}, storefrontNotFound(nil)
-	}
+	// The preview never looks the store up by address: it is built from the caller's own organisation and draft, so it works
+	// before the page address exists (made when the payout account is set up) and before the first publish. Slug may be "".
 	return s.store.Build(ctx, StorefrontSource{Kind: storeKind(sc), OrgID: sc.org.ID, Slug: bp.Slug, Name: bp.Name, Description: bp.Description, LogoURL: bp.LogoURL,
 		ContactEmail: bp.ContactEmail, Config: s.decode(up.Draft, storeKind(sc)), Preview: true})
 }
