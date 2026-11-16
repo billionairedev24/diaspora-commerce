@@ -45,4 +45,4 @@ themselves (`SELLER_SHIPS`), forward only, with a required reason, audited.
    on with a reason. For one person: People > the person > *Grant a permission directly*. Both are in the change log.
 3. The check is on the server (orders-service `OrdersAccess.overrideActor`) and in gateway-bff, which only shows the
    **Override status** action to holders. Without it the order sheet says "Seller ships this order" and offers nothing.
-4. Mock BFF catalogue: `python3 tools/identity/gen_access_fixture.py` (already run for V52).
+4. Mock BFF catalogue: the V52 permission was added by hand to `web/packages/api-client/src/mocks/staff/access-catalogue.ts` (running `tools/identity/gen_access_fixture.py` today also pulls in unrelated drift), and Super Admin gets it in `mocks/staff/model.ts`.
