@@ -9,6 +9,13 @@ and `design/AfroTransact Architecture.dc.html` for the architecture. The backlog
 `docs/backlog/backlog.csv` (Jira import format) — set a story's `Status` to `Done` when its
 acceptance criteria are met and verified.
 
+## One product, three branches
+
+`main`, `develop` and `release-1` are **functionally identical**: same features, behaviour, contracts, data model, UI, copy and tests. The only
+difference is architecture: `main` and `develop` run every service as its own deployable (microservices), `release-1` runs the same modules as two
+deployables (`afrotransact-core` for Java, `afrotransact-go` for Go) and is what goes to production. A functional change is not done until its
+equivalent is on every line; never let one line gain a feature, fix, migration, route, permission or setting the others lack.
+
 ## Toolchain (pinned)
 
 | Area | Version |

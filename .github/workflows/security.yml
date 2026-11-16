@@ -200,7 +200,7 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@v7
-      - name: osv-scanner (SARIF + gate: CVSS >= 7 or unscored fails; checksum-verified binary)
+      - name: "osv-scanner (SARIF + gate: CVSS >= 7 or unscored fails; checksum-verified binary)"
         # --no-resolve: the reactor poms depend on each other (0.1.0-SNAPSHOT), which the online resolver cannot fetch (exit 127).
         # Transitive Java dependencies are judged by Trivy and OWASP Dependency-Check (real Maven resolution).
         run: tools/security/osv-gate.sh --no-resolve -r .
