@@ -14,8 +14,9 @@ import org.springframework.web.client.RestClientException;
 import tools.jackson.databind.JsonNode;
 
 /**
- * offers-service {@code GET /v1/public/products/{atin}/offers} (path agreed for the offers service, port 8102).
- * Until it is deployed every call returns an empty list.
+ * offers-service {@code GET /v1/public/products/{productAtin}/buy-boxes} (port 8102): the buy box of every variant of the product page,
+ * flattened to one row per listed offer, the winner first. Any failure (the service not deployed included) is an empty list. (The path
+ * used to be {@code /v1/public/products/{atin}/offers}, which offers never served, so compare_offers always came back empty.)
  */
 @Component
 class HttpOfferReader implements OfferReader {
@@ -33,7 +34,7 @@ class HttpOfferReader implements OfferReader {
     public List<Offer> offers(String productAtin, String bearerToken) {
         JsonNode body;
         try {
-            body = client.get().uri("/v1/public/products/{atin}/offers", productAtin)
+            body = client.get().uri("/v1/public/products/{atin}/buy-boxes", productAtin)
                     .headers(h -> Downstream.relay(h, bearerToken))
                     .retrieve().body(JsonNode.class);
         } catch (RestClientException e) {
@@ -44,14 +45,27 @@ class HttpOfferReader implements OfferReader {
         if (body == null) {
             return out;
         }
-        JsonNode items = body.isArray() ? body : body.path("offers");
-        for (JsonNode o : items) {
-            out.add(new Offer(Downstream.text(o, "offerId"), Downstream.text(o, "sellerName"),
-                    Downstream.text(o, "sellerKind"), Downstream.text(o, "fulfilment"), Downstream.number(o, "priceMinor"),
-                    Downstream.text(o, "currency").isBlank() ? "USD" : Downstream.text(o, "currency"),
-                    o.path("inStock").asBoolean(false), o.path("deliveryDays").asInt(0),
-                    Downstream.text(o, "condition").isBlank() ? "NEW" : Downstream.text(o, "condition")));
+        JsonNode boxes = body.isArray() ? body : body.path("items");
+        for (JsonNode box : boxes) {
+            JsonNode winner = box.path("buyBox");
+            if (!winner.isMissingNode() && !winner.isNull()) {
+                out.add(offer(winner));
+            }
+            for (JsonNode other : box.path("otherOffers")) {
+                out.add(offer(other));
+            }
         }
         return out;
+    }
+
+    private static Offer offer(JsonNode o) {
+        JsonNode seller = o.path("seller");
+        String name = Downstream.text(seller, "name");
+        String currency = Downstream.text(o, "currency");
+        String condition = Downstream.text(o, "condition");
+        return new Offer(Downstream.text(o, "offerId"), name.isBlank() ? Downstream.text(o, "soldBy") : name,
+                Downstream.text(seller, "kind"), Downstream.text(o, "fulfilment"), Downstream.number(o, "priceMinor"),
+                currency.isBlank() ? "USD" : currency, !"OUT_OF_STOCK".equals(Downstream.text(o, "stockStatus")),
+                o.path("deliveryDays").asInt(0), condition.isBlank() ? "NEW" : condition);
     }
 }
