@@ -51,8 +51,8 @@ def load_yaml(path):
         return {}
 
 
-def skip_rules():
-    cfg = load_yaml(CONFIG)
+def skip_rules(root=ROOT):
+    cfg = load_yaml(root / "tools/release/parity.yaml")
     return (cfg.get("config") or {}).get("env_skip") or {}
 
 
@@ -108,7 +108,7 @@ def apply_block(text, entries):
 
 def plan(root=ROOT):
     """Yield (deployable, file, wanted_text, current_text, conflicts, kept) for every deployable values file."""
-    rules = skip_rules()
+    rules = skip_rules(root)
     for dep, runtime, chart, modules in deployables(root):
         base = union(root, runtime, modules, "values", rules)
         for scope in SCOPES:

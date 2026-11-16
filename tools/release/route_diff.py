@@ -57,6 +57,7 @@ def main():
     ap.add_argument("--modules", help="comma separated module names (contracts/openapi/<module>.yaml)")
     ap.add_argument("--modules-from", help="application.yml of core: the modules enabled by default")
     ap.add_argument("--contracts", default=str(ROOT / "contracts/openapi"))
+    ap.add_argument("--json-out", help="write {\"missing\": [{module, method, path}]} here (read by tools/release/parity.py --route-report)")
     args = ap.parse_args()
     if not args.live and not args.live_file:
         ap.error("--live or --live-file")
@@ -68,6 +69,7 @@ def main():
         sys.exit("FAIL: /v3/api-docs not served")
     all_live = routes(aggregate)
     bad = 0
+    report = {"missing": []}
     for m in modules:
         contract_file = pathlib.Path(args.contracts) / f"{m}.yaml"
         if not contract_file.exists():
@@ -82,9 +84,12 @@ def main():
         print(f"[{m}] {len(contract)} contract routes, {len(live)} served ({scope}): {len(missing)} missing" + (f", {len(extra)} not in the contract" if group else ""))
         for method, path in missing:
             print(f"    MISSING  {method} {path}")
+            report["missing"].append({"module": m, "method": method, "path": path})
         for method, path in extra:
             print(f"    EXTRA    {method} {path}")
         bad += len(missing)
+    if args.json_out:
+        pathlib.Path(args.json_out).write_text(json.dumps(report))
     print("route diff: " + ("FAILED" if bad else "OK"))
     return 1 if bad else 0
 

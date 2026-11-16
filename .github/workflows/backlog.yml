@@ -31,7 +31,7 @@ jobs:
           path = "docs/backlog/backlog.csv"
           expected = ["Issue Id", "Issue Type", "Summary", "Description", "Acceptance Criteria", "Parent Id",
                       "Epic Name", "Priority", "Story Points", "Labels", "Component", "Status"]
-          statuses = {"To Do", "In Progress", "Done"}
+          statuses = {"To Do", "In Progress", "In Review", "Done"}
           types = {"Epic", "Story", "Task", "Bug", "Sub-task"}
           priorities = {"Highest", "High", "Medium", "Low", "Lowest"}
           errors = []
