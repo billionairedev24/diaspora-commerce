@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.trustops.config.TrustOpsProperties;
 import com.afrotransact.trustops.port.OrdersClient;
 import com.afrotransact.trustops.port.UpstreamException;
@@ -13,6 +15,7 @@ import tools.jackson.databind.JsonNode;
 
 /** orders-service {@code GET /v1/lookup/orders/{idOrNumber}} (OrderLookup). */
 @Component
+@ConditionalOnModuleMode(caller = "trust-ops", callee = "orders", value = ModuleMode.HTTP)
 class HttpOrdersClient implements OrdersClient {
 
     private static final String SERVICE = "orders";

@@ -4,6 +4,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.trustops.config.TrustOpsProperties;
 import com.afrotransact.trustops.domain.ModerationReasonCode;
 import com.afrotransact.trustops.port.CatalogModerationClient;
@@ -17,6 +19,7 @@ import tools.jackson.databind.JsonNode;
  * (contracts/openapi/catalog.yaml).
  */
 @Component
+@ConditionalOnModuleMode(caller = "trust-ops", callee = "catalog", value = ModuleMode.HTTP)
 class HttpCatalogModerationClient implements CatalogModerationClient {
 
     private static final String SERVICE = "catalog";

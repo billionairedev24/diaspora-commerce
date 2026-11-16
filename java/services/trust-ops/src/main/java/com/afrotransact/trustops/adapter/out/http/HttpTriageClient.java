@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import com.afrotransact.trustops.config.TrustOpsProperties;
 import com.afrotransact.trustops.domain.AiFlag;
 import com.afrotransact.trustops.domain.TriageHint;
@@ -16,6 +18,7 @@ import tools.jackson.databind.JsonNode;
 
 /** ai-gateway {@code POST /v1/ai/triage} (Report: riskLevel, summary, flags with cited fields, model). */
 @Component
+@ConditionalOnModuleMode(caller = "trust-ops", callee = "ai-gateway", value = ModuleMode.HTTP)
 class HttpTriageClient implements TriageClient {
 
     private static final String SERVICE = "ai-gateway";

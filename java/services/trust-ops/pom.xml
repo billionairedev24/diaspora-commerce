@@ -47,6 +47,18 @@
         </dependency>
         <dependency>
             <groupId>com.afrotransact</groupId>
+            <artifactId>catalog-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.afrotransact</groupId>
+            <artifactId>orders-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.afrotransact</groupId>
+            <artifactId>ai-gateway-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.afrotransact</groupId>
             <artifactId>seller-api</artifactId>
         </dependency>
         <dependency>
