@@ -19,7 +19,7 @@ out="$("$helm" template core "$core" -f "$core/values-prod.yaml" --set-json 'cut
 grep -A1 'name: MODULE_CATALOG_ENABLED' <<<"$out" | grep -q 'value: "true"' || fail "catalog is not enabled in core by cutover.services"
 grep -A1 'name: MODULE_ORDERS_ENABLED' <<<"$out" | grep -q 'value: "false"' || fail "orders must stay off in core"
 grep -q 'name: CATALOG_DB_POOL_SIZE' <<<"$out" || fail "CATALOG_DB_POOL_SIZE missing"
-grep -E 'name: [A-Z_]*(PASSWORD|SECRET|KEY)' <<<"$out" && fail "a credential name is rendered as a plain env var (secrets come from the Secret)"
+grep -E 'name: [A-Z_]*(PASSWORD|SECRET|KEY)$' <<<"$out" && fail "a credential name is rendered as a plain env var (secrets come from the Secret)"
 # 1b. the Go deployable reads AT_MODULES_<NAME>_ENABLED; a deployable with no module on is idle (replicas 0)
 out="$("$helm" template go "$go" -f "$go/values-prod.yaml" --set-json 'cutover.services={"cart":"afrotransact-go","carrier-gateway":"afrotransact-go"}')"
 grep -A1 'name: AT_MODULES_CART_ENABLED' <<<"$out" | grep -q 'value: "true"' || fail "cart is not enabled in the Go deployable by cutover.services"

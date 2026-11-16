@@ -1,6 +1,6 @@
 apiVersion: v2
 name: afrotransact-core
-description: AfroTransact core (Release 1, ADR 0011): every Java module in one Spring Boot deployable, switched per module by values.
+description: "AfroTransact core (Release 1, ADR 0011): every Java module in one Spring Boot deployable, switched per module by values."
 type: application
 version: 0.1.0
 appVersion: "0.1.0"

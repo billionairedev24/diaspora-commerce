@@ -1,0 +1,127 @@
+# release-1 parity configuration (ADR 0011, docs/engineering/release-1-parity.md). Read by tools/release/parity.py and
+# tools/release/chart_env_sync.py. This file is the ALLOW-LIST: anything main or develop adds that is not mounted in a deployable
+# (afrotransact-core, afrotransact-go) must be listed here WITH A REASON, or the release-1 parity check fails.
+version: 1
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# Services that exist under java/services or go/services but are deliberately NOT mounted in a deployable. Name: reason.
+# Empty today: all 16 Java services are @ModuleSpec entries of CoreApplication (retail and delivery-runs are mounted and switched off by
+# default), all 10 Go services are in go/apps/afrotransact-go/internal/registry.
+unmounted:
+  java: {}
+  go: {}
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# What may stay per-service on release-1 (the per-service build is kept until the ADR 0011 cutover phase).
+per_service_only:
+  # path globs (repository relative) whose NEW files are not a parity gap, with the reason
+  paths:
+    "java/services/*/Dockerfile": "per-service image, built on main/develop; release-1 builds java/Dockerfile with PROJECT=apps/core"
+    "java/services/*/deploy/**": "per-service chart and Argo CD Application; scaled to 0 by cutover.services once the module moves"
+    "go/services/*/Dockerfile": "per-service image, built on main/develop; release-1 builds go/Dockerfile.afrotransact-go"
+    "go/services/*/deploy/**": "per-service chart and Argo CD Application; scaled to 0 by cutover.services once the module moves"
+    "infra/argocd/applicationsets/services.yaml": "per-service ApplicationSet, kept for the services that have not moved (cutover.movedTo scales the rest)"
+    "infra/argocd/launch-set/kustomization.yaml": "per-service launch set; release-1.yaml adds the deployables"
+
+# Every workflow file must be classified. line:
+#   release-1         runs on release-1 pushes and/or pull requests (a release-1 push trigger, or pull_request without a branch filter)
+#   per-service-only  triggers only on main/develop (and manual): the per-service build, kept until the cutover phase
+#   manual            workflow_dispatch / workflow_call / schedule only: no push or pull_request trigger
+#   reusable          workflow_call only (called by another workflow)
+# tools/release/parity.py verifies each class against the workflow's real triggers and fails on a mismatch or an unclassified workflow.
+workflows:
+  _deploy.yml:               {line: reusable, reason: "deploy of one signed image: pins the digest on release-1 (uat, trial, prod and the deployables)"}
+  _go-service.yml:           {line: reusable, reason: "per-service Go pipeline, called by go-<service>.yml on main/develop"}
+  _java-service.yml:         {line: reusable, reason: "per-service Java pipeline, called by java-<service>.yml on main/develop"}
+  _web-app.yml:              {line: reusable, reason: "web build and Cloudflare deploy; prod only from a commit release-1 contains"}
+  afrotransact-go.yml:       {line: release-1, reason: "build, test, sign and push the Go deployable"}
+  core.yml:                  {line: release-1, reason: "build, test, sign and push the Java deployable"}
+  backlog.yml:               {line: release-1, reason: "backlog.csv stays importable"}
+  carrier-sandboxes.yml:     {line: manual, reason: "carrier sandbox run against carrier-gateway, on demand"}
+  contracts.yml:             {line: release-1, reason: "OpenAPI/AsyncAPI lint and breaking-change diff"}
+  deploy-guide.yml:          {line: release-1, reason: "deploy guide script tests"}
+  docs.yml:                  {line: release-1, reason: "developer portal build and deploy"}
+  env-urls.yml:              {line: release-1, reason: "environment host consistency"}
+  go-authz-sync.yml:         {line: per-service-only, reason: "per-service build of a Go module"}
+  go-carrier-gateway.yml:    {line: per-service-only, reason: "per-service build of a Go module"}
+  go-cart.yml:               {line: per-service-only, reason: "per-service build of a Go module"}
+  go-gateway-bff.yml:        {line: per-service-only, reason: "per-service build of a Go module"}
+  go-geo.yml:                {line: per-service-only, reason: "per-service build of a Go module"}
+  go-indexer.yml:            {line: per-service-only, reason: "per-service build of a Go module"}
+  go-media.yml:              {line: per-service-only, reason: "per-service build of a Go module"}
+  go-notifications.yml:      {line: per-service-only, reason: "per-service build of a Go module"}
+  go-promise.yml:            {line: per-service-only, reason: "per-service build of a Go module"}
+  go-search.yml:             {line: per-service-only, reason: "per-service build of a Go module"}
+  java-ai-gateway.yml:       {line: per-service-only, reason: "per-service build of a Java module"}
+  java-bookings.yml:         {line: per-service-only, reason: "per-service build of a Java module"}
+  java-catalog.yml:          {line: per-service-only, reason: "per-service build of a Java module"}
+  java-content.yml:          {line: per-service-only, reason: "per-service build of a Java module"}
+  java-delivery-runs.yml:    {line: per-service-only, reason: "per-service build of a Java module"}
+  java-fulfilment.yml:       {line: per-service-only, reason: "per-service build of a Java module"}
+  java-identity.yml:         {line: per-service-only, reason: "per-service build of a Java module"}
+  java-inventory.yml:        {line: per-service-only, reason: "per-service build of a Java module"}
+  java-mcp-server.yml:       {line: per-service-only, reason: "per-service build of a Java module"}
+  java-offers.yml:           {line: per-service-only, reason: "per-service build of a Java module"}
+  java-orders.yml:           {line: per-service-only, reason: "per-service build of a Java module"}
+  java-payments.yml:         {line: per-service-only, reason: "per-service build of a Java module"}
+  java-retail.yml:           {line: per-service-only, reason: "per-service build of a Java module"}
+  java-seller.yml:           {line: per-service-only, reason: "per-service build of a Java module"}
+  java-tax-returns.yml:      {line: per-service-only, reason: "per-service build of a Java module"}
+  java-trust-ops.yml:        {line: per-service-only, reason: "per-service build of a Java module"}
+  kafka-topics.yml:          {line: release-1, reason: "topic definitions match listeners (tools in tofu)"}
+  legal-documents.yml:       {line: release-1, reason: "legal document seed consistency (content module)"}
+  mobile.yml:                {line: release-1, reason: "OTA preview from release-1; production store builds only from a commit release-1 contains"}
+  observability-config.yml:  {line: release-1, reason: "rules, dashboards and Alloy config"}
+  ovh-images.yml:            {line: manual, reason: "per-service images for the single-VPS test box (ovh-vps), on demand; release-1 images come from core.yml and afrotransact-go.yml"}
+  ovh-vps.yml:               {line: manual, reason: "single-VPS test environment (per-service k3s path), billed by the hour, never automatic"}
+  ovh-web.yml:               {line: manual, reason: "web apps on Cloudflare Workers for the OVH environment"}
+  promote.yml:               {line: manual, reason: "promotes a signed image to uat, trial or prod (runs only from release-1)"}
+  release-1-guard.yml:       {line: release-1, reason: "release-1 contains main"}
+  release-1-parity.yml:      {line: release-1, reason: "parity of main's changes in the monolith, and the offline delivery checks"}
+  release-1-sync.yml:        {line: manual, reason: "scheduled and manual: opens the PR that merges main (and develop on request) into release-1"}
+  reproducible-build.yml:    {line: release-1, reason: "reproducible build check (pull request) and weekly schedule"}
+  security.yml:              {line: release-1, reason: "repo-wide scans, supply-chain checks, scheduled"}
+  seed-guard.yml:            {line: release-1, reason: "seed data guard (content module migrations)"}
+  seo-probe.yml:             {line: release-1, reason: "SEO probe of the deployed environments"}
+  storybook.yml:             {line: release-1, reason: "UI package visual tests"}
+  tofu.yml:                  {line: release-1, reason: "infrastructure plan on pull requests, dev apply on push"}
+  tool-kafka-replay.yml:     {line: release-1, reason: "Kafka replay tool tests"}
+  trial.yml:                 {line: manual, reason: "web apps for the 8-day trial on Cloudflare Workers"}
+  web-seller-center.yml:     {line: release-1, reason: "web app: preview on pull requests, dev on push, prod by dispatch"}
+  web-staff-console.yml:     {line: release-1, reason: "web app: preview on pull requests, dev on push, prod by dispatch"}
+  web-storefront.yml:        {line: release-1, reason: "web app: preview on pull requests, dev on push, prod by dispatch"}
+  workflows.yml:             {line: release-1, reason: "actionlint and generated workflows are current"}
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# Configuration parity (tools/release/chart_env_sync.py and parity.py `config`, `secrets`).
+config:
+  # Names never copied from a service chart's extraEnv into the deployable chart. Glob patterns allowed. Name: reason.
+  env_skip:
+    DB_URL: "core derives it: CORE_DB_URL (one database) and <MODULE>_DB_USER / <MODULE>_DB_PASSWORD per module (infra/ovh-vps/secrets.sh)"
+    DB_USER: "per-module <MODULE>_DB_USER in afrotransact-core-secrets"
+    DB_PASSWORD: "per-module <MODULE>_DB_PASSWORD in afrotransact-core-secrets"
+    DB_NAME: "not used by a module in core"
+    SPRING_DATASOURCE_*: "the pool is modules.<m>.pool (<M>_DB_POOL_SIZE), bounded by dbBudget"
+    JAVA_TOOL_OPTIONS: "core sets heap, GC and metaspace for the shared JVM (values.yaml)"
+    SPRING_PROFILES_ACTIVE: "process-wide: orders' `uat,temporal-cloud` cannot switch the whole JVM. OPEN ITEM for the orders batch: check that application-temporal-cloud.yml settings reach core in uat (its TEMPORAL_* values are copied)"
+    AT_SECURITY_ENABLED: "process-wide switch of the shared security chain, owned by CoreSecurityConfiguration"
+    MANAGEMENT_*: "core has one management port"
+    PORT: "core has one port"
+  # Secret names a module expects (service chart comment `# - NAME`) that are not rendered by secrets.sh for a deployable on purpose.
+  secret_skip:
+    DB_URL: "renamed per module in the deployable secrets (CORE_DB_URL, <MODULE>_DB_URL)"
+    DB_USER: "renamed per module in the deployable secrets"
+    DB_PASSWORD: "renamed per module in the deployable secrets"
+    DB_NAME: "not a secret key in the deployable secrets"
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# Kafka: consumer groups of a module are `<module>-service[-suffix]` in core exactly as standalone (KafkaGroupIdsTest in core runs
+# the same rule at runtime). Topic names are declared in contracts/asyncapi/events.yaml.
+kafka:
+  group_pattern: '^[a-z]+(-[a-z]+)*-service(-[a-z-]+)?$'
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# Observability: `service=` values rules, alerts, dashboards and scrape configs may select on. Modules and deployables are always known.
+observability:
+  extra_service_values:
+    - alloy
