@@ -48,7 +48,7 @@ budget (degrades to the cheapest vision model above the daily limit). Advisory: 
 | Tool | Calls | Effect |
 |---|---|---|
 | `search_products` | search `GET /v1/search` | product cards (grounding facts) |
-| `compare_offers` | catalog `GET /v1/public/{variants,products}/{atin}` + offers `GET /v1/public/products/{atin}/offers` | offers (empty until offers-service ships) |
+| `compare_offers` | catalog `GET /v1/public/{variants,products}/{atin}` + offers `GET /v1/public/products/{productAtin}/buy-boxes` | offers (empty until offers-service ships) |
 | `check_delivery` | promise `GET /v1/promises?atin=&zip=` | promise, or "not available yet" |
 | `add_to_cart` | — (catalog lookup only) | **action proposal**; never touches the cart |
 | `build_cart_from_recipe` | search per ingredient | real in-stock hits only + "Add all to cart" proposal |
