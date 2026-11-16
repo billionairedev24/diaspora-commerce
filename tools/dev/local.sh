@@ -71,7 +71,7 @@ PIDS="$STATE/pids"
 BIN="$STATE/bin"
 COMPOSE_FILE="$ROOT/infra/local/docker-compose.yml"
 # Release 1: `monolith` runs afrotransact-core + afrotransact-go, `services` the old standalone processes.
-STACK="${STACK:-monolith}"
+STACK="${STACK:-monolith}"; export STACK  # the seeder and make smoke read it to pick core's single entry or the per-service ports
 case "$STACK" in monolith | services) ;; *) echo "STACK must be monolith or services (got: $STACK)" >&2; exit 2 ;; esac
 MONO_SERVICES="core afrotransact-go"
 OVERRIDE="$STATE/compose.external-postgres.yml"
@@ -677,6 +677,9 @@ mono_peer_env() {
   export NOTIFICATIONS_URL="${NOTIFICATIONS_URL:-$go}" PROMISE_URL="${PROMISE_URL:-$go}"
   export CART_URL="${CART_URL:-$go/modules/cart}" SEARCH_URL="${SEARCH_URL:-$go/modules/search}"
   export CARRIER_GATEWAY_URL="${CARRIER_GATEWAY_URL:-$go/modules/carrier-gateway}" CARRIER_URL="${CARRIER_URL:-$go/modules/carrier-gateway}"
+  # The seeder and `make smoke` reach the Java modules through core's single entry, <CORE_URL>/modules/<module> (the legacy ports
+  # 8100-8115 are compatibility only), and the BFF on afrotransact-go.
+  export CORE_URL="${CORE_URL:-http://localhost:$(port_of core)}" BFF_URL="${BFF_URL:-$go}"
 }
 
 # The environment of the core JVM. Call it in the process that starts core (a subshell for `up`). Pools stay core's own (small by
@@ -1817,6 +1820,7 @@ case "${1:-}" in
   seed) shift
     # Release 1 (STACK=monolith): media, geo, cart, search and carrier-gateway are afrotransact-go's (:8200), not their old ports.
     # `make up` exports those addresses for its own seeding; a later `make seed` must too (values you set win).
+    load_secrets  # .local/secrets.env: a Stripe test key lets the seeder confirm its demo payments (tools/seed/seedlib/stripe_test.py)
     if [[ "$STACK" == monolith ]]; then mono_peer_env; fi
     python3 "$ROOT/tools/seed/seed.py" "$@" ;;
   repair-orgs) cmd_repair_orgs ;;

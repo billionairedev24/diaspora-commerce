@@ -35,7 +35,7 @@ PREORDER_TIME_ZONE = "America/Chicago"
 STEPS = ("sellers", "size-charts", "products", "content", "ads", "preorders", "pickups", "bookings", "ops", "users")
 OPS_REQUIRED = ("identity", "catalog", "offers", "inventory", "retail", "orders", "payments", "fulfilment", "cart")
 
-SERVICES = {  # env var, default local URL (infra/local/PORTS.md), health path
+SERVICES = {  # env var, per-service local URL (STACK=services: infra/local/PORTS.md), health path
     "identity": ("IDENTITY_URL", "http://localhost:8100", "/actuator/health"),
     "catalog": ("CATALOG_URL", "http://localhost:8101", "/actuator/health"),
     "offers": ("OFFERS_URL", "http://localhost:8102", "/actuator/health"),
@@ -55,9 +55,65 @@ SERVICES = {  # env var, default local URL (infra/local/PORTS.md), health path
     "tax-returns": ("TAX_RETURNS_URL", "http://localhost:8111", "/actuator/health"),
     "cart": ("CART_URL", "http://localhost:8203", "/readyz"),
     "geo": ("GEO_URL", "http://localhost:8205", "/readyz"),
+    # screen-shaped API of the web apps (the delivery options of a cart, for the ops step)
+    "bff": ("BFF_URL", "http://localhost:8200", "/readyz"),
     # customer pickup points (pickups step; the ops step's seller store pickup)
     "carrier-gateway": ("CARRIER_GATEWAY_URL", "http://localhost:8209", "/readyz"),
 }
+
+DEFAULT_STACK = "monolith"  # tools/dev/local.sh: STACK=monolith (core + afrotransact-go) or services (one process per service)
+# STACK=monolith: the Java modules are core's, at <core>/modules/<module> (the legacy ports 8100-8115 are compatibility only);
+# Go: media, geo and the BFF flat on afrotransact-go, cart, search and carrier-gateway under its /modules/<name>.
+JAVA_MODULES = ("identity", "catalog", "offers", "inventory", "seller", "bookings", "content", "delivery-runs", "orders",
+                "payments", "retail", "fulfilment", "trust-ops", "tax-returns")
+GO_UNDER_MODULES = ("cart", "search", "carrier-gateway")
+
+
+def stack_of(env: dict[str, str]) -> str:
+    return (env.get("STACK") or DEFAULT_STACK).strip().lower()
+
+
+def core_url(env: dict[str, str]) -> str:
+    return (env.get("CORE_URL") or f"http://localhost:{env.get('CORE_PORT') or 8120}").rstrip("/")
+
+
+def go_url(env: dict[str, str]) -> str:
+    return (env.get("AFROTRANSACT_GO_URL") or f"http://localhost:{env.get('AFROTRANSACT_GO_PORT') or 8200}").rstrip("/")
+
+
+def service_endpoints(env: dict[str, str]) -> dict[str, tuple[str, str]]:
+    """name -> (base URL, health path or URL). A URL you set (CATALOG_URL ...) always wins. STACK=monolith (default): core's
+    single entry <CORE_URL>/modules/<module> and afrotransact-go; STACK=services: each service's own port."""
+    mono = stack_of(env) == "monolith"
+    out: dict[str, tuple[str, str]] = {}
+    for name, (var, legacy, health) in SERVICES.items():
+        explicit = (env.get(var) or "").strip()
+        if explicit:
+            url = explicit
+        elif mono and name in JAVA_MODULES:
+            url = f"{core_url(env)}/modules/{name}"
+        elif mono and name in GO_UNDER_MODULES:
+            url = f"{go_url(env)}/modules/{name}"
+        elif mono:
+            url = go_url(env)
+        else:
+            url = legacy
+        if mono and name in JAVA_MODULES and not explicit:
+            health = f"{core_url(env)}/actuator/health/{name}"
+        out[name] = (url.rstrip("/"), health)
+    return out
+
+
+# The services each step talks to: its base URLs are logged once when the step starts.
+STEP_SERVICES = {
+    "sellers": ("seller", "catalog"), "size-charts": ("catalog",),
+    "products": ("catalog", "media", "offers", "inventory", "tax-returns"), "content": ("content", "media", "catalog"),
+    "ads": ("content", "catalog"), "preorders": ("delivery-runs", "media"), "pickups": ("carrier-gateway",),
+    "bookings": ("bookings", "media"),
+    "ops": ("identity", "orders", "payments", "cart", "bff", "fulfilment", "offers", "retail", "geo"),
+    "users": ("identity",),
+}
+
 REQUIRED = ("catalog", "offers", "inventory", "media")
 
 # offers creates AfroTransact Retail's offer from catalog.product.created over Kafka: on a cold stack the consumer group
@@ -213,9 +269,10 @@ class Seeder:
         state_dir = Path(env.get("SEED_STATE_DIR") or root / ".local" / "seed")
         state_dir.mkdir(parents=True, exist_ok=True)
         self.state_dir = state_dir
-        self.token = TokenProvider(env, log)
-        self.svc = {name: Http(env.get(var) or url, token=self.token) for name, (var, url, _) in SERVICES.items()}
-        self.health = {name: path for name, (_, _, path) in SERVICES.items()}
+        self.endpoints = service_endpoints(env)
+        self.token = TokenProvider(env, log, identity_url=self.endpoints["identity"][0])
+        self.svc = {name: Http(url, token=self.token) for name, (url, _) in self.endpoints.items()}
+        self.health = {name: path for name, (_, path) in self.endpoints.items()}
         self.state = State(state_dir / "state.json")
         self.report = Report()
         sources = []
@@ -242,7 +299,7 @@ class Seeder:
         self.retail_event_lost = False  # a long wait timed out: do not spend it again on every other product
         if env.get("SEED_TAX_TOKEN", "").strip():  # a Tax Reviewer's token (tax:classify-admin) when tax-returns has security on
             tax_token = env["SEED_TAX_TOKEN"].strip()
-            self.svc["tax-returns"] = Http(env.get("TAX_RETURNS_URL") or SERVICES["tax-returns"][1], token=lambda: tax_token)
+            self.svc["tax-returns"] = Http(self.endpoints["tax-returns"][0], token=lambda: tax_token)
 
     # ------------------------------------------------------------------------------------------------ run
     def run(self, steps: tuple[str, ...] = STEPS) -> int:
@@ -254,6 +311,7 @@ class Seeder:
         self._image_sources_banner()
         try:
             for step in steps:
+                self._log_urls(step)
                 getattr(self, "step_" + step.replace("-", "_"))()
         finally:
             for sha, img in self.library.attribution.items():
@@ -271,9 +329,25 @@ class Seeder:
         self._summary()
         return 1 if self.report.problems else 0
 
+    def _log_urls(self, step: str) -> None:
+        names = STEP_SERVICES.get(step, ())
+        if names:
+            self.log(f"  [{step}] {stack_of(self.env)}: " + " · ".join(f"{n} {self.endpoints[n][0]}" for n in names))
+
     def catalog_is_empty(self) -> bool:
         page = self.svc["catalog"].get("/v1/products", params={"size": 1})
         return int((page or {}).get("total", 0)) == 0
+
+    def missing_products(self) -> list[D.Product]:
+        """Demo products that can be published (their category is ACTIVE) but are not in the catalog: an earlier run lost
+        them (publish gate, photos, a service down). `--if-empty` re-runs the products step for them."""
+        cats = self._categories()
+        out = []
+        for p in D.PRODUCTS:
+            cat = cats.get(p.path)
+            if cat and self._tax_status(cat, cats) == "ACTIVE" and not self._find_product(p.title):
+                out.append(p)
+        return out
 
     def ops_missing(self) -> bool:
         """True when the operations data (`ops` step) is not there: no seeded suppliers, or no orders at all."""
@@ -282,7 +356,7 @@ class Seeder:
     def _ops(self) -> OpsSeeder:
         signed_in = SignedIn(TestUsers(self.svc["identity"], self.env, self.log))
         return OpsSeeder(self.svc, signed_in, self._find_product, self.log, self.report.add, self._problem,
-                         up=self.up)
+                         up=self.up, env=self.env)
 
     def _preflight(self) -> None:
         for name, http in self.svc.items():
