@@ -229,6 +229,9 @@ naming both modules. Which edges are in-process and which stay HTTP: `docs/engin
 
 * Orders needs Temporal (`TEMPORAL_TARGET`, `TEMPORAL_START_WORKERS=false` to run without workers) and Valkey (`REDIS_URL`).
   Kafka is `KAFKA_BOOTSTRAP`. Provider keys (Stripe, OpenRouter, ...) are read from `.local/secrets.env` as for the services.
+* Lola (ai-gateway) reads catalog, offers, orders, bookings and tax-returns in-process, for the signed-in shopper captured when the chat request enters
+  (`at.aigateway.mode=in-process`; one edge back to HTTP: `AT_AIGATEWAY_<CATALOG|OFFERS|ORDERS|BOOKINGS|TAXRETURNS>_MODE=http`, which then needs `at.ai.downstream.<callee>-url`). The cart,
+  search and delivery promise are Go and stay HTTP. A tool that cannot reach its callee answers "not available" within 5 s (`at.aigateway.<callee>.timeout`); the USD/day AI cap is unchanged.
 * `at.security.enabled=false` in the `local` profile, as for the services. With security on, the shared chain keeps every module's
   anonymous permits (seller storefront reads and webhooks, content visitor forms, identity sign-up, the MCP metadata).
 * Not verified here: see "Status and what was not verified" in `docs/engineering/release-1-architecture.md`.

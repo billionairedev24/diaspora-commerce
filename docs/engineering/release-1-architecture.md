@@ -479,10 +479,9 @@ explicit caller principal): catalog <-> tax-returns (spike) and **payments -> se
 converted in two passes, listed edge by edge in 12.7 (orders, payments, fulfilment, trust-ops, bookings, identity) and 12.8 (catalog, offers,
 inventory, seller, content, tax-returns)**: 43 port adapters were converted in those two passes (19 in 12.7, 24 in 12.8 with the 3 of the spike); **12.10 converts 10 more** (orders -> identity: address book for the
 signed-in customer and staff directory; trust-ops -> catalog twice, orders, ai-gateway; orders -> delivery-runs three times and fulfilment -> delivery-runs, the last four in-process
-only while delivery-runs is enabled, which it is not by default) and adds the bounded wait, the bulkhead and the end-user actor every edge now uses. **13 Java-to-Java HTTP adapters are
-still not converted**: mcp-server's 8 tool clients (they act for the signed-in user: the extension point is in 12.10, the next agent converts them) and ai-gateway's 5 readers
-(`HttpCatalogReader`, `HttpOfferReader`, `HttpOrderTracker`, `HttpAccountReader`, `HttpServiceDirectory`: they relay the shopper's token from the SSE worker thread of Lola,
-so each needs the person captured at request entry and five new provider APIs). What stays HTTP is listed with the reason in 12.7, 12.8 and 12.10 and in
+only while delivery-runs is enabled, which it is not by default) and adds the bounded wait, the bulkhead and the end-user actor every edge now uses. **ai-gateway's 5 readers are converted too** (`HttpCatalogReader`, `HttpOfferReader`, `HttpOrderTracker`, `HttpAccountReader` -> orders, bookings and
+tax-returns histories, `HttpServiceDirectory`: the shopper is captured at request entry, 12.10). **8 Java-to-Java HTTP adapters are still not converted**: mcp-server's
+8 tool clients (they act for the signed-in user: the extension point is in 12.10, another agent converts them). What stays HTTP is listed with the reason in 12.7, 12.8 and 12.10 and in
 `apps/core/src/test/resources/http-edges.txt`, and `ModuleEdgeGuardTest` keeps that list honest.
 The principal registry (`at.modules.<m>.caller-scopes`, copied from identity's client list) holds every module's scopes.
 
@@ -541,7 +540,7 @@ Still HTTP in core, and why:
 | orders -> identity (`HttpStaffDirectory`, `HttpAddressBook`) | **converted in 12.10** (staff directory as a service principal, address book for the signed-in customer through `EndUserActor`) |
 | fulfilment -> geo, bookings -> geo | Go callee |
 | trust-ops -> catalog (product moderation, review moderation), orders (lookup), ai-gateway (triage) | **converted in 12.10** |
-| ai-gateway -> catalog, offers, orders, bookings, tax-returns readers and search/promise/cart | catalog, offers, orders tracker, account (orders, bookings, returns) and services directory: **not converted yet** (12.10); search, promise and cart are Go and stay HTTP |
+| ai-gateway -> catalog, offers, orders, bookings, tax-returns readers and search/promise/cart | catalog, offers, orders (tracker and history), bookings (history and service search) and tax-returns (returns): **converted in 12.10** (the shopper captured at request entry); search, promise and cart are Go and stay HTTP (`HttpCartReader`, `HttpProductSearch`, `HttpDeliveryPromises`) |
 | mcp-server -> catalog, inventory, orders, seller, payments, bookings (and applications, tax) | **not converted yet**: the tools relay the end user's token, so an in-process version runs the callee as that user (`EndUserActor`, 12.10), not as a service principal, and keeps the AI/MCP spend cap path unchanged |
 | retail -> catalog, inventory; delivery-runs -> orders, catalog | retail and delivery-runs are disabled in core by default; the callers are converted when they are enabled |
 
@@ -681,11 +680,39 @@ must capture it at request entry into `Caller`, not at the adapter); (3) the too
 | orders -> delivery-runs | `DeliveryRunSlots`, `PreorderEligibility`, `DeliveryFeeRules` | `delivery-runs-api` `DeliveryRunsApi` | `delivery-runs:reserve` (open runs: public) | in-process while delivery-runs is enabled, else HTTP |
 | fulfilment -> delivery-runs | `DeliveryRunsClient` | `DeliveryRunsApi.dispatch` | `delivery-runs:read` | same |
 
+**ai-gateway's five readers converted (Lola's read tools).** Lola runs a turn on `lolaExecutor` (virtual threads), which has no security context, and the HTTP readers relayed
+`Caller.bearerToken` captured at request entry; the in-process readers act for the same person, captured the same way and at the same place:
+
+* **Capture.** `CallerResolver.shopper(request)` (used by `POST /v1/lola/chat` and `/chat/complete` only, on the request thread, before the executor hop) takes `EndUsers.currentAsCustomer()`
+  (the person acting as a shopper, as the relayed token's `X-Acting-As: CUSTOMER`) into `Caller.user`; a service token or no authentication gives no person, never a service posing as one.
+  The ports take a `Shopper(bearerToken, user)` instead of the bare token string: HTTP adapters (microservices profile, and the Go search and promise edges) read the token, in-process
+  adapters read the person and ignore the token string.
+* **Five edges, three published user-scoped APIs and three public ones.** Reads of the shopper's own data enter through `ModuleEntry.runAsUser` with a delegation scope on ai-gateway's
+  `caller-scopes` (not an OAuth scope): `orders-api` `ShopperOrdersApi.mine/track` (`orders:mine.read`; orders' own `OrderQueryService`, so another customer's order is the same 404/403), `bookings-api`
+  `ShopperBookingsApi.mine` (`bookings:mine.read`), `tax-returns-api` `ShopperReturnsApi.mine` (`returns:mine.read`). Public reads the HTTP endpoints serve without a token run as ai-gateway's
+  principal with no scope: `catalog-api` `PublicProductApi.find` (variant, then product page), `offers-api` `PublicOffersApi.offersForProduct`, `bookings-api` `ServiceSearchApi.search`.
+  No MCP tool was added; no handover code is part of any published view.
+* **Failure parity.** Lola's readers never throw: a status the callee answers goes to the reader's own mapping (orders tracker: 404/403 "not found", everything else "unavailable"; every other
+  reader: "not available" / empty), anything else (crash, bounded wait, bulkhead's 503, no signed-in person) is "not available", with no callee text passed on. `InProcessVersusHttpReaderParityTest`
+  (ai-gateway) runs 7 readers x 13 callee behaviours through the real HTTP reader and the in-process reader and requires equal answers; orders' `InProcessVersusHttpFailureParityTest` is specific to
+  checkout's adapters and was not extended (its failure classes are the same).
+* **Bounded wait.** The Lola thread parks on a virtual thread of the callee's lane for at most the edge timeout: `at.aigateway.<callee>.timeout`, defaults 5 s for the five edges (the old
+  `at.ai.downstream.timeout`), not the 10 s an edge with ai-gateway on a side gets, because a tool call should degrade fast; the bulkhead of the callee lane applies as for every edge.
+* **Spend cap untouched.** The USD/day AI cap (budget, rate limit, model fallback) is checked in `LolaService` before and around model calls and is not on these paths.
+* **Cart stays HTTP**: `AccountReader` is now a facade (`AccountReaderImpl`) over one port per edge (`OrderHistory`, `BookingHistory`, `ReturnHistory`, `CartReader`); `HttpCartReader` (Go cart) is the only
+  unconditional HTTP reader and is listed in `http-edges.txt`. Modes: `at.aigateway.mode` (core: in-process), per edge `at.aigateway.<catalog|offers|orders|bookings|taxreturns>.mode`; the HTTP readers
+  are the microservices profile and need their `at.ai.downstream.*-url` only when selected.
+* **Found while converting (fixed in the HTTP reader as well)**: `HttpOfferReader` called `GET /v1/public/products/{atin}/offers`, a path offers never served, so `compare_offers` always said "not available yet"
+  over HTTP. It now reads the real `GET /v1/public/products/{productAtin}/buy-boxes` (the winner and the other offers of every variant), which the in-process reader serves the same way.
+
 **Left HTTP, with the reason**: mcp-server's 8 tool clients (`HttpCatalogApi`, `HttpInventoryApi`, `HttpOrdersApi`, `HttpSellerApi`, `HttpPaymentsApi`, `HttpBookingsApi`, `HttpApplicationsApi`, `HttpTaxApi`): owner
-sequence, the next agent converts them on the extension point above. ai-gateway's 5 readers: they act for the shopper from Lola's worker thread (`Caller.bearerToken` is captured at request entry), so the
-person must be captured into `Caller` there and the ports (`String bearerToken`) change; they also need five new provider APIs (orders list and tracking, bookings mine and service search, tax-returns
-returns, catalog public product, offers) and `HttpAccountReader` also reads the Go cart service. Not done in this pass. Go callees stay HTTP (cart, promise, geo, search, media, carrier-gateway,
-authz-sync).
+sequence, the next agent converts them on the extension point above. Go callees stay HTTP (cart, promise, geo, search, media, carrier-gateway, authz-sync); ai-gateway's readers of catalog, offers, orders, bookings and tax-returns are converted (above).
+
+**Tests of the ai-gateway edges**: `InProcessReadersTest` (person from `Caller`, worker thread without a security context, caller principal, no person = nothing called, refusal mapping, public reads),
+`InProcessVersusHttpReaderParityTest` (7 readers x 13 behaviours), `CallerResolverTest` (seller member shops as a customer, service token gives no person), provider tests `ShopperOrdersApiAdapterTest`,
+`ShopperBookingsApiAdapterTest`, `ShopperReturnsApiAdapterTest` (actor in force is the person, missing delegation scope 403 before any read, fail closed without a caller), `ServiceSearchApiAdapterTest`,
+`PublicProductApiAdapterTest`, `PublicOffersApiAdapterTest`, `ArchitectureTest`, `InProcessCallSitesTest`, `ModuleEdgeGuardTest`. **Not verified for these edges**: a running core with ai-gateway, orders and Postgres
+(Lola chat end to end with a signed JWT), the 403-per-method cases of `ModuleEdgesInCoreTest` for the three shopper APIs against a booted core, load.
 
 **Tests**: `EndUserActorTest` (13 cases), `BoundedModuleCallsTest` (15: every outcome, timeout, bulkhead and permit accounting, caller interrupt, propagation of MDC and observation, no transaction or security
 leak, person binding, nested hop, measured hop cost), `ModuleCallSettingsTest`, `InProcessCallsTest`, consumer tests per new edge, provider tests (`AddressBookApiAdapterTest`, `AddressBookForPersonTest` on the real
