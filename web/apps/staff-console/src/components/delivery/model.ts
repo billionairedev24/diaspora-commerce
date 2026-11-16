@@ -23,7 +23,8 @@ export const STATUS_LABEL: Record<DeliveryStatus, MessageKey> = {
   in_transit: 'st.dlv.status.in_transit',
   out_for_delivery: 'st.dlv.status.out_for_delivery',
   delivery_failed: 'st.dlv.status.delivery_failed',
-  delivered: 'st.dlv.status.delivered'
+  delivered: 'st.dlv.status.delivered',
+  returned: 'st.dlv.status.returned'
 };
 
 export const STATUS_TONE: Record<DeliveryStatus, 'good' | 'warn' | 'bad' | 'info' | 'brand'> = {
@@ -35,7 +36,8 @@ export const STATUS_TONE: Record<DeliveryStatus, 'good' | 'warn' | 'bad' | 'info
   in_transit: 'warn',
   out_for_delivery: 'warn',
   delivery_failed: 'bad',
-  delivered: 'good'
+  delivered: 'good',
+  returned: 'warn'
 };
 
 export const AUDIT_LABEL: Record<string, MessageKey> = {
@@ -43,6 +45,8 @@ export const AUDIT_LABEL: Record<string, MessageKey> = {
   ASSIGN: 'st.dlv.audit.ASSIGN',
   REASSIGN: 'st.dlv.audit.REASSIGN',
   PICKED_UP: 'st.dlv.audit.PICKED_UP',
+  IN_TRANSIT: 'st.dlv.audit.IN_TRANSIT',
+  RETURNED: 'st.dlv.audit.RETURNED',
   OUT_FOR_DELIVERY: 'st.dlv.audit.OUT_FOR_DELIVERY',
   DELIVERED: 'st.dlv.audit.DELIVERED',
   FAILED: 'st.dlv.audit.FAILED',

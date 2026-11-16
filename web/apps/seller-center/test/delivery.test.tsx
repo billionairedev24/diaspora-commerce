@@ -63,6 +63,26 @@ describe('AfroTransact pickup and delivery fee', () => {
     expect((await mockApi().listShipFrom())[1]?.afrotransactPickup.hours).toHaveLength(5);
   });
 
+  it('says plainly who fulfils the orders, and a seller who turns AfroTransact off must confirm they ship them themselves', async () => {
+    const user = userEvent.setup();
+    await renderScreen(<ShippingView />);
+    const cards = await screen.findAllByTestId('shipping-location');
+    const mama = within(cards[0] as HTMLElement).getByRole('form', { name: 'AfroTransact pickup' });
+    const toggle = within(mama).getByRole('switch', { name: /AfroTransact picks up here/ });
+    expect(toggle).toHaveAttribute('aria-checked', 'true');
+    expect(within(mama).getByTestId('fulfilment-mode')).toHaveTextContent('Fulfilled by AfroTransact');
+    expect(within(mama).queryByTestId('self-ship-ack')).toBeNull();
+    await user.click(toggle);
+    expect(within(mama).getByTestId('fulfilment-mode')).toHaveTextContent('You ship the orders from this location yourself');
+    const save = within(mama).getByRole('button', { name: 'Save pickup settings' });
+    expect(save).toBeDisabled();
+    expect(within(mama).getByText('Tick the box to confirm you will ship these orders yourself.')).toBeInTheDocument();
+    await user.click(within(within(mama).getByTestId('self-ship-ack')).getByRole('checkbox'));
+    expect(save).toBeEnabled();
+    await user.click(save);
+    await waitFor(async () => expect((await mockApi().listShipFrom())[0]?.afrotransactPickup.enabled).toBe(false));
+  });
+
   it('explains why driver pickup can’t be turned on: outside the area, not geocoded', async () => {
     const user = userEvent.setup();
     const api = mockApi();

@@ -2210,5 +2210,15 @@
   "sc.settings.store-page.description": "El aspecto de tu página pública: tema, portada, productos destacados y lo que leen los clientes.",
   "sc.settings.status.storePublished": "Publicada",
   "sc.settings.status.storeDraft": "Sin publicar",
-  "sc.settings.status.storeChanges": "Cambios sin publicar"
+  "sc.settings.status.storeChanges": "Cambios sin publicar",
+  "sc.ship.afro.picksUp": "AfroTransact lo recoge.",
+  "sc.ship.afro.picksUpHelp": "Mantenlo empaquetado y listo durante tu horario de recogida (Ajustes, Envíos). No tienes que hacer nada más.",
+  "sc.ship.afro.hasIt": "AfroTransact tiene este pedido.",
+  "sc.ship.afro.hasItHelp": "AfroTransact lo recogió y lo está entregando. No tienes nada que hacer.",
+  "sc.ship.afro.failed": "AfroTransact aún no pudo entregarlo.",
+  "sc.ship.afro.failedHelp": "Lo estamos resolviendo con el comprador. Si vuelve a ti, lo verás aquí.",
+  "sc.pickup.modeOn": "Gestionado por AfroTransact: AfroTransact recoge aquí tus pedidos empaquetados durante estas horas y los entrega. La tarifa de entrega es de AfroTransact, no tuya.",
+  "sc.pickup.modeOff": "Tú envías los pedidos de este lugar: los empaquetas, los envías y mantienes su estado y seguimiento al día en Pedidos. Eres responsable de que lleguen.",
+  "sc.pickup.ack": "Entiendo que soy responsable de enviar estos pedidos yo mismo.",
+  "sc.pickup.ackNeeded": "Marca la casilla para confirmar que enviarás estos pedidos tú mismo."
 }

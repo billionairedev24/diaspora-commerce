@@ -2210,5 +2210,15 @@
   "sc.settings.store-page.description": "L'apparence de votre page publique : thème, bannière, produits à la une et textes lus par les clients.",
   "sc.settings.status.storePublished": "Publiée",
   "sc.settings.status.storeDraft": "Non publiée",
-  "sc.settings.status.storeChanges": "Modifications non publiées"
+  "sc.settings.status.storeChanges": "Modifications non publiées",
+  "sc.ship.afro.picksUp": "AfroTransact vient le chercher.",
+  "sc.ship.afro.picksUpHelp": "Gardez-le emballé et prêt pendant vos heures de collecte (Paramètres, Expédition). Vous n’avez rien d’autre à faire.",
+  "sc.ship.afro.hasIt": "AfroTransact a cette commande.",
+  "sc.ship.afro.hasItHelp": "AfroTransact l’a récupérée et la livre. Vous n’avez rien à faire.",
+  "sc.ship.afro.failed": "AfroTransact n’a pas encore pu la livrer.",
+  "sc.ship.afro.failedHelp": "Nous nous en occupons avec l’acheteur. Si elle vous revient, vous la verrez ici.",
+  "sc.pickup.modeOn": "Expédié par AfroTransact : AfroTransact récupère vos commandes emballées ici pendant ces heures et les livre. Les frais de livraison reviennent à AfroTransact, pas à vous.",
+  "sc.pickup.modeOff": "Vous expédiez vous-même les commandes de ce lieu : vous les emballez, les envoyez et tenez leur statut et leur suivi à jour dans Commandes. Vous êtes responsable de leur arrivée.",
+  "sc.pickup.ack": "Je comprends que je suis responsable de l’expédition de ces commandes.",
+  "sc.pickup.ackNeeded": "Cochez la case pour confirmer que vous expédierez ces commandes vous-même."
 }
