@@ -12,7 +12,7 @@ export interface ProgramRow {
   label: MessageKey;
   href?: string;
   external?: boolean;
-  action?: 'lola' | 'preorder';
+  action?: 'preorder';
 }
 
 export interface ProgramsInput {
@@ -36,7 +36,6 @@ export function programRows({ navigation, me, preorder }: ProgramsInput): Progra
       href: PREORDER_PATH,
       action: 'preorder'
     });
-  rows.push({ id: 'lola', label: 'nav.lola', action: 'lola' });
   if (navigation.deals.available)
     rows.push({
       id: 'deals',

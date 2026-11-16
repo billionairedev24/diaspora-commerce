@@ -1,0 +1,47 @@
+/* Transparent on larger screens: the chat is a card beside the page, not a modal curtain. */
+.overlay { position: fixed; inset: 0; z-index: calc(var(--at-z-dialog) - 1); background: transparent; }
+
+.panel {
+  position: fixed;
+  z-index: var(--at-z-dialog);
+  inset-inline-end: max(var(--at-space-4), env(safe-area-inset-right, 0px));
+  /* Above the launcher (56px) with a gap, and above the cookie banner / bottom bar the launcher clears. */
+  inset-block-end: calc(max(var(--at-space-4), env(safe-area-inset-bottom, 0px)) + var(--at-cookie-banner-h, 0px) + var(--at-cookie-banner-gap, 0px) + var(--at-bottom-bar-h, 0px) + 56px + var(--at-space-3));
+  width: min(400px, calc(100vw - 2 * var(--at-space-4)));
+  height: min(640px, calc(100dvh - var(--at-sticky-header-h, 0px) - var(--at-space-8)));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--at-color-surface);
+  color: var(--at-color-text);
+  border: 1px solid var(--at-color-border);
+  border-radius: var(--at-radius-lg);
+  box-shadow: var(--at-shadow-lg);
+}
+.panel:focus { outline: none; }
+
+.head { display: flex; align-items: center; gap: var(--at-space-3); padding: var(--at-space-3) var(--at-space-4); background: var(--at-color-header-bg); color: var(--at-color-header-text); flex: none; }
+.title { flex: 1; margin: 0; font-size: var(--at-text-base); font-weight: var(--at-weight-bold); }
+.close {
+  display: grid;
+  place-items: center;
+  width: var(--at-size-touch);
+  height: var(--at-size-touch);
+  margin-block: calc(-1 * var(--at-space-2));
+  margin-inline: 0 calc(-1 * var(--at-space-3));
+  border: 0;
+  border-radius: var(--at-radius-pill);
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .close:hover { background: var(--at-color-header-hover-bg); }
+}
+.body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: var(--at-space-4) var(--at-space-4) calc(var(--at-space-4) + env(safe-area-inset-bottom, 0px)); }
+
+/* Phones: a full-height sheet over the page, dimmed. */
+@media (max-width: 640px) {
+  .overlay { background: var(--at-color-overlay); }
+  .panel { inset: 0; width: 100%; height: 100dvh; border: 0; border-radius: 0; }
+}

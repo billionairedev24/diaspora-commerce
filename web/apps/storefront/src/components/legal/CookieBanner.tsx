@@ -10,15 +10,18 @@ import { useConsent } from '@/lib/consent/ConsentProvider';
 
 import styles from './Legal.module.css';
 
-/** Publishes the banner's height as --at-cookie-banner-h: the page pads its end by it, so nothing stays under the banner. */
+/** Publishes the banner's height as --at-cookie-banner-h: the page pads its end by it, so nothing stays under the banner. Floating buttons ride above it. */
 function publishHeight(el: HTMLElement | null) {
   if (!el || typeof ResizeObserver === 'undefined') return;
   const root = document.documentElement;
+  // The gap is the room floating buttons (the Lola launcher) leave above the banner: the banner's own offset plus a margin.
+  root.style.setProperty('--at-cookie-banner-gap', '32px');
   const ro = new ResizeObserver(() => root.style.setProperty('--at-cookie-banner-h', `${Math.ceil(el.getBoundingClientRect().height)}px`));
   ro.observe(el);
   return () => {
     ro.disconnect();
     root.style.removeProperty('--at-cookie-banner-h');
+    root.style.removeProperty('--at-cookie-banner-gap');
   };
 }
 

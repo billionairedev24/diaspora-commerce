@@ -13,7 +13,7 @@ export interface AccountMenuEntry {
   href?: string;
   /** Full page navigation (other apps, e.g. Seller Center via /sell, and identity's hosted sign-in). */
   external?: boolean;
-  action?: 'lola' | 'signout';
+  action?: 'signout';
   count?: number;
 }
 
@@ -58,7 +58,6 @@ export function accountMenuModel(me: Me | undefined, returnTo = '/'): AccountMen
       { id: 'payments', label: 'account.payments', icon: 'card', href: '/account/payments', count: c?.paymentMethods },
       { id: 'credit', label: 'account.credit', icon: 'gift', href: '/account/credit' },
       { id: 'security', label: 'account.security', icon: 'shield', href: '/account/security' },
-      { id: 'lola', label: 'account.askLola', icon: 'sparkle', action: 'lola' },
       ...backOfficeEntries(user.backOffices)
     ]
   };

@@ -16,7 +16,7 @@ const ada: Me = {
 
 describe('avatar menu variants', () => {
   it('guest: "Welcome, Guest" with Sign in and Create account only', () => {
-    renderWithProviders(<AccountMenu me={guest} onAskLola={vi.fn()} inline defaultOpen />);
+    renderWithProviders(<AccountMenu me={guest} inline defaultOpen />);
     const menu = screen.getByRole('menu');
     expect(within(menu).getByText('Welcome, Guest')).toBeInTheDocument();
     expect(within(menu).getByText('Sign in for orders, returns and faster checkout')).toBeInTheDocument();
@@ -25,8 +25,8 @@ describe('avatar menu variants', () => {
     expect(screen.getByRole('button', { name: /Account menu: Welcome, Guest/ })).toBeInTheDocument();
   });
 
-  it('signed in: initials avatar, account items with counts, Ask Lola, Sell, Offer services and Sign out', () => {
-    renderWithProviders(<AccountMenu me={ada} onAskLola={vi.fn()} inline defaultOpen />);
+  it('signed in: initials avatar, account items with counts, Sell, Offer services and Sign out', () => {
+    renderWithProviders(<AccountMenu me={ada} inline defaultOpen />);
     const menu = screen.getByRole('menu');
     expect(within(menu).getByText('Adaeze Nwosu')).toBeInTheDocument();
     expect(within(menu).getByText('adaeze@example.com')).toBeInTheDocument();
@@ -39,7 +39,6 @@ describe('avatar menu variants', () => {
       'Payment methods3',
       'Gift cards & credit',
       'Login & security',
-      'Ask Lola',
       'Sell on AfroTransact',
       'Offer your services',
       'Sign out'
@@ -65,7 +64,7 @@ describe('sign out', () => {
       Response.json({ redirectTo: 'http://localhost:8100/connect/logout?id_token_hint=x' })
     );
     vi.stubGlobal('fetch', fetchMock);
-    renderWithProviders(<AccountMenu me={ada} onAskLola={vi.fn()} inline defaultOpen />);
+    renderWithProviders(<AccountMenu me={ada} inline defaultOpen />);
     fireEvent.click(within(screen.getByRole('menu')).getByText('Sign out'));
     await waitFor(() => expect(assign).toHaveBeenCalledWith('http://localhost:8100/connect/logout?id_token_hint=x'));
     const [input, init] = fetchMock.mock.calls[0] ?? [];

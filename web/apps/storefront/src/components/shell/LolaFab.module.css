@@ -1,0 +1,65 @@
+/* Bottom end corner, clear of the safe-area inset, the cookie banner (which publishes its height and a gap) and a bottom action bar. */
+.fab {
+  position: fixed;
+  inset-inline-end: max(var(--at-space-4), env(safe-area-inset-right, 0px));
+  inset-block-end: calc(max(var(--at-space-4), env(safe-area-inset-bottom, 0px)) + var(--at-cookie-banner-h, 0px) + var(--at-cookie-banner-gap, 0px) + var(--at-bottom-bar-h, 0px));
+  z-index: var(--at-z-drawer);
+  display: flex;
+  align-items: center;
+  gap: var(--at-space-2);
+  /* The label sits on the inner side of the button, so it reads from the corner inwards in both directions. */
+  flex-direction: row-reverse;
+}
+
+.button {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--at-radius-pill);
+  background: var(--at-color-action-primary);
+  color: var(--at-color-action-primary-text);
+  box-shadow: var(--at-shadow-md);
+  cursor: pointer;
+  transition: transform var(--at-duration-fast) var(--at-ease);
+}
+@media (hover: hover) {
+  .button:hover { background: var(--at-color-action-primary-hover); transform: translateY(-2px); }
+}
+
+.label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--at-space-1);
+  padding-block: var(--at-space-2);
+  padding-inline: var(--at-space-4) var(--at-space-2);
+  border: 1px solid var(--at-color-border);
+  border-radius: var(--at-radius-pill);
+  background: var(--at-color-surface);
+  color: var(--at-color-text);
+  box-shadow: var(--at-shadow-md);
+  font-size: var(--at-text-sm);
+  font-weight: var(--at-weight-semibold);
+  white-space: nowrap;
+}
+.dismiss {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--at-radius-pill);
+  background: none;
+  color: var(--at-color-text-muted);
+  cursor: pointer;
+}
+/* 44px touch target around the small close mark. */
+.dismiss::after { content: ''; position: absolute; inset: -10px; }
+
+@media print { .fab { display: none; } }
+@media (prefers-reduced-motion: reduce) { .button { transition: none; } }

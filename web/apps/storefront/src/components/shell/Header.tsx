@@ -2,7 +2,7 @@
 
 import { EMPTY_NAVIGATION } from '@afrotransact/api-client';
 import { useLocale } from '@afrotransact/i18n/react';
-import { CalendarCheck, LogoMark, MapPin, SealCheck, ShoppingCart, Sparkle, Storefront, Tag, wordmarkClassName } from '@afrotransact/ui';
+import { CalendarCheck, LogoMark, MapPin, SealCheck, ShoppingCart, Storefront, Tag, wordmarkClassName } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
@@ -22,7 +22,6 @@ import { AllMenu } from './AllMenu';
 import { AnnouncementBar } from './AnnouncementBar';
 import styles from './Header.module.css';
 import { LocationPicker } from './LocationPicker';
-import { useLolaLauncher } from './LolaLauncher';
 import { SearchBox } from './SearchBox';
 
 /** Publishes the sticky header's live height as --at-sticky-header-h (scroll-padding-top, so keyboard focus and in-page
@@ -102,7 +101,6 @@ export function Header() {
   const { data: member } = useQuery({ ...membershipQueries.account(api), enabled: me?.authenticated === true });
   const [locOpen, setLocOpen] = useState(false);
   const locRef = useRef<HTMLButtonElement>(null);
-  const lola = useLolaLauncher();
   const pathname = usePathname();
   const params = useSearchParams();
   const count = cart?.itemCount ?? 0;
@@ -131,11 +129,7 @@ export function Header() {
             <SearchBox />
           </div>
           <span className={styles.spacer} />
-          <button type="button" className={`${styles.chromeBtn} ${styles.logoBtn} ${styles.lolaBtn}`} onClick={() => lola.open()} aria-label={t('header.lolaAria')} aria-haspopup="dialog">
-            <Sparkle size={20} weight="fill" className={styles.sparkle} aria-hidden />
-            <span className={styles.lolaLabel}>{t('header.lola')}</span>
-          </button>
-          <AccountMenu me={me} onAskLola={() => lola.open()} memberTier={member?.member ? (member.tier?.name ?? null) : null} />
+          <AccountMenu me={me} memberTier={member?.member ? (member.tier?.name ?? null) : null} />
           <Link href="/cart" className={styles.chromeBtn} aria-label={t('header.cartAria', { count })}>
             <span className={styles.cartIcon}>
               <ShoppingCart size={30} aria-hidden />
@@ -156,7 +150,6 @@ export function Header() {
               me={me}
               preorder={showPreorderNav ? { code: preorder?.window?.code } : null}
               deliverLabel={label}
-              onAskLola={() => lola.open()}
               onDeliverTo={() => setLocOpen(true)}
             />
             {showPreorderNav && (
@@ -172,12 +165,6 @@ export function Header() {
                 </Link>
               </li>
             )}
-            <li>
-              <button type="button" className={styles.navItem} onClick={() => lola.open()} aria-haspopup="dialog">
-                <Sparkle weight="fill" className={styles.gold} aria-hidden />
-                {t('nav.lola')}
-              </button>
-            </li>
             {nav.deals.available && (
               <li>
                 <Link href={searchHref({ sort: 'price_asc' })} className={styles.navItem}>

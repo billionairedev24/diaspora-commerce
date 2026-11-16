@@ -11,7 +11,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { AccountHeader } from '@/components/account/AccountHeader';
 import { PlacedConfirmation } from '@/components/preorder/PreorderConfirmation';
 import { RateItemButton } from '@/components/reviews/ReviewSheet';
-import { useLolaLauncher } from '@/components/shell/LolaLauncher';
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
@@ -121,7 +120,6 @@ export function OrdersView() {
   const api = browserApi();
   const orders = useInfiniteQuery(shopperQueries.infiniteOrders(api));
   const placed = useSearchParams().get('placed');
-  const lola = useLolaLauncher();
   const [tab, setTab] = useState<OrderTab>('ALL');
   const [text, setText] = useState('');
   const [range, setRange] = useState<OrderRange>('3m');
@@ -289,8 +287,6 @@ export function OrdersView() {
 
       <Section title={t('ord.helpTitle')} lead={t('ord.helpBody')}>
         <div>
-          <TextLinkButton onClick={() => lola.open(t('ord.lolaPrompt'))}>{t('account.askLola')}</TextLinkButton>
-          {' · '}
           <Link href="/account/help" className={textLinkClassName}>
             {t('account.help')}
           </Link>

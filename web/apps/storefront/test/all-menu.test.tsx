@@ -33,7 +33,6 @@ const props = (over: Partial<AllMenuProps> = {}): AllMenuProps => ({
   me: guest,
   preorder: null,
   deliverLabel: 'Austin 78701',
-  onAskLola: vi.fn(),
   onDeliverTo: vi.fn(),
   ...over
 });
@@ -103,7 +102,7 @@ describe('All menu drawer', () => {
       within(groups[1]!)
         .getAllByRole('menuitem')
         .map((i) => i.textContent)
-    ).toEqual(expect.arrayContaining(['Lola AI', 'Gift cards', 'Sell on AfroTransact', 'Offer your services']));
+    ).toEqual(expect.arrayContaining(['Gift cards', 'Sell on AfroTransact', 'Offer your services']));
     expect(
       within(groups[2]!)
         .getAllByRole('menuitem')
@@ -126,7 +125,6 @@ describe('All menu drawer', () => {
     const programs = labels();
     expect(programs.slice(programs.indexOf('Pre-order'), programs.indexOf('Offer your services') + 1)).toEqual([
       'Pre-order',
-      'Lola AI',
       "Today's Deals",
       'AfroTransact Brand',
       'Services',
@@ -196,10 +194,9 @@ describe('All menu drawer', () => {
     expect(screen.queryByRole('menuitem', { name: 'Sign in' })).not.toBeInTheDocument();
   });
 
-  it('Lola and Deliver to close the drawer and then run their action', async () => {
-    const onAskLola = vi.fn();
+  it('Deliver to closes the drawer and then runs its action; Lola is not in the menu (the floating launcher is the one way in)', async () => {
     const onDeliverTo = vi.fn();
-    mount({ onAskLola, onDeliverTo });
+    mount({ onDeliverTo });
     openMenu();
     await screen.findByRole('menu');
     fireEvent.click(screen.getByRole('menuitem', { name: 'Deliver to Austin 78701' }));
@@ -207,8 +204,7 @@ describe('All menu drawer', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     openMenu();
     await screen.findByRole('menu');
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Lola AI' }));
-    await waitFor(() => expect(onAskLola).toHaveBeenCalled());
+    expect(screen.queryByRole('menuitem', { name: /Lola/ })).not.toBeInTheDocument();
   });
 
   it('Arabic: right-to-left labels, and the arrows swap (back is the right arrow)', async () => {

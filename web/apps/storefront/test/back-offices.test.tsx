@@ -18,7 +18,7 @@ const backOfficeItems = (me: Me) =>
 
 describe('account menu back offices', () => {
   it('an approved seller (APP-30200 Malo Branding) gets Seller Center instead of Sell on AfroTransact', () => {
-    renderWithProviders(<AccountMenu me={person([{ app: 'seller-center', state: 'active' }])} onAskLola={vi.fn()} inline defaultOpen />);
+    renderWithProviders(<AccountMenu me={person([{ app: 'seller-center', state: 'active' }])} inline defaultOpen />);
     const labels = within(screen.getByRole('menu')).getAllByRole('menuitem').map((i) => i.textContent);
     expect(labels).toContain('Seller Center');
     expect(labels).not.toContain('Sell on AfroTransact');
@@ -40,7 +40,7 @@ describe('account menu back offices', () => {
       ['account.providerHub', '/back-office/provider-hub'],
       ['account.staffConsole', '/back-office/staff-console']
     ]);
-    renderWithProviders(<AccountMenu me={person([{ app: 'seller-center', state: 'application' }, { app: 'staff-console', state: 'active' }])} onAskLola={vi.fn()} inline defaultOpen />);
+    renderWithProviders(<AccountMenu me={person([{ app: 'seller-center', state: 'application' }, { app: 'staff-console', state: 'active' }])} inline defaultOpen />);
     const menu = screen.getByRole('menu');
     expect(within(menu).getByText('Continue your seller application')).toBeInTheDocument();
     expect(within(menu).getByText('Staff console')).toBeInTheDocument();

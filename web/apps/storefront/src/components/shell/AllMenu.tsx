@@ -50,7 +50,6 @@ export interface AllMenuProps {
   preorder: { code?: string } | null;
   /** The "Deliver to" label of the header ("Austin 78701"), empty until a location is set. */
   deliverLabel: string;
-  onAskLola: () => void;
   onDeliverTo: () => void;
 }
 
@@ -62,7 +61,7 @@ export interface AllMenuProps {
  * Modal: Escape and the backdrop close it, focus is trapped and returns to the "All" button, the page behind cannot scroll. Menu semantics:
  * arrow keys, Home and End move between rows; the forward arrow opens a department, the back arrow returns.
  */
-export function AllMenu({ navigation, locale, me, preorder, deliverLabel, onAskLola, onDeliverTo }: AllMenuProps) {
+export function AllMenu({ navigation, locale, me, preorder, deliverLabel, onDeliverTo }: AllMenuProps) {
   const t = useT();
   const { dir } = useI18n();
   const pathname = usePathname();
@@ -116,7 +115,7 @@ export function AllMenu({ navigation, locale, me, preorder, deliverLabel, onAskL
     }
   };
   const close = () => change(false);
-  // Closes, then runs an action that opens something else (Lola, the location picker, sign out) once focus is back on the page.
+  // Closes, then runs an action that opens something else (the location picker, sign out) once focus is back on the page.
   const closeThen = (fn: () => void) => () => {
     close();
     setTimeout(fn, 0);
@@ -229,13 +228,6 @@ export function AllMenu({ navigation, locale, me, preorder, deliverLabel, onAskL
       preorder: preorder !== null
     }).map((p) => {
       const label = t(p.label);
-      if (p.action === 'lola')
-        return {
-          key: p.id,
-          kind: 'action' as const,
-          label,
-          onSelect: closeThen(onAskLola)
-        };
       return {
         key: p.id,
         kind: 'link' as const,

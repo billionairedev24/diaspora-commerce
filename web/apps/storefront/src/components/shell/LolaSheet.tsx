@@ -2,7 +2,7 @@
 
 import { cartKeys, isApiError, type LolaProductCard, type LolaProposal } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { Button, buttonClassName, CheckCircle, CircleNotch, Headset, PaperPlaneRight, Sheet, Sparkle, useToast } from '@afrotransact/ui';
+import { Button, buttonClassName, ChatPanel, CheckCircle, CircleNotch, Headset, PaperPlaneRight, Sparkle, useToast } from '@afrotransact/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -162,7 +162,7 @@ function Answer({ m, onSettle }: { m: LolaMessage; onSettle: (proposalId: string
   );
 }
 
-/** Lola drawer (S135): streamed answers, visible tool calls, product cards, confirmable proposals, suggestion chips. */
+/** Lola chat panel (S135): streamed answers, visible tool calls, product cards, confirmable proposals, suggestion chips. */
 export function LolaSheet({ open, onOpenChange, prompt, onPromptSent }: { open: boolean; onOpenChange: (o: boolean) => void; prompt?: string | null; onPromptSent?: () => void }) {
   const t = useT();
   const { messages, suggestions, busy, needsSignIn, send, settle } = useLola();
@@ -188,10 +188,10 @@ export function LolaSheet({ open, onOpenChange, prompt, onPromptSent }: { open: 
   };
 
   return (
-    <Sheet
+    <ChatPanel
       open={open}
       onOpenChange={onOpenChange}
-      persistent
+      closeLabel={t('lola.close')}
       title={t('lola.title')}
       description={t('lola.subtitle')}
       header={
@@ -248,6 +248,6 @@ export function LolaSheet({ open, onOpenChange, prompt, onPromptSent }: { open: 
           </button>
         </form>
       </div>
-    </Sheet>
+    </ChatPanel>
   );
 }
