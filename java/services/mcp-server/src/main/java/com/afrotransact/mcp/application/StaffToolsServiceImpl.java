@@ -36,7 +36,7 @@ class StaffToolsServiceImpl implements StaffToolsService {
     @Override
     public ToolResult applicationsQueue(McpCaller caller, String status, Integer page) {
         guard.require(caller.profile(), ToolCatalog.APPLICATIONS_QUEUE);
-        String s = status == null || status.isBlank() ? "IN_REVIEW" : status.trim().toUpperCase(Locale.ROOT);
+        String s = status == null || status.isBlank() ? "PENDING_REVIEW" : status.trim().toUpperCase(Locale.ROOT);
         Downstream d = applications.queue(s, page == null ? 0 : Math.max(page, 0), 25, caller.bearerToken());
         return d.ok() ? ToolResult.ok(masker.mask(d.body())) : Results.from(d, "application queue");
     }
