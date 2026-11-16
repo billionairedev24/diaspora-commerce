@@ -31,7 +31,10 @@ test.describe('staff console · delivery desk', () => {
     await expect(sheet).toBeVisible();
     await expect(sheet.getByRole('button', { name: /Mark delivered/ })).toHaveCount(0);
     await sheet.getByRole('button', { name: 'Take this delivery' }).click();
-    await sheet.getByRole('button', { name: 'Mark picked up' }).click();
+    await sheet.getByRole('button', { name: 'Picked up from the seller…' }).click();
+    const pickup = page.getByRole('dialog', { name: 'Picked up from the seller' });
+    await pickup.getByLabel('Pickup note (optional)').fill('2 boxes handed over at the shop');
+    await pickup.getByRole('button', { name: 'Mark picked up' }).click();
     await sheet.getByRole('button', { name: 'Mark out for delivery' }).click();
     await sheet.getByRole('button', { name: /Mark delivered/ }).click();
 
