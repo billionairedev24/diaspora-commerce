@@ -610,7 +610,7 @@
   "co.reviewItems": "Ver {n, plural, one {# artículo} other {# artículos}}",
   "co.sellers": "De {n, plural, one {# vendedor} other {# vendedores}}",
   "co.itemsTotal": "Artículos ({n})",
-  "co.shipping": "Envío y manipulación",
+  "co.shipping": "Costo de entrega (a tu cargo)",
   "co.tax": "Impuesto estimado",
   "co.total": "Total del pedido",
   "co.stripeNote": "Stripe · autorizado ahora, cobrado por envío",
@@ -1994,7 +1994,6 @@
   "nav.customerService": "Atención al cliente",
   "nav.language": "Idioma",
   "nav.deliverTo": "Enviar a {label}",
-  "ord.mode.seller_ships": "Enviado por el vendedor",
   "ord.mode.afrotransact": "Entregado por AfroTransact",
   "ord.trackingNumber": "Número de seguimiento {number}",
   "ord.proofReceivedBy": "Recibido por {name}",
@@ -2095,5 +2094,7 @@
   "store.gone.body": "La tienda que buscas no está abierta ahora, o la dirección no es correcta.",
   "store.gone.home": "Ir a AfroTransact",
   "store.gone.search": "Buscar todos los productos",
-  "store.meta.title": "{name}"
+  "store.meta.title": "{name}",
+  "ord.mode.legacy_seller_shipped": "Enviado por el vendedor",
+  "co.noFulfilment": "Este vendedor no ofrece entrega ni recogida para estos artículos cerca de ti, por lo que no se pueden comprar ahora. Quítalos o elige otra dirección."
 }

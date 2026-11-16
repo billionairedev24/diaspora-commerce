@@ -40,10 +40,10 @@ export type PaymentSheetKeys = z.infer<typeof PaymentSheetKeysSchema>;
 /* ── Orders ────────────────────────────────────────────────────── */
 
 /** How a placed order's shipment reached the shopper (history keeps 'express' of any order placed before launch shipping). */
-export const DeliveryMethodSchema = z.enum(['carrier', 'express', 'seller_ships', 'afrotransact_delivery', 'pickup']);
+export const DeliveryMethodSchema = z.enum(['carrier', 'express', 'legacy_seller_shipped', 'afrotransact_delivery', 'pickup']);
 
 /** Who moves a shipment. The apps say AfroTransact delivers, and show delivery proof, only for the AfroTransact modes. */
-export const FulfilmentModeSchema = z.enum(['seller_ships', 'afrotransact_delivery', 'fulfilled_by_afrotransact', 'pickup', 'preorder_run']);
+export const FulfilmentModeSchema = z.enum(['legacy_seller_shipped', 'afrotransact_delivery', 'fulfilled_by_afrotransact', 'pickup', 'preorder_run']);
 export type FulfilmentMode = z.infer<typeof FulfilmentModeSchema>;
 
 /** True when AfroTransact itself delivers (or hands over) this mode: the only modes that may show a proof of delivery. */
@@ -241,6 +241,8 @@ export const CheckoutPackageSchema = CartPackageSchema.extend({
   pickupPoints: z.array(PickupPointSchema).optional(),
   /** Why the package has no pickup option (absent when it has one); machine-readable, the app words it for the shopper. */
   pickupUnavailableReason: z.enum(['NEEDS_ADDRESS', 'SELLER_NOT_ENABLED', 'TOO_FAR', 'OTHER_AREA', 'NO_PLATFORM_POINT', 'LOOKUP_FAILED']).optional(),
+  /** The seller offers neither Seller pickup (for this address) nor Fulfilled by AfroTransact for this package: it can't be bought (never true while the pickup facts are unknown). */
+  noFulfilment: z.boolean().optional(),
   localDelivery: CheckoutLocalDeliverySchema.optional(),
   /** The part of this package's delivery fee the shopper's membership waives (S323); 0 or absent for none. */
   membershipWaivedMinor: MinorSchema.optional()

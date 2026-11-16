@@ -8,53 +8,33 @@ import { ShipmentProgress } from '@/components/orders/ShipmentProgress';
 
 import { renderWithProviders } from './render';
 
-type Progress = Pick<SellerShipment, 'status' | 'nextActions' | 'trackingNumber' | 'canBuyLabel' | 'fulfilment' | 'fulfilmentMode' | 'needsShipDetails'>;
+type Progress = Pick<SellerShipment, 'status' | 'nextActions' | 'trackingNumber' | 'canBuyLabel' | 'fulfilment' | 'fulfilmentMode'>;
 
-const own: Progress = { status: 'READY', nextActions: ['PICKED_UP'], trackingNumber: null, canBuyLabel: false, fulfilment: 'SELLER', fulfilmentMode: 'seller_ships', needsShipDetails: true };
+/** An old shipment the seller shipped themselves, before self-shipping was retired: history, no steps. */
+const legacy: Progress = { status: 'READY', nextActions: [], trackingNumber: null, canBuyLabel: false, fulfilment: 'SELLER', fulfilmentMode: 'legacy_seller_shipped' };
 
-describe('a seller who ships it themselves', () => {
-  it('cannot mark it shipped without a tracking number or handover details, and sends what they gave', async () => {
-    const user = userEvent.setup();
-    const onMove = vi.fn();
-    renderWithProviders(<ShipmentProgress shipment={own} editable loading={false} onMove={onMove} />);
-    const button = screen.getByRole('button', { name: 'Mark as shipped' });
-    expect(button).toBeDisabled();
-    expect(screen.getByText('Add a tracking number or say how you sent it.')).toBeInTheDocument();
-    // No label to buy, and AfroTransact is not mentioned as moving it.
-    expect(screen.queryByText(/Buy a shipping label/)).not.toBeInTheDocument();
-    expect(document.body.textContent).not.toMatch(/driver/i);
-
-    await user.type(screen.getByLabelText(/How you sent it/), 'Handed to a courier at 3pm');
-    expect(button).toBeEnabled();
-    await user.click(button);
-    expect(onMove).toHaveBeenCalledWith('PICKED_UP', undefined, { trackingNumber: undefined, trackingCarrier: undefined, shipNote: 'Handed to a courier at 3pm' });
+describe('self-shipping is retired', () => {
+  it('offers the seller no shipped or tracking entry on an old seller-shipped order, and no delivered step either', () => {
+    for (const status of ['READY', 'PICKED_UP', 'IN_TRANSIT'] as const) {
+      const { unmount } = renderWithProviders(<ShipmentProgress shipment={{ ...legacy, status }} editable loading={false} onMove={vi.fn()} />);
+      expect(screen.queryByRole('button')).toBeNull();
+      expect(screen.queryByTestId('ship-details')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/Tracking number/)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/How you sent it/)).not.toBeInTheDocument();
+      unmount();
+    }
   });
 
-  it('can send a tracking number (spaces removed) with an optional courier name for the seller’s own records', async () => {
+  it('only offers confirm, pack and ready on a Fulfilled by AfroTransact shipment from the seller’s store, never shipped or delivered', async () => {
     const user = userEvent.setup();
     const onMove = vi.fn();
-    renderWithProviders(<ShipmentProgress shipment={own} editable loading={false} onMove={onMove} />);
-    expect(screen.queryByLabelText('Courier name (optional)')).not.toBeInTheDocument();
-    await user.type(screen.getByLabelText('Tracking number (optional)'), '9400 1118');
-    await user.type(await screen.findByLabelText('Courier name (optional)'), 'Local Express');
-    expect(screen.getByText('For your records and ours. Buyers are never shown it.')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Mark as shipped' }));
-    expect(onMove).toHaveBeenCalledWith('PICKED_UP', undefined, { trackingNumber: '94001118', trackingCarrier: 'Local Express', shipNote: undefined });
-  });
-
-  it('confirms delivery without any AfroTransact step in between', async () => {
-    const user = userEvent.setup();
-    const onMove = vi.fn();
-    renderWithProviders(<ShipmentProgress shipment={{ ...own, status: 'PICKED_UP', nextActions: ['DELIVERED'], needsShipDetails: false }} editable loading={false} onMove={onMove} />);
-    await user.click(screen.getByRole('button', { name: 'Mark delivered' }));
-    expect(onMove).toHaveBeenCalledWith('DELIVERED', undefined, undefined);
-  });
-
-  it('is told AfroTransact collects it when the seller opted into delivery by AfroTransact (nothing to ship)', () => {
     renderWithProviders(
-      <ShipmentProgress shipment={{ ...own, status: 'PACKED', nextActions: ['READY'], fulfilment: 'AFROTRANSACT_DELIVERY', fulfilmentMode: 'afrotransact_delivery', needsShipDetails: false }} editable loading={false} onMove={vi.fn()} />
+      <ShipmentProgress shipment={{ ...legacy, status: 'PACKED', nextActions: ['READY'], fulfilment: 'AFROTRANSACT_DELIVERY', fulfilmentMode: 'afrotransact_delivery' }} editable loading={false} onMove={onMove} />
     );
     expect(screen.queryByTestId('ship-details')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /shipped|delivered/i })).toBeNull();
+    await user.click(screen.getByRole('button'));
+    expect(onMove).toHaveBeenCalledWith('READY', undefined);
   });
 });
 
@@ -73,7 +53,7 @@ describe('proof of delivery on the seller’s order (read-only)', () => {
 });
 
 describe('a seller whose shipment is fulfilled by AfroTransact', () => {
-  const afro: Progress = { status: 'READY', nextActions: [], trackingNumber: null, canBuyLabel: false, fulfilment: 'AFROTRANSACT_DELIVERY', fulfilmentMode: 'afrotransact_delivery', needsShipDetails: false };
+  const afro: Progress = { status: 'READY', nextActions: [], trackingNumber: null, canBuyLabel: false, fulfilment: 'AFROTRANSACT_DELIVERY', fulfilmentMode: 'afrotransact_delivery' };
 
   it('sees it read-only: AfroTransact picks it up, with where to find the pickup hours, and no button', () => {
     renderWithProviders(<ShipmentProgress shipment={afro} editable loading={false} onMove={vi.fn()} />);
@@ -93,9 +73,13 @@ describe('a seller whose shipment is fulfilled by AfroTransact', () => {
     }
   });
 
-  it('says nothing about AfroTransact for a seller-shipped or pickup order', () => {
-    renderWithProviders(<ShipmentProgress shipment={{ ...afro, fulfilmentMode: 'seller_ships', status: 'PICKED_UP', nextActions: ['DELIVERED'] }} editable loading={false} onMove={vi.fn()} />);
+  it('says nothing about AfroTransact for a pickup order, and the seller hands it over with the customer’s code', async () => {
+    const user = userEvent.setup();
+    const onMove = vi.fn();
+    renderWithProviders(<ShipmentProgress shipment={{ ...afro, fulfilment: 'SELLER', fulfilmentMode: 'pickup', status: 'READY', nextActions: ['DELIVERED'] }} editable loading={false} onMove={onMove} />);
     expect(screen.queryByTestId('afrotransact-note')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Mark delivered' })).toBeEnabled();
+    await user.type(screen.getByLabelText(/code/i), '4821');
+    await user.click(screen.getByRole('button', { name: /Hand over/ }));
+    expect(onMove).toHaveBeenCalledWith('DELIVERED', '4821');
   });
 });

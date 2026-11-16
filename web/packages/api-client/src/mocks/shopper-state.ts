@@ -102,9 +102,9 @@ function deliveredOrder(orderNumber: string, placed: Date, items: Array<{ id: st
         statusLabel: 'Delivered',
         items: lines.map((l) => `${l.title} × ${l.quantity}`).join(' · '),
         sellerName: seller,
-        // Seed history: one order AfroTransact delivered (with photo proof), one the seller shipped (tracking number, no proof, no carrier named).
-        deliveryMethod: sellerShips ? 'seller_ships' : 'afrotransact_delivery',
-        fulfilmentMode: sellerShips ? 'seller_ships' : 'fulfilled_by_afrotransact',
+        // Seed history: one order AfroTransact delivered (with photo proof), one the seller shipped before self-shipping was retired (tracking number, no proof, no carrier named).
+        deliveryMethod: sellerShips ? 'legacy_seller_shipped' : 'afrotransact_delivery',
+        fulfilmentMode: sellerShips ? 'legacy_seller_shipped' : 'fulfilled_by_afrotransact',
         cancellable: false,
         carrier: null,
         trackingNumber: sellerShips ? '9400 1118 9922 3344 5566 77' : null,

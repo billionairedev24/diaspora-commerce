@@ -53,7 +53,7 @@ export default function Tracking() {
                   </View>
                   <View style={{ flex: 1, paddingBottom: sp['3'] }}>
                     <AppText variant="bodyStrong" color={i <= step ? c.text : c.textSubtle}>{st.title}</AppText>
-                    {i <= step ? <AppText variant="small" color={c.textMuted}>{i === 2 && s.method !== 'afrotransact_delivery' && s.fulfilmentMode !== 'seller_ships' ? s.label : stepDetail(st, s.fulfilmentMode)}</AppText> : null}
+                    {i <= step ? <AppText variant="small" color={c.textMuted}>{i === 2 && s.method !== 'afrotransact_delivery' && s.fulfilmentMode !== 'legacy_seller_shipped' ? s.label : stepDetail(st, s.fulfilmentMode)}</AppText> : null}
                   </View>
                 </View>
               ))}

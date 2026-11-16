@@ -503,10 +503,8 @@ export const SellerShipmentSchema = z.object({
   status: ShipmentStatusSchema,
   statusLabel: z.string(),
   fulfilment: FulfilmentKindSchema,
-  /** seller_ships: you ship it and mark it shipped and delivered (never in an AfroTransact queue); afrotransact_delivery: you opted into delivery by AfroTransact; fulfilled_by_afrotransact: AfroTransact fulfils and delivers it. */
+  /** Two modes exist. afrotransact_delivery: Fulfilled by AfroTransact from your location (the customer pays the delivery fee, you pay nothing for it); fulfilled_by_afrotransact: AfroTransact fulfils and delivers it; pickup: Seller pickup. legacy_seller_shipped: an old order you shipped yourself before self-shipping was retired (history, no steps). */
   fulfilmentMode: FulfilmentModeSchema,
-  /** The next step is Mark shipped and you ship it yourself: send a tracking number or say how it was sent. */
-  needsShipDetails: z.boolean(),
   perishable: z.boolean(),
   lines: z.array(
     z.object({ title: z.string(), quantity: z.number().int(), unitPriceMinor: z.number().int(), itemsMinor: z.number().int(), variantAtin: z.string(), imageUrl: nullableString })

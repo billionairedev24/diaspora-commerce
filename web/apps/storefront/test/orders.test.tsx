@@ -196,24 +196,25 @@ describe('honest wording per fulfilment mode (mock BFF)', () => {
     expect(within(shipment).queryByText('Shipped by the seller')).not.toBeInTheDocument();
   });
 
-  it('a seller-shipped order says the seller ships it, names no carrier and never shows delivery proof', async () => {
-    const api = await signInDemo();
-    const seller = await api.getProduct('AT000000P6');
-    await api.addToCart({ offerId: seller.buyBox?.offerId ?? '', quantity: 1 });
-    const sum = await api.getCheckoutSummary();
-    const conf = await api.placeOrder(
-      { addressId: 'ad1', paymentMethodId: 'pm_visa4242', deliverySelections: [{ packageId: sum.packages[0]?.packageId ?? '', option: 'afrotransact_delivery' }] },
-      'checkout-modes-ui-1'
-    );
-    await api.confirmCheckoutPayment(conf.orderNumber);
-    const order = await api.getOrder(conf.orderNumber);
-    expect(order.shipments[0]?.fulfilmentMode).toBe('seller_ships');
-    renderWithProviders(<OrderDetailView orderNumber={conf.orderNumber} />);
+  it('an old order the seller shipped themselves (history) says so, names no carrier and never shows delivery proof', async () => {
+    await signInDemo();
+    renderWithProviders(<OrderDetailView orderNumber="AT-2026-100873" />);
     const shipment = await screen.findByTestId('shipment');
     expect(within(shipment).getByText('Shipped by the seller')).toBeInTheDocument();
     expect(within(shipment).queryByText(/AfroTransact/)).not.toBeInTheDocument();
     expect(within(shipment).queryByTestId('order-view-proof')).not.toBeInTheDocument();
-    expect(within(shipment).queryByTestId('order-tracking')).not.toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/\b(usps|ups|fedex|dhl)\b/i);
+  });
+
+  it('a seller who offers neither pickup nor Fulfilled by AfroTransact cannot be bought: no delivery option, flagged, order blocked', async () => {
+    const api = await signInDemo();
+    const seller = await api.getProduct('AT000000P5');
+    await api.addToCart({ offerId: seller.buyBox?.offerId ?? '', quantity: 1 });
+    const sum = await api.getCheckoutSummary();
+    const pkg = sum.packages.find((p) => p.fulfilment === 'SELLER');
+    expect(pkg?.deliveryOptions.map((o) => o.key)).toEqual([]);
+    expect(pkg?.noFulfilment).toBe(true);
+    expect(sum.canPlaceOrder).toBe(false);
+    expect(sum.deliveryBlockedReason).toMatch(/offers neither pickup near you nor delivery/);
   });
 });

@@ -171,11 +171,14 @@ function checkoutPackages(session: MockSession, zip: string, now: Date): Checkou
       const options = p.deliveryOptions.filter((o) => o.key !== 'pickup' || points.length > 0).map((o) => dated(o, p));
       if (points.length && !options.some((o) => o.key === 'pickup')) options.push(pickupOption(points, now, isAT));
       // Outside every delivery zone the only delivery option is quote_required (pickup stays): the shopper never dead-ends.
-      if (outside) return outsideZonePackage(p, points.length ? pickupOption(points, now, isAT) : null, points);
-      return { ...p, deliveryOptions: options, pickupPoints: points, delivery: { ...p.delivery, label: options[0]?.eta ?? p.delivery.label } };
+      // Sellers do not ship themselves: a seller's own package with no pickup near the address has no way to be bought.
+      const noFulfilment = p.fulfilment === 'SELLER' && points.length === 0;
+      if (outside && !noFulfilment) return outsideZonePackage(p, points.length ? pickupOption(points, now, isAT) : null, points);
+      return { ...p, deliveryOptions: options, pickupPoints: points, ...(noFulfilment ? { noFulfilment: true } : {}), delivery: { ...p.delivery, label: options[0]?.eta ?? p.delivery.label } };
     });
 }
 
+export const NO_FULFILMENT_MESSAGE = 'Some items can’t be bought right now: the seller offers neither pickup near you nor delivery. Remove them or choose another address.';
 export const QUOTE_REQUIRED_MESSAGE = 'Part of your order is too far for standard delivery. Ask us for a quote, choose pickup, or choose another address.';
 
 function choiceMap(raw: string | null): Map<string, string> {
@@ -293,8 +296,8 @@ function summary(ctx: Ctx, addressId: string | null, packageDelivery?: string | 
     taxLines: tax.taxLines,
     shippingTaxAllocation: tax.shippingTaxAllocation,
     blockedLines: tax.blockedLines,
-    canPlaceOrder: tax.canPlaceOrder && !quotePkg,
-    ...(quotePkg ? { deliveryBlockedReason: QUOTE_REQUIRED_MESSAGE } : {}),
+    canPlaceOrder: tax.canPlaceOrder && !quotePkg && !packages.some((p) => p.noFulfilment),
+    ...(quotePkg ? { deliveryBlockedReason: QUOTE_REQUIRED_MESSAGE } : packages.some((p) => p.noFulfilment) ? { deliveryBlockedReason: NO_FULFILMENT_MESSAGE } : {}),
     totalMinor: subtotal - discountMinor + netShipping + taxMinor,
     currency: 'USD',
     sellerCount: new Set(packages.map((p) => p.seller.id)).size,
@@ -702,12 +705,12 @@ export const shopperHandlers = [
       const sel = req.deliverySelections.find((x) => x.packageId === p.packageId);
       const opt = p.deliveryOptions.find((o) => o.key === sel?.option);
       const needsCode = (sel?.option === 'afrotransact_delivery' || sel?.option === 'pickup') && (p.lines.some((l) => l.perishable) || sel.preferences?.handover === 'hand');
-      // Who moves it, as orders decides at checkout: the seller ships a seller-packed package that did not opt into delivery by
-      // AfroTransact, whatever the shopper's "Delivery" option; AfroTransact moves Fulfilled by AfroTransact and opted-in ones.
+      // Who moves it, as orders decides at checkout: pickup, or Fulfilled by AfroTransact (AfroTransact stock, or a seller's store it
+      // collects from). A plain seller package with no pickup cannot be bought (orders.fulfilment-unavailable), never guessed.
       const mode: FulfilmentMode =
-        sel?.option === 'pickup' ? 'pickup' : p.fulfilment === 'AFROTRANSACT' ? 'fulfilled_by_afrotransact' : p.fulfilment === 'AFROTRANSACT_DELIVERY' ? 'afrotransact_delivery' : 'seller_ships';
+        sel?.option === 'pickup' ? 'pickup' : p.fulfilment === 'AFROTRANSACT' ? 'fulfilled_by_afrotransact' : p.fulfilment === 'AFROTRANSACT_DELIVERY' ? 'afrotransact_delivery' : 'pickup';
       return { shipmentId: `${orderNumber}-s${i + 1}`, label: `${p.heading} · ${opt?.label ?? ''}`.trim(), status: 'placed', statusLabel: 'Order placed',
-        items: p.lines.map((l) => `${l.title} × ${l.quantity}`).join(' · '), sellerName: p.seller.name, deliveryMethod: mode === 'seller_ships' && sel?.option !== 'carrier' ? 'seller_ships' : (sel?.option ?? 'carrier'), fulfilmentMode: mode, cancellable: true,
+        items: p.lines.map((l) => `${l.title} × ${l.quantity}`).join(' · '), sellerName: p.seller.name, deliveryMethod: sel?.option ?? 'afrotransact_delivery', fulfilmentMode: mode, cancellable: true,
         carrier: null, trackingNumber: null, promisedFrom: opt?.earliestDate ?? null, promisedBy: opt?.latestDate ?? null, deliveredAt: null,
         deliveryCode: needsCode ? String(1000 + ((n * 7919) % 9000)) : null,
         lines: p.lines.map((l) => ({ lineId: l.lineId, atin: l.atin, title: l.title, imageUrl: null, quantity: l.quantity, unitPriceMinor: l.priceMinor, itemsMinor: l.lineTotalMinor })),

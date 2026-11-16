@@ -1,6 +1,6 @@
 'use client';
 
-import { deliveredByAfroTransact, type SellerShipDetails, sellerKeys, sellerQueries, type SellerStatusAction } from '@afrotransact/api-client';
+import { deliveredByAfroTransact, sellerKeys, sellerQueries, type SellerStatusAction } from '@afrotransact/api-client';
 import { Button, Sheet, useToast } from '@afrotransact/ui';
 import { DownloadSimple } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -29,7 +29,7 @@ export function OrderSheet({ orderNumber, onClose }: { orderNumber: string | nul
   const editable = can('orders');
   const q = useQuery({ ...sellerQueries.order(api, orgId, orderNumber ?? ''), enabled: orderNumber !== null });
   const status = useMutation({
-    mutationFn: ({ shipmentId, to, code, ship }: { shipmentId: string; to: SellerStatusAction; code?: string; ship?: SellerShipDetails }) => api.updateShipmentStatus(orderNumber ?? '', shipmentId, to, idempotencyKey(), code, ship),
+    mutationFn: ({ shipmentId, to, code }: { shipmentId: string; to: SellerStatusAction; code?: string }) => api.updateShipmentStatus(orderNumber ?? '', shipmentId, to, idempotencyKey(), code),
     onSuccess: (o, v) => {
       qc.setQueryData(sellerKeys.order(orgId, o.orderNumber), o);
       void qc.invalidateQueries({ queryKey: sellerKeys.orders(orgId) });
@@ -77,7 +77,7 @@ export function OrderSheet({ orderNumber, onClose }: { orderNumber: string | nul
                   </li>
                 ))}
                 <li className="flex gap-2 border-t border-border pt-1 text-muted">
-                  <span className="flex-1">Shipping</span>
+                  <span className="flex-1">{s.fulfilment === 'SELLER' ? 'Shipping' : t('sc.order.deliveryFee')}</span>
                   <span>{s.shippingMinor ? money(s.shippingMinor, o.currency) : 'Free'}</span>
                 </li>
                 <li className="flex gap-2 font-semibold">
@@ -110,13 +110,15 @@ export function OrderSheet({ orderNumber, onClose }: { orderNumber: string | nul
                     <span className="flex-1">{t('sc.local.charge')}</span>
                     <span>{money(s.localDelivery.customerChargeMinor, o.currency)}</span>
                   </span>
-                  <span className="flex gap-2 font-semibold">
-                    <span className="flex-1">{t('sc.local.fee')}</span>
-                    <span>−{money(s.localDelivery.sellerFeeMinor, o.currency)}</span>
-                  </span>
+                  {s.localDelivery.sellerFeeMinor > 0 ? (
+                    <span className="flex gap-2 font-semibold">
+                      <span className="flex-1">{t('sc.local.fee')}</span>
+                      <span>−{money(s.localDelivery.sellerFeeMinor, o.currency)}</span>
+                    </span>
+                  ) : null}
                 </div>
               ) : null}
-              <ShipmentProgress shipment={s} editable={editable} loading={status.isPending} onMove={(to, code, ship) => status.mutate({ shipmentId: s.shipmentId, to, code, ship })} />
+              <ShipmentProgress shipment={s} editable={editable} loading={status.isPending} onMove={(to, code) => status.mutate({ shipmentId: s.shipmentId, to, code })} />
               {s.proof && deliveredByAfroTransact(s.fulfilmentMode) ? <ProofOfDelivery proof={s.proof} /> : null}
               {editable && s.canBuyLabel ? <LabelForm order={o} shipmentId={s.shipmentId} suggested={s.suggestedParcel} /> : null}
               <details className="text-xs text-muted">
