@@ -565,7 +565,8 @@ never requests it). `orders-service`: `offers:read` (reads the offer's `inventor
 | `flags:manage` | platform | Feature flags |
 | `markets:manage` | platform | Activate countries and states |
 | `developer:manage` | platform | API keys, webhooks and OAuth clients |
-| `ai:manage` | platform | AI routes, budgets and Lola settings |
+| `ai:manage` | platform | AI routes, budgets and Lola settings; view the AI spend cap and today's spend |
+| `ai:cap.manage` | platform | Change the daily AI spend cap (V52; Super Admin and Developer only; not an MCP scope) |
 | `audit:read` | platform | Read the audit log |
 | `reports:read` | platform | Dashboards and reports |
 | `access:read` | access | View access control: roles, capabilities, people and change log |
