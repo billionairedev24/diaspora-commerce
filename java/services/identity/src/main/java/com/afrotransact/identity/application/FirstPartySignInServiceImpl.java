@@ -318,7 +318,7 @@ class FirstPartySignInServiceImpl implements FirstPartySignInService {
 
     /** The caller must be a first-party client's service token with {@code auth:first-party}. */
     private String requireFirstPartyClient() {
-        Actor actor = current.actor();
+        Actor actor = current.caller();
         if (actor.type() != PrincipalType.SERVICE || !actor.can(IdentityPermissions.AUTH_FIRST_PARTY)
                 || !settings.clientIds().contains(actor.subject())) {
             throw new ForbiddenActionException("identity.first-party-client-required",

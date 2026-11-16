@@ -31,6 +31,7 @@ import com.afrotransact.identity.domain.UserAccount;
 import com.afrotransact.identity.port.FirstPartySignInStore;
 import com.afrotransact.identity.port.PasskeyAssertions;
 import com.afrotransact.identity.port.PasswordHasher;
+import com.afrotransact.identity.port.ServiceTokenVerifier;
 import com.afrotransact.identity.port.UserAccountRepository;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PrincipalType;
@@ -73,6 +74,32 @@ class FirstPartySignInServiceImplTest {
         assertThatThrownBy(() -> service().passkeyOptions(CTX)).isInstanceOf(ForbiddenActionException.class);
         caller = new Actor("gateway-bff", PrincipalType.SERVICE, Optional.empty(), Set.of(), Set.of("users:read"));
         assertThatThrownBy(() -> service().passkeyOptions(CTX)).isInstanceOf(ForbiddenActionException.class);
+    }
+
+    /**
+     * Core on the local profile (at.security.enabled=false): the actor resolver answers the local super admin for every
+     * call, so the BFF's verified client-credentials token must be what the first-party check reads (regression: every
+     * sign-in answered 403 identity.first-party-client-required).
+     */
+    @Test
+    void localSuperAdminResolverStillSeesTheVerifiedBffToken() {
+        Actor localAdmin = new Actor("local-dev", PrincipalType.STAFF, Optional.empty(), Set.of("platform.super_admin"),
+                Set.of("*"));
+        ServiceTokenVerifier verified = () -> Optional.of(BFF);
+        ServiceTokenVerifier none = Optional::empty;
+        FirstPartySignInSettings settings = new FirstPartySignInSettings(Set.of("gateway-bff"));
+        Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
+
+        FirstPartySignInServiceImpl withBff = new FirstPartySignInServiceImpl(new CurrentUser(() -> localAdmin, verified),
+                settings, users, hasher, signIn, protection, store, passkeys, enrolment, clock);
+        when(hasher.hash(anyString())).thenReturn("{bcrypt}dummy");
+        assertThatThrownBy(() -> withBff.password(new PasswordSignIn("nobody@example.com", "pw", null, CTX)))
+                .isInstanceOf(SignInFailed.class);
+
+        FirstPartySignInServiceImpl anonymous = new FirstPartySignInServiceImpl(new CurrentUser(() -> localAdmin, none),
+                settings, users, hasher, signIn, protection, store, passkeys, enrolment, clock);
+        assertThatThrownBy(() -> anonymous.password(new PasswordSignIn("nobody@example.com", "pw", null, CTX)))
+                .isInstanceOf(ForbiddenActionException.class);
     }
 
     @Test
