@@ -38,11 +38,16 @@ final class ShipFromDtos {
                                   @Size(max = 2) @Schema(example = "US", defaultValue = "US") String country,
                                   @Schema(description = "Also make it the default") Boolean makeDefault,
                                   @Schema(description = "Version being edited (updates); 409 when it changed")
-                                  Long version) {
+                                  Long version,
+                                  @Valid @Size(max = 14) @Schema(description = "Creates only: the hours AfroTransact "
+                                          + "can collect here. With them the new location is Fulfilled by AfroTransact "
+                                          + "by default when that is possible; without them nothing is enabled")
+                                  List<PickupWindowDto> pickupHours) {
 
         ShipFromAddressInput toInput() {
             return new ShipFromAddressInput(label, name, company, phone, line1, line2, city, state, postalCode,
-                    country, Boolean.TRUE.equals(makeDefault), version);
+                    country, Boolean.TRUE.equals(makeDefault), version,
+                    pickupHours == null ? List.of() : pickupHours.stream().map(PickupWindowDto::toWindow).toList());
         }
     }
 
