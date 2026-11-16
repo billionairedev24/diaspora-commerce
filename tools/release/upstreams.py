@@ -358,7 +358,11 @@ def check_edge(errors, docs=None):
         if not route["metadata"].get("namespace", "").startswith("afrotransact-"):
             continue  # platform routes (Grafana in dev) are not AfroTransact services
         denied, allowed = set(), {}
+        if len(route["spec"]["rules"]) > 16:
+            errors.append(f"{label}: {len(route['spec']['rules'])} rules; the Gateway API allows 16 per HTTPRoute (merge deny matches into an existing deny rule)")
         for rule in route["spec"]["rules"]:
+            if len(rule.get("matches", [])) > 64:
+                errors.append(f"{label}: a rule has {len(rule['matches'])} matches; the Gateway API allows 64")
             paths = [m["path"]["value"] for m in rule.get("matches", [])] or ["/"]
             if any(fl.get("extensionRef", {}).get("name") == "deny-operational-paths" for fl in rule.get("filters", [])):
                 denied.update(paths)
