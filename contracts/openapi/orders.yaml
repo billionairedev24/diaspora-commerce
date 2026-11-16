@@ -149,7 +149,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
         '422':
-          description: orders.cart-empty, orders.cart-not-checkoutable, orders.market-disabled, orders.address-not-found,
+          description: >-
+            orders.cart-empty, orders.cart-not-checkoutable, orders.market-disabled, orders.address-not-found,
             orders.invalid-delivery-selection, orders.tax-line-blocked (a cart line has no definite tax decision yet:
             the detail names the item in plain words; remove it from the cart or try again later. Never defaulted
             or dropped silently)
@@ -325,7 +326,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
         '422':
-          description: orders.cart-empty, orders.cart-not-checkoutable, orders.market-disabled, orders.address-not-found,
+          description: >-
+            orders.cart-empty, orders.cart-not-checkoutable, orders.market-disabled, orders.address-not-found,
             orders.invalid-delivery-selection, orders.tax-line-blocked (a cart line has no definite tax decision yet:
             the detail names the item in plain words; remove it from the cart or try again later. Never defaulted
             or dropped silently)
