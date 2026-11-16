@@ -31,6 +31,8 @@ type StaffDeliveryService interface {
 	Take(ctx context.Context, c *domain.Caller, shipmentID, idem string, req domain.DeliveryActionRequest) (domain.DeliveryDetail, error)
 	Assign(ctx context.Context, c *domain.Caller, shipmentID, idem string, req domain.DeliveryAssignRequest) (domain.DeliveryDetail, error)
 	PickedUp(ctx context.Context, c *domain.Caller, shipmentID, idem string, req domain.DeliveryActionRequest) (domain.DeliveryDetail, error)
+	InTransit(ctx context.Context, c *domain.Caller, shipmentID, idem string, req domain.DeliveryActionRequest) (domain.DeliveryDetail, error)
+	Returned(ctx context.Context, c *domain.Caller, shipmentID, idem string, req domain.DeliveryFailedRequest) (domain.DeliveryDetail, error)
 	OutForDelivery(ctx context.Context, c *domain.Caller, shipmentID, idem string, req domain.DeliveryActionRequest) (domain.DeliveryDetail, error)
 	Delivered(ctx context.Context, c *domain.Caller, shipmentID, idem string, req domain.DeliveryProofRequest) (domain.DeliveryDetail, error)
 	Failed(ctx context.Context, c *domain.Caller, shipmentID, idem string, req domain.DeliveryFailedRequest) (domain.DeliveryDetail, error)
@@ -320,6 +322,14 @@ func deliveryErr(err error) error {
 	return err
 }
 
+// expecting adds the status the screen showed, so a change another person made first answers 409 instead of being overruled.
+func expecting(body jobj, status string) jobj {
+	if st := strings.ToLower(strings.TrimSpace(status)); st != "" && len(st) <= 40 {
+		body["expectedStatus"] = st
+	}
+	return body
+}
+
 func versioned(body jobj, v *int64, note string) jobj {
 	if v != nil {
 		body["version"] = *v
@@ -348,7 +358,7 @@ func (s *staffDeliveryImpl) simple(ctx context.Context, c *domain.Caller, shipme
 	if err != nil {
 		return domain.DeliveryDetail{}, err
 	}
-	return s.act(ctx, sc, shipmentID, http.MethodPost, path, versioned(jobj{}, req.Version, req.Note))
+	return s.act(ctx, sc, shipmentID, http.MethodPost, path, expecting(versioned(jobj{}, req.Version, req.Note), req.ExpectedStatus))
 }
 
 func (s *staffDeliveryImpl) Take(ctx context.Context, c *domain.Caller, id, idem string, req domain.DeliveryActionRequest) (domain.DeliveryDetail, error) {
@@ -357,6 +367,10 @@ func (s *staffDeliveryImpl) Take(ctx context.Context, c *domain.Caller, id, idem
 
 func (s *staffDeliveryImpl) PickedUp(ctx context.Context, c *domain.Caller, id, idem string, req domain.DeliveryActionRequest) (domain.DeliveryDetail, error) {
 	return s.simple(ctx, c, id, idem, "/picked-up", req)
+}
+
+func (s *staffDeliveryImpl) InTransit(ctx context.Context, c *domain.Caller, id, idem string, req domain.DeliveryActionRequest) (domain.DeliveryDetail, error) {
+	return s.simple(ctx, c, id, idem, "/in-transit", req)
 }
 
 func (s *staffDeliveryImpl) OutForDelivery(ctx context.Context, c *domain.Caller, id, idem string, req domain.DeliveryActionRequest) (domain.DeliveryDetail, error) {
@@ -382,18 +396,27 @@ func (s *staffDeliveryImpl) Assign(ctx context.Context, c *domain.Caller, id, id
 }
 
 func (s *staffDeliveryImpl) Failed(ctx context.Context, c *domain.Caller, id, idem string, req domain.DeliveryFailedRequest) (domain.DeliveryDetail, error) {
+	return s.reasoned(ctx, c, id, idem, "/failed", "Say why it failed (3 to 500 characters)", req)
+}
+
+// Returned sends the parcel back to the seller after a failed attempt; the reason is kept in the audit trail.
+func (s *staffDeliveryImpl) Returned(ctx context.Context, c *domain.Caller, id, idem string, req domain.DeliveryFailedRequest) (domain.DeliveryDetail, error) {
+	return s.reasoned(ctx, c, id, idem, "/returned", "Say why it goes back to the seller (3 to 500 characters)", req)
+}
+
+func (s *staffDeliveryImpl) reasoned(ctx context.Context, c *domain.Caller, id, idem, path, ask string, req domain.DeliveryFailedRequest) (domain.DeliveryDetail, error) {
 	if err := validDeliveryID(id); err != nil {
 		return domain.DeliveryDetail{}, err
 	}
 	reason := strings.TrimSpace(req.Reason)
 	if n := len([]rune(reason)); n < 3 || n > 500 {
-		return domain.DeliveryDetail{}, domain.ValidationProblem(map[string]string{"reason": "Say why it failed (3 to 500 characters)"})
+		return domain.DeliveryDetail{}, domain.ValidationProblem(map[string]string{"reason": ask})
 	}
 	sc, err := s.operator(ctx, c, idem)
 	if err != nil {
 		return domain.DeliveryDetail{}, err
 	}
-	return s.act(ctx, sc, id, http.MethodPost, "/failed", versioned(jobj{"reason": reason}, req.Version, ""))
+	return s.act(ctx, sc, id, http.MethodPost, path, expecting(versioned(jobj{"reason": reason}, req.Version, ""), req.ExpectedStatus))
 }
 
 // proofBody validates the proof the console sent (the same limits orders enforces) and checks each photo with media: it
@@ -489,7 +512,7 @@ func (s *staffDeliveryImpl) Delivered(ctx context.Context, c *domain.Caller, id,
 	if err != nil {
 		return domain.DeliveryDetail{}, err
 	}
-	return s.act(ctx, sc, id, http.MethodPost, "/delivered", versioned(body, req.Version, ""))
+	return s.act(ctx, sc, id, http.MethodPost, "/delivered", expecting(versioned(body, req.Version, ""), req.ExpectedStatus))
 }
 
 func (s *staffDeliveryImpl) CorrectProof(ctx context.Context, c *domain.Caller, id, idem string, req domain.DeliveryProofRequest) (domain.DeliveryDetail, error) {

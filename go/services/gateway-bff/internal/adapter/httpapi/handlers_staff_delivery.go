@@ -18,9 +18,11 @@ func (h *handlersImpl) registerStaffDelivery(route func(pattern string, fn http.
 	route("POST /v1/staff/deliveries/{shipmentId}/take", h.staffDeliveryTake)
 	route("POST /v1/staff/deliveries/{shipmentId}/assign", h.staffDeliveryAssign)
 	route("POST /v1/staff/deliveries/{shipmentId}/picked-up", h.staffDeliveryPickedUp)
+	route("POST /v1/staff/deliveries/{shipmentId}/in-transit", h.staffDeliveryInTransit)
 	route("POST /v1/staff/deliveries/{shipmentId}/out-for-delivery", h.staffDeliveryOut)
 	route("POST /v1/staff/deliveries/{shipmentId}/delivered", h.staffDeliveryDelivered)
 	route("POST /v1/staff/deliveries/{shipmentId}/failed", h.staffDeliveryFailed)
+	route("POST /v1/staff/deliveries/{shipmentId}/returned", h.staffDeliveryReturned)
 	route("PUT /v1/staff/deliveries/{shipmentId}/proof", h.staffDeliveryCorrectProof)
 }
 
@@ -77,6 +79,22 @@ func (h *handlersImpl) staffDeliveryPickedUp(w http.ResponseWriter, r *http.Requ
 	h.deliveryAction(w, r, func(s app.StaffDeliveryService, id, idem string, b domain.DeliveryActionRequest) (domain.DeliveryDetail, error) {
 		return s.PickedUp(r.Context(), callerFrom(r.Context()), id, idem, b)
 	})
+}
+
+func (h *handlersImpl) staffDeliveryInTransit(w http.ResponseWriter, r *http.Request) {
+	h.deliveryAction(w, r, func(s app.StaffDeliveryService, id, idem string, b domain.DeliveryActionRequest) (domain.DeliveryDetail, error) {
+		return s.InTransit(r.Context(), callerFrom(r.Context()), id, idem, b)
+	})
+}
+
+func (h *handlersImpl) staffDeliveryReturned(w http.ResponseWriter, r *http.Request) {
+	var b domain.DeliveryFailedRequest
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Delivery.Returned(r.Context(), callerFrom(r.Context()), r.PathValue("shipmentId"), r.Header.Get("Idempotency-Key"), b)
+	h.reply(w, r, http.StatusOK, v, err)
 }
 
 func (h *handlersImpl) staffDeliveryOut(w http.ResponseWriter, r *http.Request) {

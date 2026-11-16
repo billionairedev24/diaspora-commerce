@@ -138,19 +138,48 @@ func ordersResource() *staffResource {
 					}
 					return ""
 				},
-				run: func(ctx context.Context, sc staffCtx, _ jobj, v jobj) error {
+				run: func(ctx context.Context, sc staffCtx, o jobj, v jobj) error {
 					shipmentID, to, ok := strings.Cut(vs(v, "step"), "|")
 					if !ok || shipmentID == "" || to == "" {
 						return domain.ValidationProblem(map[string]string{"step": "Choose the next step"})
+					}
+					if m := shipmentMode(shipmentJobj(o, shipmentID)); (m == domain.ModeSellerStore || m == domain.ModeFulfilled) && deliverySteps[to] && (to != "RETURNED" || strings.EqualFold(jstr(shipmentJobj(o, shipmentID), "status"), "DELIVERY_FAILED")) {
+						// Taken with the delivery steps (proof, audit and the job lock), never as a plain status change.
+						return domain.ValidationProblem(map[string]string{"step": "AfroTransact delivers this order: use the delivery steps in the order sheet or in Delivery"})
 					}
 					code := strings.TrimSpace(vs(v, "handoverCode"))
 					if code != "" && !domain.IsHandoverCode(code) {
 						return domain.ValidationProblem(map[string]string{"handoverCode": "Enter the 4 digits"})
 					}
-					if reasonRequired(to) && strings.TrimSpace(vs(v, "reason")) == "" && !(to == "DELIVERED" && code != "") {
+					if reasonRequired(to, shipmentMode(shipmentJobj(o, shipmentID))) && strings.TrimSpace(vs(v, "reason")) == "" && !(to == "DELIVERED" && code != "") {
 						return domain.ValidationProblem(map[string]string{"reason": "Say why (required to " + strings.ToLower(shipmentStepVerbs[to]) + ")"})
 					}
 					return sc.post(ctx, sc.up.Orders, "/v1/shipments/"+url.PathEscape(shipmentID)+"/transitions", omitEmpty(jobj{"to": to, "reason": vs(v, "reason"), "handoverCode": code}), nil)
+				}},
+			// The seller ships and updates their own orders. Only a holder of orders:override-shipment (Super Admin) can force
+			// a later status, with a reason; orders-service checks the permission again, keeps who, when and why, and refuses
+			// AfroTransact-delivered and pickup shipments.
+			{key: "shipment-override", label: "Override status", tone: "neutral", permission: permOverrideShipment,
+				form: func(_ context.Context, _ staffCtx, o jobj) *domain.Form {
+					return &domain.Form{Title: "Override the seller's status", SubmitLabel: "Override", Fields: []domain.FormField{
+						withOptions(ff("step", "New status", "select", true), shipmentOverrideSteps(o)),
+						withMax(ff("reason", "Why are you overriding it?", "text", true), 500)}}
+				},
+				when: func(_ staffCtx, o jobj) string {
+					if len(shipmentOverrideSteps(o)) == 0 {
+						return "Nothing to override: the seller ships no open shipment on this order."
+					}
+					return ""
+				},
+				run: func(ctx context.Context, sc staffCtx, _ jobj, v jobj) error {
+					shipmentID, to, ok := strings.Cut(vs(v, "step"), "|")
+					if !ok || shipmentID == "" || to == "" {
+						return domain.ValidationProblem(map[string]string{"step": "Choose the new status"})
+					}
+					if n := len([]rune(strings.TrimSpace(vs(v, "reason")))); n < 3 || n > 500 {
+						return domain.ValidationProblem(map[string]string{"reason": "Say why (3 to 500 characters)"})
+					}
+					return sc.post(ctx, sc.up.Orders, "/v1/shipments/"+url.PathEscape(shipmentID)+"/override", jobj{"to": to, "reason": strings.TrimSpace(vs(v, "reason"))}, nil)
 				}},
 		},
 	}
@@ -176,7 +205,7 @@ func shipmentNextStepActions(o jobj) []staffAction {
 		}
 		driverOwned := strings.EqualFold(jstr(s, "deliveryMethod"), domain.AfroTransactDelivery)
 		for _, step := range shipmentLifecycle {
-			if !next[step] || reasonRequired(step) || step == "RETURNED" || (driverOwned && driverSteps[step]) {
+			if !next[step] || reasonRequired(step, shipmentMode(s)) || step == "RETURNED" || (driverOwned && driverSteps[step]) {
 				continue
 			}
 			label := shipmentStepVerbs[step]
@@ -191,36 +220,8 @@ func shipmentNextStepActions(o jobj) []staffAction {
 				}})
 			break // one next step per shipment
 		}
-		if hint := driverHint(jstr(s, "status"), driverOwned); hint != "" {
-			label := "In the Delivery queue"
-			if len(ships) > 1 {
-				label += " · " + jstr(s, "label")
-			}
-			// A button that cannot be pressed: it says where this shipment moves next.
-			out = append(out, staffAction{key: "driver:" + id, label: label, tone: "neutral", permission: "orders:manage", also: []string{"orders:update-status"},
-				when: func(staffCtx, jobj) string { return hint },
-				run:  func(context.Context, staffCtx, jobj, jobj) error { return nil }})
-		}
 	}
 	return out
-}
-
-// driverHint says what happens next to a shipment AfroTransact delivers (the name is historical: no driver app is involved).
-func driverHint(status string, driverOwned bool) string {
-	if !driverOwned {
-		return ""
-	}
-	switch strings.ToUpper(status) {
-	case "READY":
-		return "Run it in Delivery: take it, pick it up from the seller or the warehouse and deliver it with a photo as proof."
-	case "PICKED_UP", "IN_TRANSIT":
-		return "Picked up. Mark it out for delivery in Delivery."
-	case "OUT_FOR_DELIVERY":
-		return "Out for delivery. Mark it delivered in Delivery with a photo as proof, or record why it failed."
-	case "DELIVERY_FAILED":
-		return "A delivery attempt failed. Try again from Delivery, or return it with More options."
-	}
-	return ""
 }
 
 // shipmentLifecycle is the order of the steps staff may take on a shipment (orders-service state machine).
@@ -234,9 +235,48 @@ var shipmentStepVerbs = map[string]string{
 	"DELIVERY_FAILED": "Record a failed delivery", "RETURNED": "Mark returned", "CANCELLED": "Cancel the shipment",
 }
 
-// reasonRequired: the steps orders-service wants a reason for (a cancellation, a failure, a delivery confirmed by hand).
-func reasonRequired(to string) bool {
-	return to == "CANCELLED" || to == "DELIVERY_FAILED" || to == "DELIVERED"
+// reasonRequired: the steps that need a reason or note: a cancellation, a failed delivery, a return (back to the seller, or
+// a pickup nobody collected), and a delivery confirmed by hand. Delivered by AfroTransact needs a photo instead (its note is
+// optional).
+func reasonRequired(to, mode string) bool {
+	switch to {
+	case "CANCELLED", "DELIVERY_FAILED", "RETURNED":
+		return true
+	case "DELIVERED":
+		return mode != domain.ModeSellerStore && mode != domain.ModeFulfilled
+	}
+	return false
+}
+
+// shipmentOverrideSteps lists the overrides orders-service offers this caller, as "<shipment> · <step>" choices whose value is
+// "<shipmentId>|<STATUS>" (empty for everyone without orders:override-shipment).
+func shipmentOverrideSteps(o jobj) []domain.FieldOption {
+	out := []domain.FieldOption{}
+	multi := len(objs(o, "shipments")) > 1
+	for _, s := range objs(o, "shipments") {
+		id := firstNonEmpty(jstr(s, "shipmentId"), jstr(s, "id"))
+		for _, step := range shipmentLifecycle {
+			if !slices.Contains(overrideSteps(s), step) {
+				continue
+			}
+			label := shipmentStepVerbs[step]
+			if multi {
+				label = jstr(s, "label") + " · " + label
+			}
+			out = append(out, domain.FieldOption{Value: id + "|" + step, Label: label})
+		}
+	}
+	return out
+}
+
+// shipmentOf finds the order's shipment by id (an empty object when it is not there).
+func shipmentJobj(o jobj, id string) jobj {
+	for _, s := range objs(o, "shipments") {
+		if firstNonEmpty(jstr(s, "shipmentId"), jstr(s, "id")) == id {
+			return s
+		}
+	}
+	return jobj{}
 }
 
 // shipmentSteps lists, for each shipment, the steps the caller may take on it next (the shipment's own nextActions:
