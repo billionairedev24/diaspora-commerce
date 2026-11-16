@@ -15,11 +15,25 @@ schedule), the category and rates negotiated per organisation. Payments learns e
 `seller.subscription.changed`. See [commission-and-connection-fees.md](commission-and-connection-fees.md).
 
 Stories S292–S299 (epic E14). Code: `java/services/seller` (domain `Plan*`, `Trial*`, `Reward*`, `BillingGrant`,
-`FreeDays`, `PlanFeeCollection`; use cases `PlanAdminService`, `PlanSyncService`, `TrialService`, `RewardService`,
+`FreeDays`, `PlanFeeCollection`; use cases `PlanAdminService`, `TrialService`, `RewardService`,
 `BillingAdjustmentService`, `EarningsCollectionService`, `PlanFeeCollectionService`); Flyway
 `V70__plan_catalog_trials_rewards.sql`, `V71__plan_fee_collection.sql`,
 `V72__reward_rule_comparison_and_window_end.sql`; payments `PlanFeeService`,
 `V14__plan_fee_withholdings.sql`.
+
+## Routes dropped from the seller contract
+
+`GET` and `POST /v1/billing/stripe-sync` (drift report and "Sync with Stripe" for plan Prices) and
+`GET /v1/orgs/{orgId}/billing/invoices/{invoiceId}/pdf` (302 to a Stripe-hosted invoice PDF) were documented but never
+implemented, and no client calls them: not the Seller Center or staff console, not the gateway-bff routes or OpenAPI, not the
+mobile apps, not an MCP tool. Both describe Stripe Billing objects (Prices, hosted invoices) that the own-billing design removed:
+`PlanPaymentsGateway` only has customers, SetupIntents, payment methods and PaymentIntents, and plan invoices are rows in
+`invoice` that we issue. There is therefore nothing to reconcile with Stripe and no Stripe PDF to redirect to, so both were removed
+from `contracts/openapi/seller.yaml` (with the `PlanSyncReport` and `PlanSyncLine` schemas) and from the seller README and portal page.
+Invoices are downloaded through `GET /v1/orgs/{orgId}/billing/invoices/{invoiceId}/document` (printable HTML; the BFF exposes it as
+`/v1/seller/billing/invoices/{invoiceId}/document`), now documented in the contract. If a real PDF is ever needed, add a rendering port
+to the seller service and a `/pdf` route in the same change as its first client. The `plan_version_price.stripe_price_id`
+and lookup-key columns are unused legacy and can be dropped in a later migration.
 
 ## Plan catalogue and versions
 

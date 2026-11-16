@@ -169,8 +169,8 @@ subscription; failures are retried by a job). Billing page (owner / finance read
 | `POST /v1/orgs/{orgId}/billing/plan {planCode, cadence}` | upgrades on the same cadence prorate now (`always_invoice`; during a trial no proration); downgrades and cadence changes are recorded and applied at renewal by the job (`proration_behavior=none`) |
 | `POST …/billing/cancel` · `POST …/billing/resume` | cancel / resume at period end |
 | `GET/POST …/billing/payment-methods`, `POST …/{id}/default`, `DELETE …/{id}` | default can't be removed (`409 seller.default-payment-method`) |
-| `GET …/billing/invoices` | from `invoice.*` webhooks, with hosted page and PDF links |
-| `GET …/billing/invoices/{invoiceId}/pdf` | owner / finance: `302` to the invoice's Stripe PDF (`404 seller.invoice-pdf-missing` until finalised) |
+| `GET …/billing/invoices` | our own invoices (lines, payments, dunning state) |
+| `GET …/billing/invoices/{invoiceId}/document` | owner / finance: printable HTML invoice (Print, Save as PDF); plan invoices are our own, there is no Stripe PDF (`404 seller.invoice-not-found`) |
 | `GET …/billing/plan/preview?planCode=&cadence=` | owner / finance: what `POST …/billing/plan` would do — `IMMEDIATE_UPGRADE` with `amountDueNowCents` from Stripe's invoice preview (`proration_behavior=always_invoice`; 0 during a trial or from a free plan with a trial), or `AT_RENEWAL` with `effectiveAt` = the renewal; nothing changes |
 | `POST …/billing/setup-intents` | owner: a Stripe SetupIntent (`usage=off_session`) on the organisation's customer (created on first use) → `{customerId, setupIntentId, clientSecret}`; Seller Center confirms it with the Payment Element, then registers the `pm_…` with `POST …/billing/payment-methods` |
 
@@ -204,9 +204,8 @@ mapping of free days, credits and discounts, and the idempotency keys are in
 |---|---|
 | `GET/POST /v1/billing/plans`, `GET/PUT /v1/billing/plans/{code}` | catalogue (plans:manage writes; plans:manage, seller:billing or billing:adjust read); metadata edits use `expectedVersion` |
 | `PUT /v1/billing/plans/{code}/draft` | prices per cadence + default trial; creates the next version when they differ |
-| `POST …/{code}/publish` · `POST …/{code}/retire` · `PUT …/{code}/invites` | publish syncs Stripe; retired plans keep subscribers |
+| `POST …/{code}/publish` · `POST …/{code}/retire` · `PUT …/{code}/invites` | publish makes the version current; retired plans keep subscribers |
 | `GET/POST …/{code}/migration` | preview and move subscribers on older versions to the current one (next renewal, no proration) |
-| `GET/POST /v1/billing/stripe-sync` | drift report / "Sync with Stripe" (`IN_SYNC`, `ADOPTABLE`, `MISSING`, `DRIFT`, `FREE`) |
 | `GET/POST /v1/billing/trial-campaigns`, `PUT …/{id}`, `POST …/{id}/status` | promo codes and sign-up windows |
 | `GET/POST /v1/billing/reward-rules`, `PUT …/{id}`, `POST …/{id}/status`, `POST …/preview` | rules and "who qualifies now" |
 | `GET /v1/billing/grants`, `GET /v1/billing/reason-codes` | grants log, adjustment reasons |
