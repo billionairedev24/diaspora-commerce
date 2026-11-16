@@ -111,6 +111,8 @@ export interface MockSellerDb {
   businessPage: Record<string, { description: string; brandColor: string; logoUrl: string }>;
   /** The branded storefront settings per organisation (seller service /v1/orgs/{orgId}/store-page). */
   storePage: Record<string, MockStorePage>;
+  /** Set by a test: the page address is not made yet (it is made when the payout account is set up). */
+  noPageAddress?: boolean;
   /** offers-service offers of the listings' variants: the fulfilment choice (S255). */
   offers: SellerOffer[];
   /** Seller-funded coupons (offers-service). */

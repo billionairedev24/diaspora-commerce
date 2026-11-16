@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { StorePageView } from '@/components/store-page/StorePageView';
 import { addFeatured, filterPreviewProducts, localProblems, moveFeatured, moveSection, toggleSection } from '@/lib/store-page';
 
-import { asRole } from './mock-api';
+import { asRole, failStorePreview } from './mock-api';
 import { renderScreen } from './render';
 
 describe('store page helpers', () => {
@@ -80,6 +80,29 @@ describe('Settings > Store page', () => {
     await user.click(screen.getByRole('radio', { name: 'Phone' }));
     expect(screen.getByTestId('store-preview-frame')).toHaveAttribute('data-width', 'mobile');
     expect(screen.getByTestId('store-editor').textContent).not.toMatch(/\boffer/i);
+  });
+
+  it('shows the preview before the page has an address, with no featured products and no hero image', async () => {
+    const db = resetSellerDb(new Date());
+    db.noPageAddress = true;
+    await renderScreen(<StorePageView />);
+    expect(await screen.findByTestId('store-state')).toHaveTextContent('Not published');
+    expect(screen.getByText('Your page address is made when your payout account is set up.')).toBeInTheDocument();
+    expect(await screen.findByTestId('store-preview-frame')).toBeInTheDocument();
+    expect(screen.getByTestId('store-preview-note')).toHaveTextContent('Preview, not published');
+    expect(screen.queryByTestId('store-preview-missing')).not.toBeInTheDocument();
+    expect(screen.getByTestId('publish')).toBeDisabled();
+  });
+
+  it('says a missing store in plain words and offers Try again', async () => {
+    const user = userEvent.setup();
+    failStorePreview(1);
+    await renderScreen(<StorePageView />);
+    const missing = await screen.findByTestId('store-preview-missing');
+    expect(missing).toHaveTextContent('We could not show your preview');
+    expect(missing).not.toHaveTextContent('no store at this address');
+    await user.click(within(missing).getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByTestId('store-preview-frame')).toBeInTheDocument();
   });
 
   it('a member who may only look cannot save or publish', async () => {

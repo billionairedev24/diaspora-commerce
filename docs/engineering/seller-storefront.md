@@ -81,7 +81,7 @@ Reviews: bookings' aggregate over approved reviews, shown only when count >= 1. 
 ## Seller Center: Settings > Store page
 
 Own route, own save, one column on narrow screens (preview as a tab), editor and sticky preview side by side from 1280. The preview renders the real `StorefrontView` with the unsaved draft and
-the seller's own sellable products (desktop or 390 px phone; the layout answers to the storefront's own width via container queries). Status, Save changes, Publish (changes), Unpublish, View store page and History.
+the seller's own sellable products (desktop or 390 px phone; the layout answers to the storefront's own width via container queries). The preview is built from the caller's own organisation and draft, never looked up by address, so it works before the page address exists (made when the payout account is set up; `slug` is empty) and before the first publish, for sellers and providers, with no featured products or no hero image (empty sections are simply absent); it is labelled "Preview, not published" and its buttons are off. Publishing still needs the address and an approved organisation. A failed preview shows a plain message with Try again. Status, Save changes, Publish (changes), Unpublish, View store page and History.
 The banner has a focal point (what stays in view when each screen crops) rather than a server crop; pictures are validated (type, 8 MB, minimum size) before upload.
 
 ## Mock stack and tests
