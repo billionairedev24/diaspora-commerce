@@ -13,5 +13,17 @@
 
     <artifactId>module-contract</artifactId>
     <name>AfroTransact :: module-contract</name>
-    <description>Release 1 module contract, pure Java: the in-process caller principal and the module mode switch.</description>
+    <description>Release 1 module contract: the in-process caller principal, the end-user actor, the bounded-call gate and the module mode switch.
+        No Spring beans; spring-security-oauth2-resource-server is here only so EndUserActor can be built from an Authentication.</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-oauth2-resource-server</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-oauth2-jose</artifactId>
+        </dependency>
+    </dependencies>
 </project>

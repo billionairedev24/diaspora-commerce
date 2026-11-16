@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
+import com.afrotransact.module.EndUserActor;
 import jakarta.servlet.Filter;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -64,6 +65,13 @@ public class PlatformSecurityAutoConfiguration {
     @ConditionalOnMissingBean
     public ActorResolver actorResolver(PlatformSecurityProperties props) {
         return new ActingAsActorResolver(props.enabled() ? new JwtActorResolver() : new LocalActorResolver());
+    }
+
+    /** The signed-in person of the request as an {@link EndUserActor}, for in-process calls made for them. */
+    @Bean
+    @ConditionalOnMissingBean
+    public EndUsers endUsers(PlatformSecurityProperties props) {
+        return new EndUsers(props.enabled());
     }
 
     @Bean

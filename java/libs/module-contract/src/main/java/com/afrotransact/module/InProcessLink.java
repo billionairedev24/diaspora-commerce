@@ -14,19 +14,32 @@ import java.util.function.Supplier;
 public final class InProcessLink<A> {
 
     private final String caller;
+    private final String callee;
     private final Supplier<? extends A> api;
     private final Supplier<? extends CallerPrincipals> callers;
 
+    /** Temporary: a link that does not name its callee is bounded under {@link InProcessCalls#UNSPECIFIED}. */
     public InProcessLink(String caller, Supplier<? extends A> api, Supplier<? extends CallerPrincipals> callers) {
+        this(caller, InProcessCalls.UNSPECIFIED, api, callers);
+    }
+
+    /** @param callee the called module as named in the module registry; it selects the timeout, bulkhead and metrics of the edge */
+    public InProcessLink(String caller, String callee, Supplier<? extends A> api, Supplier<? extends CallerPrincipals> callers) {
         this.caller = caller;
+        this.callee = callee;
         this.api = api;
         this.callers = callers;
     }
 
     /** Runs {@code call} against the callee's API as the consumer's principal. */
     public <T> T call(Function<A, T> call) {
+        return call(null, call);
+    }
+
+    /** Same, under the edge's {@code <operation>-timeout} (for example the 60 s batch write of catalog to offers). */
+    public <T> T call(String operation, Function<A, T> call) {
         CallerPrincipal principal = callers.get().principalFor(caller);
-        return InProcessCalls.as(principal, () -> call.apply(api.get()));
+        return InProcessCalls.as(principal, callee, operation, () -> call.apply(api.get()));
     }
 
     /** Runs a call that returns nothing. */

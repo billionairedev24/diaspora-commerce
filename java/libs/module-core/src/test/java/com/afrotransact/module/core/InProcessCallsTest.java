@@ -3,15 +3,18 @@ package com.afrotransact.module.core;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.afrotransact.module.CallerPrincipal;
+import com.afrotransact.module.EndUserActor;
 import com.afrotransact.module.InProcessCalls;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.ActorResolver;
 import com.afrotransact.platform.security.LocalActorResolver;
 import com.afrotransact.platform.security.PrincipalType;
+import com.afrotransact.platform.test.InProcessKit;
 import org.junit.jupiter.api.Test;
 
 /** The caller principal: bound for one call only, and the actor in force inside it is the calling module. */
@@ -81,5 +84,24 @@ class InProcessCallsTest {
             throw new IllegalArgumentException("boom");
         })).isInstanceOf(IllegalArgumentException.class);
         assertThat(InProcessCalls.current()).isEmpty();
+    }
+
+    @Test
+    void insideACallMadeForAPersonTheActorIsThePersonAndNeverTheServiceNorTheCallersScopes() {
+        EndUserActor person = InProcessKit.user("user-1", "pt", "SELLER_MEMBER", "org", "org_a", "roles", List.of("account.customer"),
+                "perms", List.of("orders:read"));
+        Actor actor = InProcessCalls.as(CATALOG, () -> InProcessCalls.withUser(person, resolver::current));
+        assertThat(actor.type()).isEqualTo(PrincipalType.SELLER_MEMBER);
+        assertThat(actor.subject()).isEqualTo("user-1");
+        assertThat(actor.orgId()).contains("org_a");
+        assertThat(actor.permissions()).containsExactly("orders:read");
+        assertThat(InProcessCalls.currentUser()).isEmpty();
+    }
+
+    @Test
+    void aPersonBindingWithoutAnInProcessCallerIsIgnored() {
+        EndUserActor person = InProcessKit.user("user-1", "pt", "CUSTOMER");
+        Actor actor = InProcessCalls.withUser(person, resolver::current);
+        assertThat(actor).isEqualTo(LocalActorResolver.LOCAL_SUPER_ADMIN);
     }
 }
