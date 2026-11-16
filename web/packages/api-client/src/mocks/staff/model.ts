@@ -112,6 +112,9 @@ const DELIVERY_RUN = ['delivery:read', 'delivery:manage'];
 for (const role of ['platform.super_admin', 'platform.operations_manager', 'platform.fulfilment_ops', 'platform.dispatcher']) (PENDING_PERMISSIONS[role] ??= []).push(...DELIVERY_RUN);
 for (const role of ['platform.customer_support', 'platform.product_owner', 'platform.auditor', 'platform.developer']) (PENDING_PERMISSIONS[role] ??= []).push(...DELIVERY_READ);
 
+/* Override of a seller-shipped shipment (identity migration V52): Super Admin only. */
+PENDING_PERMISSIONS['platform.super_admin']?.push('orders:override-shipment');
+
 /* Pre-orders grants (identity migration V22, docs/spikes/preorder-design-implementation.md §6) until identity seeds them. */
 const PREORDER_GRANTS = ['delivery-runs:read', 'preorders:manage', 'preorders:export', 'preorders:late-add'];
 PENDING_PERMISSIONS['platform.super_admin']?.push(...PREORDER_GRANTS);
@@ -223,13 +226,21 @@ export function refundLimit(roles: string[]): number | null {
   return limit;
 }
 
+/** Modules AfroTransact does not use for now (the driver app is off), with the note the BFF shows. */
+const dormant = (key: StaffModuleKey): string | null =>
+  key === 'dispatch'
+    ? 'Driver routes are not used for now: AfroTransact staff deliver from Delivery. Pickup points are still managed here.'
+    : key === 'deliveryQuotes'
+      ? 'Not used for now. Quotes already asked for can still be answered here.'
+      : null;
+
 export function navigation(roles: string[], badges: Partial<Record<StaffModuleKey, number>> = {}): StaffNavGroup[] {
   return NAV.map((g) => ({
     key: g.key,
     label: g.label,
     modules: g.modules.flatMap((key) => {
       const level = levelOf(roles, key);
-      return level ? [{ key, label: MODULE_COPY[key].label, description: MODULE_COPY[key].description, level, badge: badges[key] ?? null }] : [];
+      return level ? [{ key, label: MODULE_COPY[key].label, description: dormant(key) ?? MODULE_COPY[key].description, level, badge: badges[key] ?? null, dormant: dormant(key) !== null }] : [];
     })
   })).filter((g) => g.modules.length > 0);
 }

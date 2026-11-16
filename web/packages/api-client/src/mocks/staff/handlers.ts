@@ -279,7 +279,14 @@ function detail(ctx: Ctx, resource: ResourceKey, r: MockRecord): RecordDetail {
     editForm: canEdit && def.edit ? def.edit.form(r) : null,
     links: def.links ? def.links(r) : [],
     version: r.fields.version === undefined || r.fields.version === null ? null : String(r.fields.version),
-    ...(def.shipments ? { shipments: def.shipments(r, mayShip) } : {})
+    ...(def.shipments
+      ? {
+          shipments: def.shipments(r, mayShip, {
+            deliver: ctx.permissions.includes('delivery:manage') && allows(ctx.roles, 'delivery', 'EDIT'),
+            override: ctx.permissions.includes('orders:override-shipment')
+          })
+        }
+      : {})
   };
 }
 

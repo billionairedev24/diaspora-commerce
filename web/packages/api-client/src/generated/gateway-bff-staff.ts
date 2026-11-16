@@ -344,7 +344,7 @@ export interface paths {
          *     and when ("This application is already approved (by Ada Obi, 12 Oct 2026, 14:03 UTC)"); show it as
          *     information and refresh the sheet. Never retry a decision with a new key. Claims `refund` / `deny` (trust-ops
          *     `POST /v1/claims/{id}/decision`, disputes:manage, refunds capped by the role's refund limit); payouts `approve` /
-         *     `hold` / `release` (payments, payouts:approve); orders `shipment-status` (orders `POST /v1/shipments/{id}/transitions`);
+         *     `hold` / `release` (payments, payouts:approve); orders `shipment-status` (orders `POST /v1/shipments/{id}/transitions`) and `shipment-override` (orders `POST /v1/shipments/{id}/override`, orders:override-shipment, reason required);
          *     privacy-requests `complete` / `deny` (content `POST /v1/privacy/requests/{reference}/resolution`, content:legal.edit;
          *     a denial needs a note).
          *     `Idempotency-Key` is relayed to upstreams that accept one.
@@ -1550,6 +1550,46 @@ export interface paths {
          * @description Needs EDIT and delivery:manage, and the delivery taken or assigned first (409 otherwise). Idempotent.
          */
         post: operations["markStaffDeliveryPickedUp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/deliveries/{shipmentId}/in-transit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark in transit (optional step between picked up and out for delivery)
+         * @description Needs EDIT and delivery:manage. Idempotent. `expectedStatus` makes a stale screen get 409 instead of overruling another person.
+         */
+        post: operations["markStaffDeliveryInTransit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/deliveries/{shipmentId}/returned": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Return a parcel to the seller after a failed delivery
+         * @description Only from delivery failed; a reason is required and kept in the audit trail. Needs EDIT and delivery:manage. Idempotent.
+         */
+        post: operations["markStaffDeliveryReturned"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6494,7 +6534,7 @@ export interface components {
              */
             mode: "AFROTRANSACT_DELIVERY" | "FULFILLED_BY_AFROTRANSACT";
             /** @enum {string} */
-            status: "placed" | "confirmed" | "packed" | "ready" | "picked_up" | "in_transit" | "out_for_delivery" | "delivery_failed" | "delivered";
+            status: "placed" | "confirmed" | "packed" | "ready" | "picked_up" | "in_transit" | "out_for_delivery" | "delivery_failed" | "delivered" | "returned";
             sellerName: string;
             /** @description The seller's city or the fulfilment centre's; empty when it cannot be read */
             originCity: string;
@@ -6582,7 +6622,7 @@ export interface components {
         };
         DeliveryAuditLine: {
             /** @enum {string} */
-            action: "TAKE" | "ASSIGN" | "REASSIGN" | "PICKED_UP" | "OUT_FOR_DELIVERY" | "DELIVERED" | "FAILED" | "REATTEMPT" | "PROOF_CORRECTED" | "DATA_FIX";
+            action: "TAKE" | "ASSIGN" | "REASSIGN" | "PICKED_UP" | "IN_TRANSIT" | "OUT_FOR_DELIVERY" | "DELIVERED" | "FAILED" | "RETURNED" | "REATTEMPT" | "PROOF_CORRECTED" | "DATA_FIX";
             fromStatus: string;
             toStatus: string;
             actorName: string;
@@ -6605,6 +6645,8 @@ export interface components {
             /** Format: int64 */
             version?: number | null;
             note?: string;
+            /** @description The shipment status the screen showed (lower case, for example ready); another person's earlier change answers 409 */
+            expectedStatus?: string;
         };
         DeliveryAssignRequest: {
             assigneeId: string;
@@ -6616,6 +6658,8 @@ export interface components {
             reason: string;
             /** Format: int64 */
             version?: number | null;
+            /** @description The shipment status the screen showed (lower case) */
+            expectedStatus?: string;
         };
         DeliveryProofRequest: {
             photoAssetIds: string[];
@@ -6628,6 +6672,8 @@ export interface components {
             reason?: string;
             /** Format: int64 */
             version?: number | null;
+            /** @description The shipment status the screen showed (lower case) */
+            expectedStatus?: string;
         };
         DeliveryUploadRequest: {
             fileName: string;
@@ -8592,6 +8638,8 @@ export interface components {
             description: string;
             level: components["schemas"]["AccessLevel"];
             badge: number | null;
+            /** @description True for a module AfroTransact does not use for now (Delivery dispatch and Delivery quotes while the driver app is off, DRIVER_APP_ENABLED=false): the console shows it muted with a "Not in use" label. The code and the data stay; staff act as the delivery agents from Delivery. */
+            dormant: boolean;
         };
         StaffNavGroup: {
             /** @enum {string} */
@@ -8943,24 +8991,42 @@ export interface components {
             fulfilmentLabel: string;
             /** @description How it travels (Carrier, AfroTransact Delivery, Pickup) */
             deliveryLabel: string;
+            /**
+             * @description Who moves it. `afrotransact_delivery` and `fulfilled_by_afrotransact` are "Fulfilled by AfroTransact": staff holding
+             *     delivery:manage take the delivery steps (the steps whose `via` is `delivery`, through /v1/staff/deliveries). `pickup`: the customer
+             *     collects (ready, collected, not collected). `seller_ships`: the seller updates it; staff holding orders:override-shipment can override.
+             * @enum {string}
+             */
+            mode: "seller_ships" | "afrotransact_delivery" | "fulfilled_by_afrotransact" | "pickup" | "preorder_run";
             /** @description Units in the shipment */
             itemCount: number;
             /** @description The first item names (at most three) */
             itemTitles: string[];
             carrier: string | null;
             trackingNumber: string | null;
+            /** @description The caller holds orders:override-shipment and the shipment is seller-shipped */
+            canOverride: boolean;
+            /** @description Statuses an override may set (upper case), forward only; empty unless canOverride. Taken with the `shipment-override` action (values `step` = `<shipment id>|<STATUS>`, `reason` required). */
+            overrideSteps: string[];
             /** @description The statuses the caller may set now (allowed) and the later steps and exceptions they cannot (with why). Empty when the shipment is finished. */
             transitions: components["schemas"]["ShipmentStep"][];
             /** @description Status changes, newest first */
             history: components["schemas"]["ShipmentChange"][];
         };
         ShipmentStep: {
+            /**
+             * @description Which API takes the step: `orders` is the order's `shipment-status` action; `delivery` is the Delivery module (/v1/staff/deliveries/{shipmentId}/picked-up, in-transit, out-for-delivery, delivered, failed, returned), the same steps the Delivery queue offers.
+             * @enum {string}
+             */
+            via: "orders" | "delivery";
+            /** @description Delivered by AfroTransact: a photo is required (optional recipient name and note), sent with the delivered call */
+            proofRequired: boolean;
             /** @description Upper-case target status, for example OUT_FOR_DELIVERY */
             to: string;
             allowed: boolean;
             /** @description Short English reason when not allowed */
             reason: string | null;
-            blocked: ("PERMISSION" | "SELLER" | "SEQUENCE" | "STATE") | null;
+            blocked: ("PERMISSION" | "DELIVERY_PERMISSION" | "SELLER" | "SELLER_UPDATES" | "PICKUP_ORDER" | "SEQUENCE" | "STATE") | null;
             /** @description The step needs a reason (satisfied by the handover code where codeAccepted) */
             noteRequired: boolean;
             /** @description The customer's 4-digit handover code may be given (handing over a pickup order) */
@@ -8973,7 +9039,7 @@ export interface components {
             at: string;
             from: string | null;
             to: string;
-            /** @description Who or what moved it (Seller, Platform admin, Carrier, Driver, System) */
+            /** @description Who moved it: the staff member's name for a change at the console, otherwise Seller, Carrier, Driver or System */
             actor: string;
             note: string | null;
         };
@@ -14354,7 +14420,7 @@ export interface operations {
     listStaffDeliveries: {
         parameters: {
             query?: {
-                /** @description Comma separated: ready, picked_up, in_transit, out_for_delivery, delivery_failed, delivered, placed, confirmed, packed */
+                /** @description Comma separated: ready, picked_up, in_transit, out_for_delivery, delivery_failed, delivered, returned, placed, confirmed, packed */
                 status?: string;
                 mode?: "AFROTRANSACT_DELIVERY" | "FULFILLED_BY_AFROTRANSACT";
                 /** @description Order number, seller, customer, city or assignee */
@@ -14571,6 +14637,75 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    markStaffDeliveryInTransit: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                shipmentId: components["parameters"]["ShipmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DeliveryActionRequest"];
+            };
+        };
+        responses: {
+            /** @description The delivery now */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    markStaffDeliveryReturned: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                shipmentId: components["parameters"]["ShipmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliveryFailedRequest"];
+            };
+        };
+        responses: {
+            /** @description The delivery now */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             503: components["responses"]["Problem"];
         };
     };

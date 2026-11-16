@@ -217,12 +217,20 @@ export function createStaffApiClient(options: ApiClientOptions) {
       request(`/v1/staff/deliveries/${enc(shipmentId)}/assign`, DeliveryDetailSchema, { method: 'POST', body: { assigneeId, ...body }, headers: idem(key) }),
     markDeliveryPickedUp: (shipmentId: string, body: DeliveryActionInput, key?: string): Promise<DeliveryDetail> =>
       request(`/v1/staff/deliveries/${enc(shipmentId)}/picked-up`, DeliveryDetailSchema, { method: 'POST', body, headers: idem(key) }),
+    markDeliveryInTransit: (shipmentId: string, body: DeliveryActionInput, key?: string): Promise<DeliveryDetail> =>
+      request(`/v1/staff/deliveries/${enc(shipmentId)}/in-transit`, DeliveryDetailSchema, { method: 'POST', body, headers: idem(key) }),
+    markDeliveryReturned: (shipmentId: string, reason: string, expectedStatus?: string, key?: string): Promise<DeliveryDetail> =>
+      request(`/v1/staff/deliveries/${enc(shipmentId)}/returned`, DeliveryDetailSchema, { method: 'POST', body: { reason, ...(expectedStatus ? { expectedStatus } : {}) }, headers: idem(key) }),
     markDeliveryOutForDelivery: (shipmentId: string, body: DeliveryActionInput, key?: string): Promise<DeliveryDetail> =>
       request(`/v1/staff/deliveries/${enc(shipmentId)}/out-for-delivery`, DeliveryDetailSchema, { method: 'POST', body, headers: idem(key) }),
     markDeliveryDelivered: (shipmentId: string, body: DeliveryProofInput, key?: string): Promise<DeliveryDetail> =>
       request(`/v1/staff/deliveries/${enc(shipmentId)}/delivered`, DeliveryDetailSchema, { method: 'POST', body, headers: idem(key) }),
-    markDeliveryFailed: (shipmentId: string, reason: string, version?: number, key?: string): Promise<DeliveryDetail> =>
-      request(`/v1/staff/deliveries/${enc(shipmentId)}/failed`, DeliveryDetailSchema, { method: 'POST', body: { reason, ...(version === undefined ? {} : { version }) }, headers: idem(key) }),
+    markDeliveryFailed: (shipmentId: string, reason: string, version?: number, key?: string, expectedStatus?: string): Promise<DeliveryDetail> =>
+      request(`/v1/staff/deliveries/${enc(shipmentId)}/failed`, DeliveryDetailSchema, {
+        method: 'POST',
+        body: { reason, ...(version === undefined ? {} : { version }), ...(expectedStatus ? { expectedStatus } : {}) },
+        headers: idem(key)
+      }),
     correctDeliveryProof: (shipmentId: string, body: DeliveryProofInput, key?: string): Promise<DeliveryDetail> =>
       request(`/v1/staff/deliveries/${enc(shipmentId)}/proof`, DeliveryDetailSchema, { method: 'PUT', body, headers: idem(key) }),
     /** Signs a direct upload of a proof photo (private bucket); the caller PUTs the file to `upload.url`. */

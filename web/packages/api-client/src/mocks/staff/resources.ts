@@ -24,7 +24,7 @@ import { exchangeRatesDef } from './exchange-rates';
 import { IDENTITY_RESOURCES } from './identity';
 import { MOCK_DRIVERS } from './lookups';
 import { tierBenefitDetails } from './membership-tiers';
-import { applyShipmentStep, noStepReason, orderSections, shipmentsOf, stepOptions } from './order-shipments';
+import { applyShipmentOverride, applyShipmentStep, noStepReason, orderSections, overrideOptions, type ShipmentCaps, shipmentsOf, stepOptions } from './order-shipments';
 import { shippingSettingsDef } from './shipping-settings';
 import { sellerApprovalsDef, sellingApprovalsDef, sellingRulesDef } from './selling';
 import { serviceAreaRulesDef, serviceZonesDef } from './service-areas';
@@ -91,7 +91,7 @@ export interface MockResource {
   /** Lays out the sheet's facts itself (grouped, empty ones left out) instead of from the fields. */
   sheetSections?: (r: MockRecord) => DetailSection[];
   /** An order's packages with the statuses the caller may set (`may`: they hold the permission and module level). */
-  shipments?: (r: MockRecord, may: boolean) => RecordShipment[];
+  shipments?: (r: MockRecord, may: boolean, caps: ShipmentCaps) => RecordShipment[];
   /** Permissions of which the caller needs one to set a shipment's status. */
   shipmentPermissions?: string[];
   linesTitle?: string;
@@ -340,6 +340,17 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
           ]),
         apply: (r, v, ctx) =>
           applyShipmentStep(r, v, ctx.actor, ctx.now, ctx.fail ?? ((errors) => { throw new Error(JSON.stringify(errors)); }))
+      },
+      {
+        // The seller ships and updates their own orders; only a holder of orders:override-shipment forces a later status, with a reason.
+        key: 'shipment-override', label: 'Override status', tone: 'neutral', permission: 'orders:override-shipment', when: (r) => (overrideOptions(r, { deliver: false, override: true }).length ? null : 'Nothing to override: the seller ships no open shipment on this order.'),
+        form: (r) =>
+          form('Override the seller’s status', 'Override', [
+            field('step', 'New status', 'select', true, { options: overrideOptions(r, { deliver: false, override: true }) }),
+            field('reason', 'Why are you overriding it?', 'text', true, { maxLength: 500 })
+          ]),
+        apply: (r, v, ctx) =>
+          applyShipmentOverride(r, v, ctx.actor, ctx.now, { deliver: false, override: true }, ctx.fail ?? ((errors) => { throw new Error(JSON.stringify(errors)); }))
       }
     ]
   },
