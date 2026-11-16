@@ -516,6 +516,7 @@ never requests it). `orders-service`: `offers:read` (reads the offer's `inventor
 | `orders:read` | orders | View orders and shipments |
 | `orders:update-status` | orders | Update status of seller-fulfilled orders and shipments |
 | `orders:manage` | orders | Update AfroTransact-fulfilled shipments, cancel and reroute orders |
+| `orders:override-shipment` | orders | Override the status of a shipment the seller ships (V53; forward only, reason required, audited; Super Admin only) |
 | `refunds:issue` | orders | Issue refunds |
 | `returns:manage` | orders | Approve and process returns (RMAs) |
 | `disputes:manage` | trust | Investigate and decide disputes |
