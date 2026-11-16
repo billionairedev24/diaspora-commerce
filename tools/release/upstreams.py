@@ -194,8 +194,24 @@ def emulate(deployable, env, cutover):
     return {**out, **{k: str(x) for k, x in (v.get("extraEnv") or {}).items()}}, v
 
 
+_DEPS_BUILT = set()
+
+
+def helm_dependencies(chart):
+    """The charts depend on the library chart (file://); `helm template` needs it under charts/ (git-ignored), so build it once per chart."""
+    if chart in _DEPS_BUILT:
+        return
+    for sub in ("build", "update"):  # build needs Chart.lock (git-ignored): fall back to update, which creates it
+        r = subprocess.run(["helm", "dependency", sub, str(chart)], capture_output=True, text=True)
+        if r.returncode == 0:
+            _DEPS_BUILT.add(chart)
+            return
+    raise SystemExit(f"helm dependency build failed for {chart}: {r.stderr.strip()}")
+
+
 def helm_render(deployable, env, cutover):
     chart = ROOT / CHARTS[deployable][0]
+    helm_dependencies(chart)
     cmd = ["helm", "template", deployable, str(chart), "-n", f"afrotransact-{env}", "-f", str(chart / "values.yaml"), "-f", str(chart / f"values-{env}.yaml"),
            "-f", str(ROOT / "infra/argocd/envs" / env / "platform-values.yaml"), "--set-json", "cutover.services=" + json.dumps(cutover)]
     r = subprocess.run(cmd, capture_output=True, text=True)
