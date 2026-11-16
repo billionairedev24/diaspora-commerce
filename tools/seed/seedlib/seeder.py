@@ -3,6 +3,7 @@ stable key (seller org id, product title, placement / campaign / window name) be
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import os
 import re
@@ -14,13 +15,15 @@ from pathlib import Path
 from typing import Any
 
 from . import dataset as D
+from . import listing as L
 from .auth import TokenProvider
 from .http import ApiError, Http
 from .images.library import ImageLibrary
 from .images.review import ImageReview
-from .images.model import ImageFile
+from .images.model import ImageFile, sniff
 from .images.sources import PexelsSource, UnsplashSource, WikimediaSource
-from .media import MediaUploader
+from .labelimage import label_png
+from .media import ImageRejected, ImageTooSmall, MediaUploader
 from .ops import OpsSeeder
 from .state import State
 from .users import SignedIn, TestUsers
@@ -161,6 +164,49 @@ def attributes_for(p: D.Product, ptype: dict[str, Any], credits: list[str]) -> d
     return out
 
 
+def create_body(p: D.Product, cat: dict[str, Any], ptype: dict[str, Any], rules: "L.Rules | None",
+                images: list[dict[str, Any]], label: dict[str, Any] | None, credits: list[str],
+                chart: dict[str, Any] | None) -> dict[str, Any]:
+    """The POST /v1/products request of a demo product: what the dataset knows about it, plus every answer the category's
+    listing rules and the product type's details ask for (listing.py), filled from the schema. Pure: `make seed-check` builds
+    the same bodies from recorded schemas and checks them offline."""
+    theme, options = theme_for(ptype, p.variants)
+    seller = D.SELLER_BY_KEY[p.seller]
+    texts = [[str(v) if isinstance(v, str) else " ".join(map(str, v.values()))] for v, _ in p.variants]
+    skus = [sku_for(seller.key, p.key, opts) for opts in options]
+    answers = L.build_answers(rules, ptype, p, texts, skus) if rules else L.Answers(description=L.description_for(p))
+    variants = []
+    for i, (opts, (_, price)) in enumerate(zip(options, p.variants)):
+        v: dict[str, Any] = {"options": opts, "sellerSku": skus[i], "priceMinor": price, "quantity": 0}
+        if p.facts:
+            v["taxFacts"] = dict(p.facts)
+        if ptype.get("identifierRule") == "ISBN":
+            v["gtin"], v["gtinExempt"] = p.attrs["gtin"], False
+        elif i < len(answers.gtins) and answers.gtins[i]:
+            v["gtin"], v["gtinExempt"] = answers.gtins[i], False
+        else:
+            v["gtinExempt"] = True
+        if i < len(answers.packages) and answers.packages[i]:
+            v["packaging"] = answers.packages[i]
+        variants.append(v)
+    attrs = attributes_for(p, ptype, credits)
+    attrs.update(answers.attributes)
+    imgs = list(images)
+    if label:
+        imgs.append(dict(label, role="LABEL"))
+    listing: dict[str, Any] = {"description": answers.description, "handlingDays": answers.handling_days}
+    if answers.dangerous is not None:
+        listing["dangerousGoods"] = answers.dangerous
+    if answers.packages and answers.packages[0]:
+        listing["packaging"] = answers.packages[0]
+    if chart:
+        listing.update({"sizeChartId": chart["id"], **({"fitNote": p.fit} if p.fit else {})})
+    if p.behaviour:
+        listing["sellerBehaviour"] = dict(p.behaviour)
+    return {"categoryId": cat["id"], "title": p.title, "attributes": attrs, "images": imgs, "variationTheme": theme,
+            "variants": variants, "currency": "USD", "listing": listing}
+
+
 class Seeder:
     def __init__(self, env: dict[str, str], root: Path, log: Callable[[str], None] = print):
         self.env, self.root, self.log = env, root, log
@@ -183,6 +229,7 @@ class Seeder:
                                     offline=env.get("SEED_OFFLINE") == "1")
         self.uploader = MediaUploader(self.svc["media"], self.state, log)
         self.up: dict[str, bool] = {}
+        self._rules: dict[str, L.Rules | None] = {}  # listing rules by category code
         self.products: dict[str, dict[str, Any]] = {}  # dataset key -> catalog product
         self.charts: dict[str, dict[str, Any]] = {}  # dataset size chart key -> catalog size chart
         self.tax_atins: dict[str, str] = {}  # variant ATIN -> product title, every variant of this run's products
@@ -394,6 +441,9 @@ class Seeder:
             except (ApiError, ValueError, KeyError) as e:
                 self._problem(f"product {p.key}: {e}")
             self.state.save()
+        healed = self.report.counts[("product images", "re-uploaded")]
+        if healed:
+            self.log(f"  ✓ {healed} existing product(s) had images gone from the object store: uploaded again")
         self._review_tax()
         self.library.save()
 
@@ -420,39 +470,22 @@ class Seeder:
                                 network=False, require=p.queries)
             self.report.review.add(p.key, p.title, kept, self.library.rejected.get(p.key), "already in the catalog")
         else:
-            imgs = self._images(p.key, D.image_queries(p), p.images, orientation="square", main_min_edge=MAIN_MIN_EDGE,
-                                require=p.queries)
-            self.report.review.add(p.key, p.title, imgs, self.library.rejected.get(p.key))
+            imgs, assets = self._upload_images(p)
             if not imgs:
                 self.report.add("products", "skipped: no image")
-                self._problem(f"{p.title}: no usable image (needs a main image of at least {MAIN_MIN_EDGE}px; "
-                              "set SEED_IMAGES_DIR or allow downloads)")
+                self._problem(f"{p.title}: no usable image (needs a main image of at least {MAIN_MIN_EDGE}px that media "
+                              "accepts; set SEED_IMAGES_DIR or allow downloads)")
                 return
-            assets = [self.uploader.upload(i, "product-image") for i in imgs]
-            theme, options = theme_for(ptype, p.variants)
-            seller = D.SELLER_BY_KEY[p.seller]
-            variants = []
-            for opts, (_, price) in zip(options, p.variants):
-                v = {"options": opts, "sellerSku": sku_for(seller.key, p.key, opts), "priceMinor": price, "quantity": 0}
-                if p.facts:
-                    v["taxFacts"] = dict(p.facts)
-                if ptype.get("identifierRule") == "ISBN":
-                    v["gtin"], v["gtinExempt"] = p.attrs["gtin"], False
-                else:
-                    v["gtinExempt"] = True
-                variants.append(v)
-            body = {"categoryId": cat["id"], "title": p.title,
-                    "attributes": attributes_for(p, ptype, [i.credit() for i in imgs if i.source != "local"]),
-                    "images": [{k: a[k] for k in ("url", "width", "height", "bytes", "contentType")} for a in assets],
-                    "variationTheme": theme, "variants": variants, "currency": "USD"}
-            chart = self._chart_for(p, cats)
-            listing: dict[str, Any] = {}
-            if chart:
-                listing = {"sizeChartId": chart["id"], **({"fitNote": p.fit} if p.fit else {})}
-            if p.behaviour:
-                listing["sellerBehaviour"] = dict(p.behaviour)
-            if listing:
-                body["listing"] = listing
+            rules = self._rules_for(cat, cats)
+            label = None
+            if rules and rules.expects("label_photo"):
+                label = self._label_image(p)
+                if label is None:
+                    self.report.add("products", "skipped: label photo refused")
+                    return
+            images = [{k: a[k] for k in ("url", "width", "height", "bytes", "contentType")} for a in assets]
+            body = create_body(p, cat, ptype, rules, images, label, [i.credit() for i in imgs if i.source != "local"],
+                               self._chart_for(p, cats))
             product = self.svc["catalog"].post("/v1/products", body)
             self.report.add("products", "created")
             line = f"  ✓ {p.title} ({product['atin']}) images: {self._describe(imgs)}"
@@ -467,6 +500,63 @@ class Seeder:
         offers = self._offers(p, product)
         self._stock(p, product, offers)
         self.log(line)
+
+    UPLOAD_ATTEMPTS = 4  # candidates tried per product when media refuses a photo
+
+    def _upload_images(self, p: D.Product) -> tuple[list[ImageFile], list[dict[str, Any]]]:
+        """The product's photos uploaded to media. A photo that is too small (checked locally, before any upload) or that
+        media refuses (422 on complete) is banned and another candidate is looked up, up to UPLOAD_ATTEMPTS times."""
+        imgs: list[ImageFile] = []
+        for attempt in range(self.UPLOAD_ATTEMPTS):
+            imgs = self._images(p.key, D.image_queries(p), p.images, orientation="square", main_min_edge=MAIN_MIN_EDGE,
+                                require=p.queries)
+            if attempt == 0:
+                self.report.review.add(p.key, p.title, imgs, self.library.rejected.get(p.key))
+            if not imgs:
+                return [], []
+            assets: list[dict[str, Any]] = []
+            try:
+                for img in imgs:
+                    assets.append(self.uploader.upload(img, "product-image"))
+                return imgs, assets
+            except (ImageRejected, ImageTooSmall) as e:
+                self.library.ban(e.img, str(e)[:120])
+                self.report.add("photos", "rejected, another one tried")
+        return [], []
+
+    def _label_image(self, p: D.Product) -> dict[str, Any] | None:
+        """A generated stand-in label photo (labelimage.py) uploaded to media; None (reported) when media refuses it."""
+        data = label_png(p.key)
+        folder = self.state_dir / "labels"
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f"{p.key}.png"
+        path.write_bytes(data)
+        mime, w, h = sniff(data) or ("image/png", 900, 1200)
+        img = ImageFile(path=str(path), source="generated", title=f"Demo label for {p.title}", author="", author_url="",
+                        license="generated by the seeder (demo)", license_url="", page_url="", width=w, height=h, mime=mime,
+                        sha256=hashlib.sha256(data).hexdigest())
+        try:
+            a = self.uploader.upload(img, "product-image", slot="LABEL")
+        except (ApiError, ValueError) as e:
+            self._problem(f"{p.title}: the demo label photo was refused ({e})")
+            return None
+        return {k: a[k] for k in ("url", "width", "height", "bytes", "contentType")}
+
+    def _rules_for(self, cat: dict[str, Any], cats: dict[str, Any]) -> L.Rules | None:
+        """The listing rules of the category above this product type (cached); the general rules when the catalog knows no
+        rules for it; None (reported once) when the catalog has no listing-rules endpoint at all."""
+        by_id = {c["id"]: c for c in cats.values()}
+        code = L.category_code(cat, by_id)
+        if code not in self._rules:
+            try:
+                self._rules[code] = L.Rules(self.svc["catalog"].get("/v1/listing-rules", params={"categoryCode": code}))
+            except ApiError as e:
+                if e.status != 404:
+                    self._rules[code] = None
+                    self._problem(f"listing rules of {code}: {e} (products are sent without the rule answers)")
+                else:
+                    self._rules[code] = L.Rules(self.svc["catalog"].get("/v1/listing-rules", params={"categoryCode": "general"}))
+        return self._rules[code]
 
     def _approve_product(self, p: D.Product, product: dict[str, Any]) -> dict[str, Any]:
         """Moderation approve. The publish gate wants every variant's tax READY; tax-returns may already have moved a
@@ -638,7 +728,6 @@ class Seeder:
                     "listing": full.get("listing") or {}, "version": full.get("version")}
             edited = self.svc["catalog"].put(f"/v1/products/{full['id']}", body)
             self.report.add("product images", "re-uploaded")
-            self.log(f"  ✓ {p.title}: its images were gone from the object store, uploaded again")
             return edited if isinstance(edited, dict) and edited.get("status") else None
         except (ApiError, ValueError, KeyError) as e:
             self._problem(f"{p.title}: its images could not be refreshed on the existing product ({e})")
@@ -917,6 +1006,14 @@ class Seeder:
         self.log("== sponsored products (content ads campaigns)")
         if not self.up.get("content"):
             return
+        try:
+            if not self.products and self.catalog_is_empty():
+                self.log("  ! sponsored products skipped: the catalog has no products yet (campaigns need 1 to 50 product "
+                         "ATINs); run make seed again once the products are in")
+                self.report.add("ad campaigns", "skipped: no products", len(D.ADS))
+                return
+        except ApiError:
+            pass
         existing = {c.get("name") for c in self.svc["content"].get("/v1/ads/campaigns") or []}
         for ad in D.ADS:
             seller = D.SELLER_BY_KEY[ad["seller"]]
@@ -928,6 +1025,11 @@ class Seeder:
             if not atins:
                 atins = [p["atin"] for k in ad["products"] if (p := self._find_product(
                     next(x.title for x in D.PRODUCTS if x.key == k)))]
+            atins = atins[:50]
+            if not atins:
+                self.report.add("ad campaigns", "skipped: its products are not in the catalog")
+                self.log(f"  - {name}: none of its products exist yet, skipped")
+                continue
             body = {"sellerOrgId": seller.org_id, "name": name, "advertiser": seller.name, "market": "US",
                     "bidMinor": ad["bid"], "dailyBudgetMinor": max(500, ad["budget"] // 10),
                     "totalBudgetMinor": ad["budget"], "currency": "USD", "keywords": ad["keywords"],
@@ -1096,7 +1198,31 @@ class Seeder:
         if down:
             self._problem(f"ops skipped: {', '.join(down)} not running (make up / tools/dev/local.sh status)")
             return
+        problem = self.first_party_problem()
+        if problem:
+            self._problem(f"ops skipped: {problem}")
+            return
         self._ops().run()
+
+    def first_party_problem(self) -> str | None:
+        """None when the seeder can sign test users in through identity's first-party API (as gateway-bff does: client
+        credentials with scope auth:first-party, then POST /v1/auth/password); else why not, in one sentence."""
+        users = TestUsers(self.svc["identity"], self.env, self.log)
+        try:
+            token = users.client_token()
+        except ApiError as e:
+            return (f"identity refused the first-party client token ({e.status}): GATEWAY_BFF_CLIENT_SECRET must match "
+                    "identity's (the local default needs no setting)")
+        try:
+            users.sign_in(token, D.TEST_USERS[0][0])
+        except ApiError as e:
+            if e.code == "identity.first-party-client-required":
+                return ("identity does not accept the first-party client token (403 identity.first-party-client-required): "
+                        "core older than the fix that makes identity verify the BFF token with security off; rebuild and "
+                        "restart core (make restart SERVICE=core), then make seed")
+            if e.status not in (400, 401, 404):
+                return str(e)
+        return None
 
     # ------------------------------------------------------------------------------------------------ users
     def step_users(self) -> None:

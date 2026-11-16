@@ -54,7 +54,12 @@ def _first_href(s: str) -> str:
 WIKIMEDIA_API = "https://commons.wikimedia.org/w/api.php"
 
 
-def wikimedia_params(query: str, limit: int = 20, width: int = 1600) -> dict[str, str]:
+# Thumbnail width asked from Wikimedia (iiurlwidth): the API scales a large original down to it, so the file is big enough for
+# media's checks (long side of at least 1000 px). A smaller original is served as it is, and the library drops it.
+WIKIMEDIA_THUMB_WIDTH = 1600
+
+
+def wikimedia_params(query: str, limit: int = 20, width: int = WIKIMEDIA_THUMB_WIDTH) -> dict[str, str]:
     """Query string of the documented generator=search request (File namespace 6, bitmap files only)."""
     return {"action": "query", "generator": "search", "gsrnamespace": "6", "gsrsearch": f"{query} filetype:bitmap",
             "gsrlimit": str(limit), "prop": "imageinfo", "iiprop": "url|size|mime|extmetadata",
@@ -94,6 +99,10 @@ def parse_wikimedia(payload: dict[str, Any]) -> list[Candidate]:
         if not lic:
             continue
         thumb = info.get("thumburl")
+        if thumb and max(int(info.get("thumbwidth") or 0), int(info.get("thumbheight") or 0)) < 1000 \
+                and max(int(info.get("width") or 0), int(info.get("height") or 0)) >= 1000 \
+                and int(info.get("size") or 0) <= 8 * 1024 * 1024:
+            thumb = None  # the thumbnail came out small but the original is large enough (and under media's 8 MB): use it
         url = thumb or info.get("url", "")
         width = int(info.get("thumbwidth") or info.get("width") or 0) if thumb else int(info.get("width") or 0)
         height = int(info.get("thumbheight") or info.get("height") or 0) if thumb else int(info.get("height") or 0)
@@ -114,7 +123,7 @@ def parse_wikimedia(payload: dict[str, Any]) -> list[Candidate]:
 class WikimediaSource:
     name = "wikimedia"
 
-    def __init__(self, fetch: Fetch = http_json, width: int = 1600):
+    def __init__(self, fetch: Fetch = http_json, width: int = WIKIMEDIA_THUMB_WIDTH):
         self.fetch, self.width = fetch, width
 
     def search(self, query: str, limit: int = 20, orientation: str = "any") -> list[Candidate]:

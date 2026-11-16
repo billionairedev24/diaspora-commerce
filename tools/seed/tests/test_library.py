@@ -47,7 +47,7 @@ class LibraryTest(unittest.TestCase):
     def download(self, url):
         self.downloads.append(url)
         n = int(url.rsplit("/", 1)[-1].split(".")[0])
-        sizes = {1: (1200, 1200), 2: (1600, 1200), 3: (900, 600), 4: (1200, 1000), 5: (1300, 1300)}
+        sizes = {1: (1200, 1200), 2: (1600, 1200), 3: (900, 600), 4: (1200, 1000), 5: (1300, 1300), 8: (400, 400)}
         w, h = sizes.get(n, (1200, 1200))
         return png(w, h, seed=n)
 
@@ -95,7 +95,8 @@ class LibraryTest(unittest.TestCase):
         lib = self.lib([src], local)
 
         rice = lib.images_for("ofada-rice", ["brown rice"], 3, main_min_edge=1000)
-        self.assertEqual([Path(i.path).name for i in rice], ["ofada-rice.png", "ofada-rice-2.png", "Ofada_Rice_3.png"])
+        self.assertEqual([Path(i.path).name for i in rice], ["ofada-rice.png", "Ofada_Rice_3.png"],
+                         "ofada-rice-2.png is 800x600: media would refuse it, so it is left out")
         self.assertEqual({i.source for i in rice}, {"local"})
         self.assertEqual([Path(i.path).name for i in lib.images_for("kente-stole", [], 3)], ["front.png"])
         self.assertEqual([Path(i.path).name for i in lib.images_for("hero-jollof", ["jollof rice"], 1)], ["jollof rice.png"])
@@ -109,9 +110,29 @@ class LibraryTest(unittest.TestCase):
         lib = self.lib([], local)
 
         picked = lib.images_for("garri", [], 2, main_min_edge=1000)
-        self.assertEqual([Path(i.path).name for i in picked], ["garri-2.png", "garri.png"], "the big one becomes main")
+        self.assertEqual([Path(i.path).name for i in picked], ["garri-2.png"], "600x600 is too small for media, the big one is main")
         (local / "garri-2.png").unlink()
         self.assertEqual(self.lib([], local).images_for("garri", [], 2, main_min_edge=1000), [])
+
+    def test_additional_photos_must_pass_the_media_size_rules_too(self):
+        src = FakeSource({"q": [cand(1), cand(6, 400, 400), cand(7, 1100, 300), cand(2)]})
+        lib = self.lib([src])
+        got = lib.images_for("shea", ["q"], 3, main_min_edge=1000)
+        self.assertEqual([i.title for i in got], ["Photo 1", "Photo 2"], "400x400 and 1100x300 are under media's minimum")
+
+    def test_the_files_real_size_counts_not_the_apis_claim(self):
+        lib = self.lib([FakeSource({"q": [cand(8), cand(1)]})])  # candidate 8 claims 1600x1200 but the file is 400x400
+        got = lib.images_for("shea", ["q"], 1, main_min_edge=1000)
+        self.assertEqual([i.title for i in got], ["Photo 1"])
+
+    def test_a_banned_photo_is_never_offered_again_and_another_is_found(self):
+        src = FakeSource({"q": [cand(1), cand(2), cand(5)]})
+        lib = self.lib([src])
+        first = lib.images_for("shea", ["q"], 1, main_min_edge=1000)
+        self.assertEqual([i.title for i in first], ["Photo 1"])
+        lib.ban(first[0], "media refused it")
+        again = lib.images_for("shea", ["q"], 1, main_min_edge=1000)
+        self.assertEqual([i.title for i in again], ["Photo 2"])
 
     def test_attribution_files(self):
         src = FakeSource({"q": [cand(1, lic="CC BY-SA 4.0"), cand(2)]})

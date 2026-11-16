@@ -5,7 +5,7 @@ from pathlib import Path
 
 from seedlib.http import ApiError
 from seedlib.images.model import ImageFile
-from seedlib.media import MediaUploader
+from seedlib.media import ImageRejected, ImageTooSmall, MediaUploader
 from seedlib.state import State
 
 from tests.helpers import png
@@ -87,6 +87,53 @@ class MediaUploaderTest(unittest.TestCase):
         unknown = MediaUploader(media, state, put=self.put, head=lambda url: None)  # store unreachable: trust the record
         unknown.upload(self.img, "product-image")
         self.assertEqual((unknown.uploaded, unknown.reused), (0, 1))
+
+    def test_a_recreated_object_store_drops_the_whole_cache_with_one_line(self):
+        media, state = FakeMedia(), State(self.tmp / "state.json")
+        first = MediaUploader(media, state, put=self.put, head=lambda url: True)
+        imgs = []
+        for n in range(5):
+            path = self.tmp / f"p{n}.png"
+            path.write_bytes(png(1200, 1200, n))
+            imgs.append(ImageFile(path=str(path), source="wikimedia", title=f"P{n}", author="", author_url="", license="CC0",
+                                  license_url="", page_url="", width=1200, height=1200, mime="image/png", sha256=f"h{n}"))
+            first.upload(imgs[-1], "product-image")
+        logs, heads = [], []
+        again = MediaUploader(media, state, log=logs.append, put=self.put,
+                              head=lambda url: heads.append(url) or False)
+        for img in imgs:
+            again.upload(img, "product-image")
+        self.assertEqual(len(logs), 1, "one summary line, not one per file")
+        self.assertIn("5 cached upload(s) dropped", logs[0])
+        self.assertEqual(len(heads), 1, "the cache is validated with ONE cheap HEAD")
+        self.assertEqual((again.uploaded, again.reused), (5, 0))
+
+    def test_a_photo_media_would_refuse_for_its_size_is_not_uploaded(self):
+        small = ImageFile(path=self.img.path, source="wikimedia", title="Tiny", author="", author_url="", license="CC0",
+                          license_url="", page_url="", width=400, height=300, mime="image/png", sha256="tiny")
+        media = FakeMedia()
+        with self.assertRaises(ImageTooSmall):
+            MediaUploader(media, State(self.tmp / "s.json"), put=self.put).upload(small, "product-image")
+        self.assertEqual(media.calls, [], "checked locally, nothing was sent")
+
+    def test_media_refusing_the_photo_on_complete_is_an_image_rejected(self):
+        class Refusing(FakeMedia):
+            def post(self, path, body=None, **kw):
+                if path.endswith("/complete"):
+                    raise ApiError("POST", path, 422, {"code": "media.rejected", "detail": "asset not published (REJECTED)"})
+                return super().post(path, body, **kw)
+
+        with self.assertRaises(ImageRejected) as ctx:
+            MediaUploader(Refusing(), State(self.tmp / "s.json"), put=self.put).upload(self.img, "product-image")
+        self.assertIs(ctx.exception.img, self.img)
+
+    def test_the_label_slot_is_sent_and_cached_apart(self):
+        media = FakeMedia()
+        up = MediaUploader(media, State(self.tmp / "s.json"), put=self.put)
+        up.upload(self.img, "product-image", slot="LABEL")
+        self.assertEqual(media.calls[0][2]["slot"], "LABEL")
+        up.upload(self.img, "product-image")
+        self.assertEqual(up.uploaded, 2)
 
     def test_multipart_when_the_store_wants_a_form_field(self):
         up = MediaUploader(FakeMedia(form_field="file"), State(self.tmp / "s.json"), put=self.put)

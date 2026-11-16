@@ -24,6 +24,10 @@ from . import relevance
 from .sources import USER_AGENT, Source
 
 MAX_BYTES = 8 * 1024 * 1024
+# media-service rejects a product photo under 500 px on its short side (TOO_SMALL) and a main photo under 1000 px on its
+# long side (MAIN_TOO_SMALL); a long side under 1000 px only warns (LOW_RES). Every photo the seeder keeps meets both.
+MEDIA_MIN_SHORT_EDGE = 500
+MEDIA_MIN_LONG_EDGE = 1000
 IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
 
 Download = Callable[[str], bytes]
@@ -42,9 +46,14 @@ def slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
 
 
+def usable_size(w: int, h: int, min_edge: int = 0) -> bool:
+    """True when a photo of w x h px passes media's size rules (see MEDIA_MIN_*), and `min_edge` on the short side."""
+    return bool(w and h) and min(w, h) >= max(min_edge, MEDIA_MIN_SHORT_EDGE) and max(w, h) >= MEDIA_MIN_LONG_EDGE
+
+
 def _wants(c: Candidate | ImageFile, orientation: str, min_edge: int) -> bool:
     w, h = c.width, c.height
-    if not w or not h or min(w, h) < min_edge:
+    if not usable_size(w, h, min_edge):
         return False
     aspect = w / h
     if orientation == "square":
@@ -71,6 +80,7 @@ class ImageLibrary:
         self.attribution: dict[str, ImageFile] = {}
         self.failed_sources: set[str] = set()
         self.rejected: dict[str, list[tuple[str, str]]] = {}  # key -> (photo title, why) the relevance filter turned away
+        self.banned: set[str] = set()  # sha256 of photos media refused or that are too small: never offered again
 
     # ------------------------------------------------------------------------------------------- manifest
     def _load(self) -> dict:
@@ -89,6 +99,17 @@ class ImageLibrary:
         with os.fdopen(fd, "w") as f:
             json.dump(self.manifest, f, indent=1, sort_keys=True)
         os.replace(tmp, self.manifest_path)
+
+    def ban(self, img: ImageFile, why: str = "") -> None:
+        """Never offer this photo again (media rejected it, or it is too small) and drop it from the cached picks, so the
+        next images_for() call finds another candidate."""
+        self.banned.add(img.sha256)
+        for key, entries in self.manifest["keys"].items():
+            self.manifest["keys"][key] = [e for e in entries if e.get("sha256") != img.sha256]
+        self.used.pop(img.sha256, None)
+        self.attribution.pop(img.sha256, None)
+        if why:
+            self.rejected.setdefault("banned", []).append((img.title, why))
 
     # ------------------------------------------------------------------------------------------- public
     def images_for(self, key: str, queries: Iterable[str], count: int, *, orientation: str = "any",
@@ -122,9 +143,11 @@ class ImageLibrary:
                         self.rejected.setdefault(key, []).append((cand.title, verdict.reason))
                         continue
                     img = self._fetch(cand)
-                    if img is None or img.sha256 in self.used or any(p.sha256 == img.sha256 for p in picked):
+                    if img is None or img.sha256 in self.used or img.sha256 in self.banned \
+                            or any(p.sha256 == img.sha256 for p in picked):
                         continue
-                    if min(img.width, img.height) < need:
+                    if not usable_size(img.width, img.height, need):  # the file's real size, not the API's claim
+                        self.banned.add(img.sha256)
                         continue
                     img.keywords_matched, img.query = " ".join(verdict.matched), q
                     picked.append(img)
@@ -167,7 +190,8 @@ class ImageLibrary:
     def _cached(self, key: str, count: int, main_min_edge: int, groups: Sequence[frozenset[str]] = ()) -> list[ImageFile]:
         entries = self.manifest["keys"].get(key) or []
         files = [ImageFile.from_json(e) for e in entries]
-        files = [f for f in files if Path(f.path).is_file() and f.source != "local"]
+        files = [f for f in files if Path(f.path).is_file() and f.source != "local" and f.sha256 not in self.banned
+                 and usable_size(f.width, f.height)]
         if groups:  # photos chosen by an earlier, looser run are checked again
             kept = []
             for f in files:
@@ -252,7 +276,11 @@ class ImageLibrary:
                 continue
             mime, w, h = info
             sha = hashlib.sha256(data).hexdigest()
-            if sha in self.used and self.used[sha] != key:
+            if sha in self.banned or (sha in self.used and self.used[sha] != key):
+                continue
+            if not usable_size(w, h):
+                self.log(f"  ! {p.name}: {w}x{h} px is too small for media (at least {MEDIA_MIN_SHORT_EDGE} px on the short "
+                         f"side, {MEDIA_MIN_LONG_EDGE} px on the long side), skipped")
                 continue
             out.append(ImageFile(path=str(p), source="local", title=p.stem.replace("-", " ").replace("_", " "),
                                  author="", author_url="", license="provided via SEED_IMAGES_DIR", license_url="",
