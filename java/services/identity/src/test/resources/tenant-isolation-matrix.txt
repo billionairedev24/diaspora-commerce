@@ -8,7 +8,6 @@
 @InternalLookupController | SERVICE_ONLY | requireServiceLookup: SERVICE principal with users:read | -
 @FirstPartySignInController | SERVICE_ONLY | SERVICE principal with auth:first-party (gateway-bff client credentials) | -
 @AccountController | PUBLIC | anonymous sign-up and verification; acts on the submitted code only | -
-@StaffInvitationPublicController | PUBLIC | anonymous preview/accept by the emailed invitation token; no tenant data | -
 @PasswordResetController | PUBLIC | anonymous reset by emailed code; no tenant data | -
 @LoginPageController | PUBLIC | hosted login page | -
 @MfaPageController | PUBLIC | hosted pre-auth page bound to the server-side login session; no id in request | -
