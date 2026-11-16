@@ -1,0 +1,1642 @@
+[
+ {
+  "code": "groceries-food",
+  "id": "fa1ee41b-a3a5-521e-8d2b-4bc4379ecae1",
+  "level": "DEPARTMENT",
+  "name": "Groceries & Food",
+  "parentId": null,
+  "path": "Groceries & Food",
+  "productType": null,
+  "taxStatus": null
+ },
+ {
+  "code": "beverages",
+  "id": "a7786e4c-3207-57a8-9dec-58803cee6abd",
+  "level": "DEPARTMENT",
+  "name": "Beverages",
+  "parentId": null,
+  "path": "Beverages",
+  "productType": null,
+  "taxStatus": null
+ },
+ {
+  "code": "beauty-personal-care",
+  "id": "97728d39-b4bf-5ba7-9939-84a26af78563",
+  "level": "DEPARTMENT",
+  "name": "Beauty & Personal Care",
+  "parentId": null,
+  "path": "Beauty & Personal Care",
+  "productType": null,
+  "taxStatus": null
+ },
+ {
+  "code": "fashion-accessories",
+  "id": "022f548b-20e4-5be7-b74a-86b82c46a5ab",
+  "level": "DEPARTMENT",
+  "name": "Fashion & Accessories",
+  "parentId": null,
+  "path": "Fashion & Accessories",
+  "productType": null,
+  "taxStatus": null
+ },
+ {
+  "code": "home-household",
+  "id": "2c728756-cfa2-5614-a6a9-0682271a2fce",
+  "level": "DEPARTMENT",
+  "name": "Home & Household",
+  "parentId": null,
+  "path": "Home & Household",
+  "productType": null,
+  "taxStatus": null
+ },
+ {
+  "code": "electronics",
+  "id": "744d3b82-fad6-57ce-93b2-2c15e221781f",
+  "level": "DEPARTMENT",
+  "name": "Electronics",
+  "parentId": null,
+  "path": "Electronics",
+  "productType": null,
+  "taxStatus": null
+ },
+ {
+  "code": "books-media",
+  "id": "9b3183d5-01d5-50c3-ab15-893667943adc",
+  "level": "DEPARTMENT",
+  "name": "Books & Media",
+  "parentId": null,
+  "path": "Books & Media",
+  "productType": null,
+  "taxStatus": null
+ },
+ {
+  "code": "health-wellness",
+  "id": "b5826b13-f009-5e15-8567-6fbd36f61b27",
+  "level": "DEPARTMENT",
+  "name": "Health & Wellness",
+  "parentId": null,
+  "path": "Health & Wellness",
+  "productType": null,
+  "taxStatus": null
+ },
+ {
+  "code": "baby-kids",
+  "id": "aa4bd109-79e5-598c-bc0f-08b69decd5f3",
+  "level": "DEPARTMENT",
+  "name": "Baby & Kids",
+  "parentId": null,
+  "path": "Baby & Kids",
+  "productType": null,
+  "taxStatus": null
+ },
+ {
+  "code": "pets",
+  "id": "6f84fe6a-16d3-5bc5-941b-39c5faa9dd40",
+  "level": "DEPARTMENT",
+  "name": "Pets",
+  "parentId": null,
+  "path": "Pets",
+  "productType": null,
+  "taxStatus": null
+ },
+ {
+  "code": "digital-products",
+  "id": "9dfac2aa-667c-531c-92b0-dd1be07428fe",
+  "level": "DEPARTMENT",
+  "name": "Digital Products",
+  "parentId": null,
+  "path": "Digital Products",
+  "productType": null,
+  "taxStatus": null
+ },
+ {
+  "code": "services",
+  "id": "1300e51e-f465-5124-8e62-3090f72333fa",
+  "level": "DEPARTMENT",
+  "name": "Services",
+  "parentId": null,
+  "path": "Services",
+  "productType": null,
+  "taxStatus": null
+ },
+ {
+  "code": "other-specialty",
+  "id": "18666886-157f-5fe7-90b5-7abe4e8873fe",
+  "level": "DEPARTMENT",
+  "name": "Other & Specialty",
+  "parentId": null,
+  "path": "Other & Specialty",
+  "productType": null,
+  "taxStatus": null
+ },
+ {
+  "code": "baby-food-formula",
+  "id": "41d2128f-8bef-5481-bbd2-df4d045e32dd",
+  "level": "CATEGORY",
+  "name": "Baby food & formula",
+  "parentId": "fa1ee41b-a3a5-521e-8d2b-4bc4379ecae1",
+  "path": "Groceries & Food › Baby food & formula",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "baby-food-formula-item",
+  "id": "8228df16-07a7-5898-b3fb-54ef56a91489",
+  "level": "PRODUCT_TYPE",
+  "name": "Baby food & formula",
+  "parentId": "41d2128f-8bef-5481-bbd2-df4d045e32dd",
+  "path": "Groceries & Food › Baby food & formula › Baby food & formula",
+  "productType": "baby-food-formula",
+  "taxStatus": null
+ },
+ {
+  "code": "bakery-products",
+  "id": "14215636-1017-5c03-8344-ee6028b8e38c",
+  "level": "CATEGORY",
+  "name": "Bakery products",
+  "parentId": "fa1ee41b-a3a5-521e-8d2b-4bc4379ecae1",
+  "path": "Groceries & Food › Bakery products",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "bakery-products-item",
+  "id": "b6304dc0-43d7-5d09-9ef2-230e07c55079",
+  "level": "PRODUCT_TYPE",
+  "name": "Bakery products",
+  "parentId": "14215636-1017-5c03-8344-ee6028b8e38c",
+  "path": "Groceries & Food › Bakery products › Bakery products",
+  "productType": "bakery-products",
+  "taxStatus": null
+ },
+ {
+  "code": "beans-pantry-sauces",
+  "id": "d6639599-bf18-5a4e-b1ad-c20e2b818393",
+  "level": "CATEGORY",
+  "name": "Beans, pantry foods & sauces",
+  "parentId": "fa1ee41b-a3a5-521e-8d2b-4bc4379ecae1",
+  "path": "Groceries & Food › Beans, pantry foods & sauces",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "beans-pantry-sauces-item",
+  "id": "798e8ef7-59ba-50eb-ab8c-c69b87c83404",
+  "level": "PRODUCT_TYPE",
+  "name": "Beans, pantry foods & sauces",
+  "parentId": "d6639599-bf18-5a4e-b1ad-c20e2b818393",
+  "path": "Groceries & Food › Beans, pantry foods & sauces › Beans, pantry foods & sauces",
+  "productType": "beans-pantry-sauces",
+  "taxStatus": null
+ },
+ {
+  "code": "candy-gum",
+  "id": "6aae5ffb-30d1-5f55-b052-e343089ae73d",
+  "level": "CATEGORY",
+  "name": "Candy & gum",
+  "parentId": "fa1ee41b-a3a5-521e-8d2b-4bc4379ecae1",
+  "path": "Groceries & Food › Candy & gum",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "candy-gum-item",
+  "id": "a0f92dca-2582-5ae7-b9a4-2d68e818dad0",
+  "level": "PRODUCT_TYPE",
+  "name": "Candy & gum",
+  "parentId": "6aae5ffb-30d1-5f55-b052-e343089ae73d",
+  "path": "Groceries & Food › Candy & gum › Candy & gum",
+  "productType": "candy-gum",
+  "taxStatus": null
+ },
+ {
+  "code": "cooking-oils",
+  "id": "830965a2-5d94-52ce-9438-f64cf64793db",
+  "level": "CATEGORY",
+  "name": "Cooking oils",
+  "parentId": "fa1ee41b-a3a5-521e-8d2b-4bc4379ecae1",
+  "path": "Groceries & Food › Cooking oils",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "cooking-oils-item",
+  "id": "d2bf8c4d-2d7d-578e-86f9-0cf3a94646ac",
+  "level": "PRODUCT_TYPE",
+  "name": "Cooking oils",
+  "parentId": "830965a2-5d94-52ce-9438-f64cf64793db",
+  "path": "Groceries & Food › Cooking oils › Cooking oils",
+  "productType": "cooking-oils",
+  "taxStatus": null
+ },
+ {
+  "code": "dairy-eggs",
+  "id": "0d3f8c43-6ee0-508f-82e0-514b520548a2",
+  "level": "CATEGORY",
+  "name": "Dairy & eggs",
+  "parentId": "fa1ee41b-a3a5-521e-8d2b-4bc4379ecae1",
+  "path": "Groceries & Food › Dairy & eggs",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "dairy-eggs-item",
+  "id": "4b47ea01-08e4-5d25-ae5a-0686c5a5c4e7",
+  "level": "PRODUCT_TYPE",
+  "name": "Dairy & eggs",
+  "parentId": "0d3f8c43-6ee0-508f-82e0-514b520548a2",
+  "path": "Groceries & Food › Dairy & eggs › Dairy & eggs",
+  "productType": "dairy-eggs",
+  "taxStatus": null
+ },
+ {
+  "code": "flours-starches",
+  "id": "0a9585fb-d453-5e14-a1e3-a730704b62a9",
+  "level": "CATEGORY",
+  "name": "Flours & starches",
+  "parentId": "fa1ee41b-a3a5-521e-8d2b-4bc4379ecae1",
+  "path": "Groceries & Food › Flours & starches",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "flours-starches-item",
+  "id": "988f1cc8-cf8a-5b4b-b1f9-92e931339873",
+  "level": "PRODUCT_TYPE",
+  "name": "Flours & starches",
+  "parentId": "0a9585fb-d453-5e14-a1e3-a730704b62a9",
+  "path": "Groceries & Food › Flours & starches › Flours & starches",
+  "productType": "flours-starches",
+  "taxStatus": null
+ },
+ {
+  "code": "fresh-produce",
+  "id": "23ecaa58-8423-5921-8475-0ed77de80251",
+  "level": "CATEGORY",
+  "name": "Fresh produce",
+  "parentId": "fa1ee41b-a3a5-521e-8d2b-4bc4379ecae1",
+  "path": "Groceries & Food › Fresh produce",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "fresh-produce-item",
+  "id": "24f1e3db-c395-5669-afe6-ed5995d13a5f",
+  "level": "PRODUCT_TYPE",
+  "name": "Fresh produce",
+  "parentId": "23ecaa58-8423-5921-8475-0ed77de80251",
+  "path": "Groceries & Food › Fresh produce › Fresh produce",
+  "productType": "fresh-produce",
+  "taxStatus": null
+ },
+ {
+  "code": "frozen-meals",
+  "id": "e6eaca4e-6704-518d-b8b9-db961c2930a5",
+  "level": "CATEGORY",
+  "name": "Frozen meals",
+  "parentId": "fa1ee41b-a3a5-521e-8d2b-4bc4379ecae1",
+  "path": "Groceries & Food › Frozen meals",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "frozen-meals-item",
+  "id": "85b7c604-b460-5f79-a8aa-b7c747208f27",
+  "level": "PRODUCT_TYPE",
+  "name": "Frozen meals",
+  "parentId": "e6eaca4e-6704-518d-b8b9-db961c2930a5",
+  "path": "Groceries & Food › Frozen meals › Frozen meals",
+  "productType": "frozen-meals",
+  "taxStatus": null
+ },
+ {
+  "code": "meat-poultry-fish",
+  "id": "79c568e5-b75e-57f3-ac64-9071e62e6372",
+  "level": "CATEGORY",
+  "name": "Meat, poultry & fish",
+  "parentId": "fa1ee41b-a3a5-521e-8d2b-4bc4379ecae1",
+  "path": "Groceries & Food › Meat, poultry & fish",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "meat-poultry-fish-item",
+  "id": "d847f3e5-dc0c-5e7f-bfa3-9b5e652a1dab",
+  "level": "PRODUCT_TYPE",
+  "name": "Meat, poultry & fish",
+  "parentId": "79c568e5-b75e-57f3-ac64-9071e62e6372",
+  "path": "Groceries & Food › Meat, poultry & fish › Meat, poultry & fish",
+  "productType": "meat-poultry-fish",
+  "taxStatus": null
+ },
+ {
+  "code": "nuts-seeds",
+  "id": "644cada6-e732-5a66-993b-de5fc22aa74d",
+  "level": "CATEGORY",
+  "name": "Nuts & seeds",
+  "parentId": "fa1ee41b-a3a5-521e-8d2b-4bc4379ecae1",
+  "path": "Groceries & Food › Nuts & seeds",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "nuts-seeds-item",
+  "id": "5cad644d-4068-52cd-adc8-12b5a9d8ade3",
+  "level": "PRODUCT_TYPE",
+  "name": "Nuts & seeds",
+  "parentId": "644cada6-e732-5a66-993b-de5fc22aa74d",
+  "path": "Groceries & Food › Nuts & seeds › Nuts & seeds",
+  "productType": "nuts-seeds",
+  "taxStatus": null
+ },
+ {
+  "code": "packaged-snacks",
+  "id": "c65ea75b-2a87-5bd1-b554-1aef2b11dd2e",
+  "level": "CATEGORY",
+  "name": "Packaged snacks",
+  "parentId": "fa1ee41b-a3a5-521e-8d2b-4bc4379ecae1",
+  "path": "Groceries & Food › Packaged snacks",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "packaged-snacks-item",
+  "id": "1c785862-0bc5-5421-9ac0-afd23b61fb78",
+  "level": "PRODUCT_TYPE",
+  "name": "Packaged snacks",
+  "parentId": "c65ea75b-2a87-5bd1-b554-1aef2b11dd2e",
+  "path": "Groceries & Food › Packaged snacks › Packaged snacks",
+  "productType": "packaged-snacks",
+  "taxStatus": null
+ },
+ {
+  "code": "pasta-noodles",
+  "id": "0f04c223-63c6-5b76-9781-1cb3bb1bc955",
+  "level": "CATEGORY",
+  "name": "Pasta & noodles",
+  "parentId": "fa1ee41b-a3a5-521e-8d2b-4bc4379ecae1",
+  "path": "Groceries & Food › Pasta & noodles",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "pasta-noodles-item",
+  "id": "53424ed0-37a6-555f-81d7-7d67e2f42bf8",
+  "level": "PRODUCT_TYPE",
+  "name": "Pasta & noodles",
+  "parentId": "0f04c223-63c6-5b76-9781-1cb3bb1bc955",
+  "path": "Groceries & Food › Pasta & noodles › Pasta & noodles",
+  "productType": "pasta-noodles",
+  "taxStatus": null
+ },
+ {
+  "code": "prepared-meals",
+  "id": "e4aafbeb-8aa8-5195-bde4-c6f7e1d24da6",
+  "level": "CATEGORY",
+  "name": "Prepared meals",
+  "parentId": "fa1ee41b-a3a5-521e-8d2b-4bc4379ecae1",
+  "path": "Groceries & Food › Prepared meals",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "prepared-meals-item",
+  "id": "8018fc5a-1c9d-5bba-b739-995db18f7bdf",
+  "level": "PRODUCT_TYPE",
+  "name": "Prepared meals",
+  "parentId": "e4aafbeb-8aa8-5195-bde4-c6f7e1d24da6",
+  "path": "Groceries & Food › Prepared meals › Prepared meals",
+  "productType": "prepared-meals",
+  "taxStatus": null
+ },
+ {
+  "code": "rice-grains",
+  "id": "550ea8b8-5435-5fea-8cac-c628c972b1ea",
+  "level": "CATEGORY",
+  "name": "Rice & grains",
+  "parentId": "fa1ee41b-a3a5-521e-8d2b-4bc4379ecae1",
+  "path": "Groceries & Food › Rice & grains",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "rice-grains-item",
+  "id": "68746f35-993c-5dfd-a4a5-0c8de6ddddc3",
+  "level": "PRODUCT_TYPE",
+  "name": "Rice & grains",
+  "parentId": "550ea8b8-5435-5fea-8cac-c628c972b1ea",
+  "path": "Groceries & Food › Rice & grains › Rice & grains",
+  "productType": "rice-grains",
+  "taxStatus": null
+ },
+ {
+  "code": "spices-seasonings",
+  "id": "b0bdda2f-a79f-5980-a691-9327fa4243e4",
+  "level": "CATEGORY",
+  "name": "Spices & seasonings",
+  "parentId": "fa1ee41b-a3a5-521e-8d2b-4bc4379ecae1",
+  "path": "Groceries & Food › Spices & seasonings",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "spices-seasonings-item",
+  "id": "1bedc3c3-b0d2-57ff-9f97-08267aac2708",
+  "level": "PRODUCT_TYPE",
+  "name": "Spices & seasonings",
+  "parentId": "b0bdda2f-a79f-5980-a691-9327fa4243e4",
+  "path": "Groceries & Food › Spices & seasonings › Spices & seasonings",
+  "productType": "spices-seasonings",
+  "taxStatus": null
+ },
+ {
+  "code": "coffee-tea-dry",
+  "id": "48708643-7513-5d5d-9a5e-1c3cb54ddcf0",
+  "level": "CATEGORY",
+  "name": "Coffee & tea, dry",
+  "parentId": "a7786e4c-3207-57a8-9dec-58803cee6abd",
+  "path": "Beverages › Coffee & tea, dry",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "coffee-tea-dry-item",
+  "id": "d9b7e3be-2eb8-533e-93d9-d3fb06ecc0b5",
+  "level": "PRODUCT_TYPE",
+  "name": "Coffee & tea, dry",
+  "parentId": "48708643-7513-5d5d-9a5e-1c3cb54ddcf0",
+  "path": "Beverages › Coffee & tea, dry › Coffee & tea, dry",
+  "productType": "coffee-tea-dry",
+  "taxStatus": null
+ },
+ {
+  "code": "energy-protein-drink-mixes",
+  "id": "3b464ba2-e568-55aa-94c8-fff78e1ce1ad",
+  "level": "CATEGORY",
+  "name": "Energy, protein & drink mixes",
+  "parentId": "a7786e4c-3207-57a8-9dec-58803cee6abd",
+  "path": "Beverages › Energy, protein & drink mixes",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "energy-protein-drink-mixes-item",
+  "id": "676f92e0-07cf-5435-9b82-90c2aa62c0f4",
+  "level": "PRODUCT_TYPE",
+  "name": "Energy, protein & drink mixes",
+  "parentId": "3b464ba2-e568-55aa-94c8-fff78e1ce1ad",
+  "path": "Beverages › Energy, protein & drink mixes › Energy, protein & drink mixes",
+  "productType": "energy-protein-drink-mixes",
+  "taxStatus": null
+ },
+ {
+  "code": "flavored-water-soda",
+  "id": "4b658159-a435-53af-8cb8-c43daa8bbd4c",
+  "level": "CATEGORY",
+  "name": "Flavored water & soda",
+  "parentId": "a7786e4c-3207-57a8-9dec-58803cee6abd",
+  "path": "Beverages › Flavored water & soda",
+  "productType": null,
+  "taxStatus": "CONFLICT_OPEN"
+ },
+ {
+  "code": "flavored-water-soda-item",
+  "id": "595d7f25-57bd-55ff-8f62-79425cba69c6",
+  "level": "PRODUCT_TYPE",
+  "name": "Flavored water & soda",
+  "parentId": "4b658159-a435-53af-8cb8-c43daa8bbd4c",
+  "path": "Beverages › Flavored water & soda › Flavored water & soda",
+  "productType": "flavored-water-soda",
+  "taxStatus": null
+ },
+ {
+  "code": "fruit-vegetable-juice",
+  "id": "5c7f6d6e-743d-54f4-8842-b7594f2f7140",
+  "level": "CATEGORY",
+  "name": "Fruit & vegetable juice",
+  "parentId": "a7786e4c-3207-57a8-9dec-58803cee6abd",
+  "path": "Beverages › Fruit & vegetable juice",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "fruit-vegetable-juice-item",
+  "id": "6ce30fc8-42ca-5b9e-8f82-026e9ddf6538",
+  "level": "PRODUCT_TYPE",
+  "name": "Fruit & vegetable juice",
+  "parentId": "5c7f6d6e-743d-54f4-8842-b7594f2f7140",
+  "path": "Beverages › Fruit & vegetable juice › Fruit & vegetable juice",
+  "productType": "fruit-vegetable-juice",
+  "taxStatus": null
+ },
+ {
+  "code": "plain-water",
+  "id": "55dbb583-de88-5e98-beec-548887b1d29e",
+  "level": "CATEGORY",
+  "name": "Plain water",
+  "parentId": "a7786e4c-3207-57a8-9dec-58803cee6abd",
+  "path": "Beverages › Plain water",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "plain-water-item",
+  "id": "e15f7fd6-ea32-5732-a787-fcc3b3a32618",
+  "level": "PRODUCT_TYPE",
+  "name": "Plain water",
+  "parentId": "55dbb583-de88-5e98-beec-548887b1d29e",
+  "path": "Beverages › Plain water › Plain water",
+  "productType": "plain-water",
+  "taxStatus": null
+ },
+ {
+  "code": "ready-to-drink-coffee-tea",
+  "id": "8c933cb0-2324-5c5e-99f2-d37c9a554e40",
+  "level": "CATEGORY",
+  "name": "Ready-to-drink coffee & tea",
+  "parentId": "a7786e4c-3207-57a8-9dec-58803cee6abd",
+  "path": "Beverages › Ready-to-drink coffee & tea",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "ready-to-drink-coffee-tea-item",
+  "id": "15d94d29-7619-5c23-ab5a-840a5aa9e83d",
+  "level": "PRODUCT_TYPE",
+  "name": "Ready-to-drink coffee & tea",
+  "parentId": "8c933cb0-2324-5c5e-99f2-d37c9a554e40",
+  "path": "Beverages › Ready-to-drink coffee & tea › Ready-to-drink coffee & tea",
+  "productType": "ready-to-drink-coffee-tea",
+  "taxStatus": null
+ },
+ {
+  "code": "hair-accessories",
+  "id": "ebd240f0-3688-5659-8895-3c036439fb4d",
+  "level": "CATEGORY",
+  "name": "Hair accessories",
+  "parentId": "97728d39-b4bf-5ba7-9939-84a26af78563",
+  "path": "Beauty & Personal Care › Hair accessories",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "hair-accessories-item",
+  "id": "19ddcd6f-7dc1-52b6-b8ea-51c5423ec001",
+  "level": "PRODUCT_TYPE",
+  "name": "Hair accessories",
+  "parentId": "ebd240f0-3688-5659-8895-3c036439fb4d",
+  "path": "Beauty & Personal Care › Hair accessories › Hair accessories",
+  "productType": "hair-accessories",
+  "taxStatus": null
+ },
+ {
+  "code": "haircare",
+  "id": "72ae119e-af9f-57b0-94fd-575385a784f2",
+  "level": "CATEGORY",
+  "name": "Haircare",
+  "parentId": "97728d39-b4bf-5ba7-9939-84a26af78563",
+  "path": "Beauty & Personal Care › Haircare",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "haircare-item",
+  "id": "08eb9fa6-3eac-5f4c-b688-a2c9790c8652",
+  "level": "PRODUCT_TYPE",
+  "name": "Haircare",
+  "parentId": "72ae119e-af9f-57b0-94fd-575385a784f2",
+  "path": "Beauty & Personal Care › Haircare › Haircare",
+  "productType": "haircare",
+  "taxStatus": null
+ },
+ {
+  "code": "medicated-skincare",
+  "id": "eec5496d-329e-5828-b5a0-910123f06269",
+  "level": "CATEGORY",
+  "name": "Medicated skincare",
+  "parentId": "97728d39-b4bf-5ba7-9939-84a26af78563",
+  "path": "Beauty & Personal Care › Medicated skincare",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "medicated-skincare-item",
+  "id": "03ba0c8c-14bc-5703-b8e4-25d39eefdf71",
+  "level": "PRODUCT_TYPE",
+  "name": "Medicated skincare",
+  "parentId": "eec5496d-329e-5828-b5a0-910123f06269",
+  "path": "Beauty & Personal Care › Medicated skincare › Medicated skincare",
+  "productType": "medicated-skincare",
+  "taxStatus": null
+ },
+ {
+  "code": "perfumes-fragrances",
+  "id": "107fa88e-1d1d-58ca-89cd-6b04ae3d5aa4",
+  "level": "CATEGORY",
+  "name": "Perfumes & fragrances",
+  "parentId": "97728d39-b4bf-5ba7-9939-84a26af78563",
+  "path": "Beauty & Personal Care › Perfumes & fragrances",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "perfumes-fragrances-item",
+  "id": "b04b6b95-983d-5ac4-9208-2f2583122bc0",
+  "level": "PRODUCT_TYPE",
+  "name": "Perfumes & fragrances",
+  "parentId": "107fa88e-1d1d-58ca-89cd-6b04ae3d5aa4",
+  "path": "Beauty & Personal Care › Perfumes & fragrances › Perfumes & fragrances",
+  "productType": "perfumes-fragrances",
+  "taxStatus": null
+ },
+ {
+  "code": "skincare-cosmetics",
+  "id": "333be21a-1826-51fd-85d8-7aab65977871",
+  "level": "CATEGORY",
+  "name": "Skincare & cosmetics",
+  "parentId": "97728d39-b4bf-5ba7-9939-84a26af78563",
+  "path": "Beauty & Personal Care › Skincare & cosmetics",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "skincare-cosmetics-item",
+  "id": "6f1f70ff-6ac1-534b-b6ee-08da24862214",
+  "level": "PRODUCT_TYPE",
+  "name": "Skincare & cosmetics",
+  "parentId": "333be21a-1826-51fd-85d8-7aab65977871",
+  "path": "Beauty & Personal Care › Skincare & cosmetics › Skincare & cosmetics",
+  "productType": "skincare-cosmetics",
+  "taxStatus": null
+ },
+ {
+  "code": "wigs-extensions",
+  "id": "2d6fb430-ab2a-5a03-8ad6-654025892326",
+  "level": "CATEGORY",
+  "name": "Wigs & extensions",
+  "parentId": "97728d39-b4bf-5ba7-9939-84a26af78563",
+  "path": "Beauty & Personal Care › Wigs & extensions",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "wigs-extensions-item",
+  "id": "5d2328c8-bfd8-5f38-afba-9a5b6f7e779d",
+  "level": "PRODUCT_TYPE",
+  "name": "Wigs & extensions",
+  "parentId": "2d6fb430-ab2a-5a03-8ad6-654025892326",
+  "path": "Beauty & Personal Care › Wigs & extensions › Wigs & extensions",
+  "productType": "wigs-extensions",
+  "taxStatus": null
+ },
+ {
+  "code": "adult-clothing-footwear",
+  "id": "b83c4fab-8c38-5184-9255-91995586e07a",
+  "level": "CATEGORY",
+  "name": "Adult clothing & footwear",
+  "parentId": "022f548b-20e4-5be7-b74a-86b82c46a5ab",
+  "path": "Fashion & Accessories › Adult clothing & footwear",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "adult-clothing-footwear-dress",
+  "id": "171288d5-4b84-55fc-ab03-bf4e96bda14d",
+  "level": "PRODUCT_TYPE",
+  "name": "Women's dresses",
+  "parentId": "b83c4fab-8c38-5184-9255-91995586e07a",
+  "path": "Fashion & Accessories › Adult clothing & footwear › Women's dresses",
+  "productType": "dress",
+  "taxStatus": null
+ },
+ {
+  "code": "adult-clothing-footwear-top",
+  "id": "eae44b84-602c-5a0a-aef4-dcd4d19b92a1",
+  "level": "PRODUCT_TYPE",
+  "name": "Women's tops & wrappers",
+  "parentId": "b83c4fab-8c38-5184-9255-91995586e07a",
+  "path": "Fashion & Accessories › Adult clothing & footwear › Women's tops & wrappers",
+  "productType": "top",
+  "taxStatus": null
+ },
+ {
+  "code": "adult-clothing-footwear-menwear",
+  "id": "4107a741-8bd0-5105-9637-8d406167456a",
+  "level": "PRODUCT_TYPE",
+  "name": "Men's clothing",
+  "parentId": "b83c4fab-8c38-5184-9255-91995586e07a",
+  "path": "Fashion & Accessories › Adult clothing & footwear › Men's clothing",
+  "productType": "menwear",
+  "taxStatus": null
+ },
+ {
+  "code": "adult-clothing-footwear-footwear",
+  "id": "a037207c-a75a-5d30-a761-db4e79776b9d",
+  "level": "PRODUCT_TYPE",
+  "name": "Footwear",
+  "parentId": "b83c4fab-8c38-5184-9255-91995586e07a",
+  "path": "Fashion & Accessories › Adult clothing & footwear › Footwear",
+  "productType": "footwear",
+  "taxStatus": null
+ },
+ {
+  "code": "bags-purses",
+  "id": "24884f10-14da-5f94-be30-5b00b059ce76",
+  "level": "CATEGORY",
+  "name": "Bags & purses",
+  "parentId": "022f548b-20e4-5be7-b74a-86b82c46a5ab",
+  "path": "Fashion & Accessories › Bags & purses",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "bags-purses-item",
+  "id": "55ee5a1b-996f-5d6f-9276-0c9980cea46f",
+  "level": "PRODUCT_TYPE",
+  "name": "Bags & purses",
+  "parentId": "24884f10-14da-5f94-be30-5b00b059ce76",
+  "path": "Fashion & Accessories › Bags & purses › Bags & purses",
+  "productType": "bags-purses",
+  "taxStatus": null
+ },
+ {
+  "code": "childrens-clothing",
+  "id": "a05430e3-332f-5606-a4df-2a6fb26b533b",
+  "level": "CATEGORY",
+  "name": "Children’s clothing",
+  "parentId": "022f548b-20e4-5be7-b74a-86b82c46a5ab",
+  "path": "Fashion & Accessories › Children’s clothing",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "childrens-clothing-kids",
+  "id": "379d6a1c-b536-5b8f-b975-963961cc7247",
+  "level": "PRODUCT_TYPE",
+  "name": "Kids' clothing",
+  "parentId": "a05430e3-332f-5606-a4df-2a6fb26b533b",
+  "path": "Fashion & Accessories › Children’s clothing › Kids' clothing",
+  "productType": "kids",
+  "taxStatus": null
+ },
+ {
+  "code": "jewelry-accessories",
+  "id": "079ff25d-07dc-5c25-bb83-132e401ff211",
+  "level": "CATEGORY",
+  "name": "Jewelry & accessories",
+  "parentId": "022f548b-20e4-5be7-b74a-86b82c46a5ab",
+  "path": "Fashion & Accessories › Jewelry & accessories",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "jewelry-accessories-item",
+  "id": "11b7547e-5769-5695-8573-076046278d70",
+  "level": "PRODUCT_TYPE",
+  "name": "Jewelry & accessories",
+  "parentId": "079ff25d-07dc-5c25-bb83-132e401ff211",
+  "path": "Fashion & Accessories › Jewelry & accessories › Jewelry & accessories",
+  "productType": "jewelry-accessories",
+  "taxStatus": null
+ },
+ {
+  "code": "bedding-linens",
+  "id": "5872046b-54b2-52fb-b4c3-10e0111dfb49",
+  "level": "CATEGORY",
+  "name": "Bedding & linens",
+  "parentId": "2c728756-cfa2-5614-a6a9-0682271a2fce",
+  "path": "Home & Household › Bedding & linens",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "bedding-linens-item",
+  "id": "cfa7974d-8c2c-5def-a88b-ecc889169d74",
+  "level": "PRODUCT_TYPE",
+  "name": "Bedding & linens",
+  "parentId": "5872046b-54b2-52fb-b4c3-10e0111dfb49",
+  "path": "Home & Household › Bedding & linens › Bedding & linens",
+  "productType": "bedding-linens",
+  "taxStatus": null
+ },
+ {
+  "code": "cleaning-paper-products",
+  "id": "4c88ba8b-e88a-5696-b8a5-cf5bf69cc409",
+  "level": "CATEGORY",
+  "name": "Cleaning & paper products",
+  "parentId": "2c728756-cfa2-5614-a6a9-0682271a2fce",
+  "path": "Home & Household › Cleaning & paper products",
+  "productType": null,
+  "taxStatus": "REFINE_CODE"
+ },
+ {
+  "code": "cleaning-paper-products-item",
+  "id": "583ec036-67c6-5597-960f-0be35402e196",
+  "level": "PRODUCT_TYPE",
+  "name": "Cleaning & paper products",
+  "parentId": "4c88ba8b-e88a-5696-b8a5-cf5bf69cc409",
+  "path": "Home & Household › Cleaning & paper products › Cleaning & paper products",
+  "productType": "cleaning-paper-products",
+  "taxStatus": null
+ },
+ {
+  "code": "decor-candles",
+  "id": "56925cda-5b5f-52f4-b05a-210cddbfc2f2",
+  "level": "CATEGORY",
+  "name": "Decor & candles",
+  "parentId": "2c728756-cfa2-5614-a6a9-0682271a2fce",
+  "path": "Home & Household › Decor & candles",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "decor-candles-item",
+  "id": "e679969f-7dd6-5034-a5de-4f6eb1de1c06",
+  "level": "PRODUCT_TYPE",
+  "name": "Decor & candles",
+  "parentId": "56925cda-5b5f-52f4-b05a-210cddbfc2f2",
+  "path": "Home & Household › Decor & candles › Decor & candles",
+  "productType": "decor-candles",
+  "taxStatus": null
+ },
+ {
+  "code": "furniture-small-appliances",
+  "id": "4c51279c-a1cf-58eb-bd6b-194ad59f3feb",
+  "level": "CATEGORY",
+  "name": "Furniture & small appliances",
+  "parentId": "2c728756-cfa2-5614-a6a9-0682271a2fce",
+  "path": "Home & Household › Furniture & small appliances",
+  "productType": null,
+  "taxStatus": "REFINE_CODE"
+ },
+ {
+  "code": "furniture-small-appliances-item",
+  "id": "437c002c-5790-513b-ae9d-ce78c96635af",
+  "level": "PRODUCT_TYPE",
+  "name": "Furniture & small appliances",
+  "parentId": "4c51279c-a1cf-58eb-bd6b-194ad59f3feb",
+  "path": "Home & Household › Furniture & small appliances › Furniture & small appliances",
+  "productType": "furniture-small-appliances",
+  "taxStatus": null
+ },
+ {
+  "code": "kitchenware-cookware",
+  "id": "75e2e199-160a-5519-a4c8-b7c37d3b9e78",
+  "level": "CATEGORY",
+  "name": "Kitchenware & cookware",
+  "parentId": "2c728756-cfa2-5614-a6a9-0682271a2fce",
+  "path": "Home & Household › Kitchenware & cookware",
+  "productType": null,
+  "taxStatus": "REFINE_CODE"
+ },
+ {
+  "code": "kitchenware-cookware-item",
+  "id": "1fd8d008-2914-57aa-8ea4-4fccb684bf28",
+  "level": "PRODUCT_TYPE",
+  "name": "Kitchenware & cookware",
+  "parentId": "75e2e199-160a-5519-a4c8-b7c37d3b9e78",
+  "path": "Home & Household › Kitchenware & cookware › Kitchenware & cookware",
+  "productType": "kitchenware-cookware",
+  "taxStatus": null
+ },
+ {
+  "code": "computers-laptops",
+  "id": "6bfdda09-8706-5bd5-bff5-3c1e2c9a79ce",
+  "level": "CATEGORY",
+  "name": "Computers & laptops",
+  "parentId": "744d3b82-fad6-57ce-93b2-2c15e221781f",
+  "path": "Electronics › Computers & laptops",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "computers-laptops-item",
+  "id": "ee48836a-f770-5617-bee7-9d89bb60b0d7",
+  "level": "PRODUCT_TYPE",
+  "name": "Computers & laptops",
+  "parentId": "6bfdda09-8706-5bd5-bff5-3c1e2c9a79ce",
+  "path": "Electronics › Computers & laptops › Computers & laptops",
+  "productType": "computers-laptops",
+  "taxStatus": null
+ },
+ {
+  "code": "gaming",
+  "id": "ed38eb0e-a5da-5361-96d2-0d2260507f75",
+  "level": "CATEGORY",
+  "name": "Gaming",
+  "parentId": "744d3b82-fad6-57ce-93b2-2c15e221781f",
+  "path": "Electronics › Gaming",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "gaming-item",
+  "id": "ea3fb907-6313-5c7d-b49f-90dd4b638589",
+  "level": "PRODUCT_TYPE",
+  "name": "Gaming",
+  "parentId": "ed38eb0e-a5da-5361-96d2-0d2260507f75",
+  "path": "Electronics › Gaming › Gaming",
+  "productType": "gaming",
+  "taxStatus": null
+ },
+ {
+  "code": "phones",
+  "id": "1f1094ef-ccc4-5ded-85f7-30ae429b9035",
+  "level": "CATEGORY",
+  "name": "Phones",
+  "parentId": "744d3b82-fad6-57ce-93b2-2c15e221781f",
+  "path": "Electronics › Phones",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "phones-item",
+  "id": "42e13a7d-06f6-5009-9868-8dad86866ed7",
+  "level": "PRODUCT_TYPE",
+  "name": "Phones",
+  "parentId": "1f1094ef-ccc4-5ded-85f7-30ae429b9035",
+  "path": "Electronics › Phones › Phones",
+  "productType": "phones",
+  "taxStatus": null
+ },
+ {
+  "code": "tvs-audio-accessories",
+  "id": "b3ef2cc4-a50c-5603-83a8-5fbb54fd2483",
+  "level": "CATEGORY",
+  "name": "TVs, audio & accessories",
+  "parentId": "744d3b82-fad6-57ce-93b2-2c15e221781f",
+  "path": "Electronics › TVs, audio & accessories",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "tvs-audio-accessories-item",
+  "id": "7c9a7a41-139c-54cf-ab96-e96b9efb57fc",
+  "level": "PRODUCT_TYPE",
+  "name": "TVs, audio & accessories",
+  "parentId": "b3ef2cc4-a50c-5603-83a8-5fbb54fd2483",
+  "path": "Electronics › TVs, audio & accessories › TVs, audio & accessories",
+  "productType": "tvs-audio-accessories",
+  "taxStatus": null
+ },
+ {
+  "code": "magazines",
+  "id": "1f1da3b6-d506-5edd-ba64-06cc138753de",
+  "level": "CATEGORY",
+  "name": "Magazines",
+  "parentId": "9b3183d5-01d5-50c3-ab15-893667943adc",
+  "path": "Books & Media › Magazines",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "magazines-item",
+  "id": "2e209460-28aa-534d-a6da-af461ea94562",
+  "level": "PRODUCT_TYPE",
+  "name": "Magazines",
+  "parentId": "1f1da3b6-d506-5edd-ba64-06cc138753de",
+  "path": "Books & Media › Magazines › Magazines",
+  "productType": "magazines",
+  "taxStatus": null
+ },
+ {
+  "code": "printed-books",
+  "id": "146b560f-444c-5c20-8725-4a36c45ae5f4",
+  "level": "CATEGORY",
+  "name": "Printed books",
+  "parentId": "9b3183d5-01d5-50c3-ab15-893667943adc",
+  "path": "Books & Media › Printed books",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "printed-books-item",
+  "id": "52f62372-4db9-5a25-919b-e77d01cdeaf0",
+  "level": "PRODUCT_TYPE",
+  "name": "Printed books",
+  "parentId": "146b560f-444c-5c20-8725-4a36c45ae5f4",
+  "path": "Books & Media › Printed books › Printed books",
+  "productType": "printed-books",
+  "taxStatus": null
+ },
+ {
+  "code": "dietary-supplements",
+  "id": "2aab8e14-c301-595e-beb5-a892aa4724e1",
+  "level": "CATEGORY",
+  "name": "Dietary supplements",
+  "parentId": "b5826b13-f009-5e15-8567-6fbd36f61b27",
+  "path": "Health & Wellness › Dietary supplements",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "dietary-supplements-item",
+  "id": "907dc8b1-2bf4-5d20-8cbb-950e5a56d58d",
+  "level": "PRODUCT_TYPE",
+  "name": "Dietary supplements",
+  "parentId": "2aab8e14-c301-595e-beb5-a892aa4724e1",
+  "path": "Health & Wellness › Dietary supplements › Dietary supplements",
+  "productType": "dietary-supplements",
+  "taxStatus": null
+ },
+ {
+  "code": "feminine-hygiene",
+  "id": "479ebb60-8c0e-5edd-aef2-dfa1ff6d95e1",
+  "level": "CATEGORY",
+  "name": "Feminine hygiene",
+  "parentId": "b5826b13-f009-5e15-8567-6fbd36f61b27",
+  "path": "Health & Wellness › Feminine hygiene",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "feminine-hygiene-item",
+  "id": "3da1f7a5-aef5-59aa-a734-99e1a1b3725d",
+  "level": "PRODUCT_TYPE",
+  "name": "Feminine hygiene",
+  "parentId": "479ebb60-8c0e-5edd-aef2-dfa1ff6d95e1",
+  "path": "Health & Wellness › Feminine hygiene › Feminine hygiene",
+  "productType": "feminine-hygiene",
+  "taxStatus": null
+ },
+ {
+  "code": "first-aid-wound-care",
+  "id": "c98d0c78-2ffa-5ae8-b44c-a0febacf80a0",
+  "level": "CATEGORY",
+  "name": "First aid & wound care",
+  "parentId": "b5826b13-f009-5e15-8567-6fbd36f61b27",
+  "path": "Health & Wellness › First aid & wound care",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "first-aid-wound-care-item",
+  "id": "891bd027-2205-5208-bfaa-a6fcf300064d",
+  "level": "PRODUCT_TYPE",
+  "name": "First aid & wound care",
+  "parentId": "c98d0c78-2ffa-5ae8-b44c-a0febacf80a0",
+  "path": "Health & Wellness › First aid & wound care › First aid & wound care",
+  "productType": "first-aid-wound-care",
+  "taxStatus": null
+ },
+ {
+  "code": "medical-devices",
+  "id": "5baec954-2c82-52d3-8a17-4c9dc56e7bef",
+  "level": "CATEGORY",
+  "name": "Medical devices",
+  "parentId": "b5826b13-f009-5e15-8567-6fbd36f61b27",
+  "path": "Health & Wellness › Medical devices",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "medical-devices-item",
+  "id": "c9d315d9-0b02-5db7-8f0e-71061c0ae167",
+  "level": "PRODUCT_TYPE",
+  "name": "Medical devices",
+  "parentId": "5baec954-2c82-52d3-8a17-4c9dc56e7bef",
+  "path": "Health & Wellness › Medical devices › Medical devices",
+  "productType": "medical-devices",
+  "taxStatus": null
+ },
+ {
+  "code": "otc-medicines",
+  "id": "8c3926de-4d10-5e2a-8c11-91f7489e4090",
+  "level": "CATEGORY",
+  "name": "OTC medicines",
+  "parentId": "b5826b13-f009-5e15-8567-6fbd36f61b27",
+  "path": "Health & Wellness › OTC medicines",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "otc-medicines-item",
+  "id": "0dd153b0-b4d1-5dc9-8640-0d4084c89e48",
+  "level": "PRODUCT_TYPE",
+  "name": "OTC medicines",
+  "parentId": "8c3926de-4d10-5e2a-8c11-91f7489e4090",
+  "path": "Health & Wellness › OTC medicines › OTC medicines",
+  "productType": "otc-medicines",
+  "taxStatus": null
+ },
+ {
+  "code": "personal-hygiene",
+  "id": "016abbf5-ca90-5817-a3f6-532cc0fe123c",
+  "level": "CATEGORY",
+  "name": "Personal hygiene",
+  "parentId": "b5826b13-f009-5e15-8567-6fbd36f61b27",
+  "path": "Health & Wellness › Personal hygiene",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "personal-hygiene-item",
+  "id": "33b43b04-bed7-5d71-8e7a-a331544e1756",
+  "level": "PRODUCT_TYPE",
+  "name": "Personal hygiene",
+  "parentId": "016abbf5-ca90-5817-a3f6-532cc0fe123c",
+  "path": "Health & Wellness › Personal hygiene › Personal hygiene",
+  "productType": "personal-hygiene",
+  "taxStatus": null
+ },
+ {
+  "code": "baby-bottles",
+  "id": "dc81af55-96da-5d40-b43b-8244312e7d04",
+  "level": "CATEGORY",
+  "name": "Baby bottles",
+  "parentId": "aa4bd109-79e5-598c-bc0f-08b69decd5f3",
+  "path": "Baby & Kids › Baby bottles",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "baby-bottles-item",
+  "id": "8c66e7ca-f9c5-5e9f-b465-d340e2083f00",
+  "level": "PRODUCT_TYPE",
+  "name": "Baby bottles",
+  "parentId": "dc81af55-96da-5d40-b43b-8244312e7d04",
+  "path": "Baby & Kids › Baby bottles › Baby bottles",
+  "productType": "baby-bottles",
+  "taxStatus": null
+ },
+ {
+  "code": "car-seats",
+  "id": "a4c70782-b0eb-52df-8b67-ff31d55ac32c",
+  "level": "CATEGORY",
+  "name": "Car seats",
+  "parentId": "aa4bd109-79e5-598c-bc0f-08b69decd5f3",
+  "path": "Baby & Kids › Car seats",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "car-seats-item",
+  "id": "ab5df2c8-aafe-5b2f-bb2a-a1f8a91e5ecc",
+  "level": "PRODUCT_TYPE",
+  "name": "Car seats",
+  "parentId": "a4c70782-b0eb-52df-8b67-ff31d55ac32c",
+  "path": "Baby & Kids › Car seats › Car seats",
+  "productType": "car-seats",
+  "taxStatus": null
+ },
+ {
+  "code": "diapers-wipes",
+  "id": "333f07e8-16ec-51ba-b506-9fdd9d41eaba",
+  "level": "CATEGORY",
+  "name": "Diapers & wipes",
+  "parentId": "aa4bd109-79e5-598c-bc0f-08b69decd5f3",
+  "path": "Baby & Kids › Diapers & wipes",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "diapers-wipes-item",
+  "id": "2d7348b0-fc9d-5de2-81cd-a4d7ffd20049",
+  "level": "PRODUCT_TYPE",
+  "name": "Diapers & wipes",
+  "parentId": "333f07e8-16ec-51ba-b506-9fdd9d41eaba",
+  "path": "Baby & Kids › Diapers & wipes › Diapers & wipes",
+  "productType": "diapers-wipes",
+  "taxStatus": null
+ },
+ {
+  "code": "toys-games",
+  "id": "e1b3d3bf-a609-549c-8aac-b870b726fb16",
+  "level": "CATEGORY",
+  "name": "Toys & games",
+  "parentId": "aa4bd109-79e5-598c-bc0f-08b69decd5f3",
+  "path": "Baby & Kids › Toys & games",
+  "productType": null,
+  "taxStatus": "REFINE_CODE"
+ },
+ {
+  "code": "toys-games-item",
+  "id": "27665bd9-1af6-5350-839c-86a9ee024608",
+  "level": "PRODUCT_TYPE",
+  "name": "Toys & games",
+  "parentId": "e1b3d3bf-a609-549c-8aac-b870b726fb16",
+  "path": "Baby & Kids › Toys & games › Toys & games",
+  "productType": "toys-games",
+  "taxStatus": null
+ },
+ {
+  "code": "pet-grooming-accessories",
+  "id": "9b7e7a80-c16c-5804-b3a1-b7c312fa9211",
+  "level": "CATEGORY",
+  "name": "Grooming & accessories",
+  "parentId": "6f84fe6a-16d3-5bc5-941b-39c5faa9dd40",
+  "path": "Pets › Grooming & accessories",
+  "productType": null,
+  "taxStatus": "REFINE_CODE"
+ },
+ {
+  "code": "pet-grooming-accessories-item",
+  "id": "3ad183c8-905e-56ef-bffd-22f7d1a0e6d4",
+  "level": "PRODUCT_TYPE",
+  "name": "Grooming & accessories",
+  "parentId": "9b7e7a80-c16c-5804-b3a1-b7c312fa9211",
+  "path": "Pets › Grooming & accessories › Grooming & accessories",
+  "productType": "pet-grooming-accessories",
+  "taxStatus": null
+ },
+ {
+  "code": "pet-food",
+  "id": "3ee70799-5163-51db-8cf8-8b17b05bb18c",
+  "level": "CATEGORY",
+  "name": "Pet food",
+  "parentId": "6f84fe6a-16d3-5bc5-941b-39c5faa9dd40",
+  "path": "Pets › Pet food",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "pet-food-item",
+  "id": "eb757027-7df6-58da-8a22-71b62fb50b1a",
+  "level": "PRODUCT_TYPE",
+  "name": "Pet food",
+  "parentId": "3ee70799-5163-51db-8cf8-8b17b05bb18c",
+  "path": "Pets › Pet food › Pet food",
+  "productType": "pet-food",
+  "taxStatus": null
+ },
+ {
+  "code": "audiobooks",
+  "id": "930e63f6-e63d-57db-94c1-2ea0108fcded",
+  "level": "CATEGORY",
+  "name": "Audiobooks",
+  "parentId": "9dfac2aa-667c-531c-92b0-dd1be07428fe",
+  "path": "Digital Products › Audiobooks",
+  "productType": null,
+  "taxStatus": "NEEDS_APPROVAL"
+ },
+ {
+  "code": "audiobooks-item",
+  "id": "6713f654-9a99-5aad-9cea-43e8a91deef0",
+  "level": "PRODUCT_TYPE",
+  "name": "Audiobooks",
+  "parentId": "930e63f6-e63d-57db-94c1-2ea0108fcded",
+  "path": "Digital Products › Audiobooks › Audiobooks",
+  "productType": "audiobooks",
+  "taxStatus": null
+ },
+ {
+  "code": "digital-art-downloads",
+  "id": "1d5890d9-9df5-5311-a1c4-d1d7eb7fb200",
+  "level": "CATEGORY",
+  "name": "Digital art & downloads",
+  "parentId": "9dfac2aa-667c-531c-92b0-dd1be07428fe",
+  "path": "Digital Products › Digital art & downloads",
+  "productType": null,
+  "taxStatus": "NEEDS_APPROVAL"
+ },
+ {
+  "code": "digital-art-downloads-item",
+  "id": "dfa88066-9153-590b-ab23-ba2eb5f87b6f",
+  "level": "PRODUCT_TYPE",
+  "name": "Digital art & downloads",
+  "parentId": "1d5890d9-9df5-5311-a1c4-d1d7eb7fb200",
+  "path": "Digital Products › Digital art & downloads › Digital art & downloads",
+  "productType": "digital-art-downloads",
+  "taxStatus": null
+ },
+ {
+  "code": "downloadable-ebooks",
+  "id": "5ca62ac7-297a-5a59-95f2-77ea4444c6ab",
+  "level": "CATEGORY",
+  "name": "Downloadable e-books",
+  "parentId": "9dfac2aa-667c-531c-92b0-dd1be07428fe",
+  "path": "Digital Products › Downloadable e-books",
+  "productType": null,
+  "taxStatus": "NEEDS_APPROVAL"
+ },
+ {
+  "code": "downloadable-ebooks-item",
+  "id": "c56ee153-26a0-52e5-86ad-4e4a839e28e3",
+  "level": "PRODUCT_TYPE",
+  "name": "Downloadable e-books",
+  "parentId": "5ca62ac7-297a-5a59-95f2-77ea4444c6ab",
+  "path": "Digital Products › Downloadable e-books › Downloadable e-books",
+  "productType": "downloadable-ebooks",
+  "taxStatus": null
+ },
+ {
+  "code": "downloadable-software",
+  "id": "f69e1988-e726-5fed-a7c0-b3d1353d1cd0",
+  "level": "CATEGORY",
+  "name": "Downloadable software",
+  "parentId": "9dfac2aa-667c-531c-92b0-dd1be07428fe",
+  "path": "Digital Products › Downloadable software",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "downloadable-software-item",
+  "id": "c6976e71-93ab-526a-b050-f6f46c4e0f01",
+  "level": "PRODUCT_TYPE",
+  "name": "Downloadable software",
+  "parentId": "f69e1988-e726-5fed-a7c0-b3d1353d1cd0",
+  "path": "Digital Products › Downloadable software › Downloadable software",
+  "productType": "downloadable-software",
+  "taxStatus": null
+ },
+ {
+  "code": "online-courses",
+  "id": "f87beecf-5f34-5680-8bf2-f9fae60cd3ca",
+  "level": "CATEGORY",
+  "name": "Online courses",
+  "parentId": "9dfac2aa-667c-531c-92b0-dd1be07428fe",
+  "path": "Digital Products › Online courses",
+  "productType": null,
+  "taxStatus": "NEEDS_APPROVAL"
+ },
+ {
+  "code": "online-courses-item",
+  "id": "82694ead-00fc-541f-a479-ea9b067c8cbb",
+  "level": "PRODUCT_TYPE",
+  "name": "Online courses",
+  "parentId": "f87beecf-5f34-5680-8bf2-f9fae60cd3ca",
+  "path": "Digital Products › Online courses › Online courses",
+  "productType": "online-courses",
+  "taxStatus": null
+ },
+ {
+  "code": "event-tickets",
+  "id": "25f9e661-2afc-5a82-b3a6-499c158e23f9",
+  "level": "CATEGORY",
+  "name": "Event tickets",
+  "parentId": "1300e51e-f465-5124-8e62-3090f72333fa",
+  "path": "Services › Event tickets",
+  "productType": null,
+  "taxStatus": "NEEDS_APPROVAL"
+ },
+ {
+  "code": "event-tickets-item",
+  "id": "8f84dfef-fe6a-53b6-8948-b834456cbded",
+  "level": "PRODUCT_TYPE",
+  "name": "Event tickets",
+  "parentId": "25f9e661-2afc-5a82-b3a6-499c158e23f9",
+  "path": "Services › Event tickets › Event tickets",
+  "productType": "event-tickets",
+  "taxStatus": null
+ },
+ {
+  "code": "fitness-classes",
+  "id": "7e62e34d-33ab-5fc3-b477-e372a6d55d84",
+  "level": "CATEGORY",
+  "name": "Fitness classes",
+  "parentId": "1300e51e-f465-5124-8e62-3090f72333fa",
+  "path": "Services › Fitness classes",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "fitness-classes-item",
+  "id": "5a5e9e92-0f54-54ee-b144-97f64d9cfff8",
+  "level": "PRODUCT_TYPE",
+  "name": "Fitness classes",
+  "parentId": "7e62e34d-33ab-5fc3-b477-e372a6d55d84",
+  "path": "Services › Fitness classes › Fitness classes",
+  "productType": "fitness-classes",
+  "taxStatus": null
+ },
+ {
+  "code": "hair-beauty-appointments",
+  "id": "585403e6-bb83-5b0d-8ddc-663c288ff09c",
+  "level": "CATEGORY",
+  "name": "Hair & beauty appointments",
+  "parentId": "1300e51e-f465-5124-8e62-3090f72333fa",
+  "path": "Services › Hair & beauty appointments",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "hair-beauty-appointments-item",
+  "id": "0493874c-57fa-5724-8ba6-4bc8a1ffa308",
+  "level": "PRODUCT_TYPE",
+  "name": "Hair & beauty appointments",
+  "parentId": "585403e6-bb83-5b0d-8ddc-663c288ff09c",
+  "path": "Services › Hair & beauty appointments › Hair & beauty appointments",
+  "productType": "hair-beauty-appointments",
+  "taxStatus": null
+ },
+ {
+  "code": "laundry-dry-cleaning",
+  "id": "87e605fe-7ce7-5b79-ab5d-67bbc68651b6",
+  "level": "CATEGORY",
+  "name": "Laundry & dry cleaning",
+  "parentId": "1300e51e-f465-5124-8e62-3090f72333fa",
+  "path": "Services › Laundry & dry cleaning",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "laundry-dry-cleaning-item",
+  "id": "299f449c-7c6c-5504-970c-189f81ab038e",
+  "level": "PRODUCT_TYPE",
+  "name": "Laundry & dry cleaning",
+  "parentId": "87e605fe-7ce7-5b79-ab5d-67bbc68651b6",
+  "path": "Services › Laundry & dry cleaning › Laundry & dry cleaning",
+  "productType": "laundry-dry-cleaning",
+  "taxStatus": null
+ },
+ {
+  "code": "photography-media",
+  "id": "20221c66-441f-5e38-b982-6a3d46cd4075",
+  "level": "CATEGORY",
+  "name": "Photography & media",
+  "parentId": "1300e51e-f465-5124-8e62-3090f72333fa",
+  "path": "Services › Photography & media",
+  "productType": null,
+  "taxStatus": "NEEDS_APPROVAL"
+ },
+ {
+  "code": "photography-media-item",
+  "id": "318ed600-40b5-5489-8442-5d88dedde73e",
+  "level": "PRODUCT_TYPE",
+  "name": "Photography & media",
+  "parentId": "20221c66-441f-5e38-b982-6a3d46cd4075",
+  "path": "Services › Photography & media › Photography & media",
+  "productType": "photography-media",
+  "taxStatus": null
+ },
+ {
+  "code": "repairs",
+  "id": "7794ec68-664e-58b2-96c9-4a994d197f2b",
+  "level": "CATEGORY",
+  "name": "Repairs",
+  "parentId": "1300e51e-f465-5124-8e62-3090f72333fa",
+  "path": "Services › Repairs",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "repairs-item",
+  "id": "5f2d1389-d7b1-53c8-9d07-21372d817e75",
+  "level": "PRODUCT_TYPE",
+  "name": "Repairs",
+  "parentId": "7794ec68-664e-58b2-96c9-4a994d197f2b",
+  "path": "Services › Repairs › Repairs",
+  "productType": "repairs",
+  "taxStatus": null
+ },
+ {
+  "code": "residential-cleaning",
+  "id": "a3a60c75-9072-5dfd-8e78-900a2afbc1f1",
+  "level": "CATEGORY",
+  "name": "Residential cleaning",
+  "parentId": "1300e51e-f465-5124-8e62-3090f72333fa",
+  "path": "Services › Residential cleaning",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "residential-cleaning-item",
+  "id": "69ccaa45-a693-5553-b83c-2710bd21fad4",
+  "level": "PRODUCT_TYPE",
+  "name": "Residential cleaning",
+  "parentId": "a3a60c75-9072-5dfd-8e78-900a2afbc1f1",
+  "path": "Services › Residential cleaning › Residential cleaning",
+  "productType": "residential-cleaning",
+  "taxStatus": null
+ },
+ {
+  "code": "tutoring-consulting",
+  "id": "bdac08a0-78bd-503d-aac5-ce3736000284",
+  "level": "CATEGORY",
+  "name": "Tutoring & consulting",
+  "parentId": "1300e51e-f465-5124-8e62-3090f72333fa",
+  "path": "Services › Tutoring & consulting",
+  "productType": null,
+  "taxStatus": "CONFLICT_OPEN"
+ },
+ {
+  "code": "tutoring-consulting-item",
+  "id": "1cf16183-e050-5f28-b48c-eb3844083ebe",
+  "level": "PRODUCT_TYPE",
+  "name": "Tutoring & consulting",
+  "parentId": "bdac08a0-78bd-503d-aac5-ce3736000284",
+  "path": "Services › Tutoring & consulting › Tutoring & consulting",
+  "productType": "tutoring-consulting",
+  "taxStatus": null
+ },
+ {
+  "code": "gift-baskets-bundles",
+  "id": "d4360844-9c12-5d71-aa14-c229995cfa39",
+  "level": "CATEGORY",
+  "name": "Gift baskets / bundles",
+  "parentId": "18666886-157f-5fe7-90b5-7abe4e8873fe",
+  "path": "Other & Specialty › Gift baskets / bundles",
+  "productType": null,
+  "taxStatus": "BLOCKED_BUNDLE"
+ },
+ {
+  "code": "gift-baskets-bundles-item",
+  "id": "11d6005e-5378-5068-b48b-3ec235ae11ec",
+  "level": "PRODUCT_TYPE",
+  "name": "Gift baskets / bundles",
+  "parentId": "d4360844-9c12-5d71-aa14-c229995cfa39",
+  "path": "Other & Specialty › Gift baskets / bundles › Gift baskets / bundles",
+  "productType": "gift-baskets-bundles",
+  "taxStatus": null
+ },
+ {
+  "code": "gift-cards",
+  "id": "70d5bba2-b6f4-579a-a5ae-3452d805ca25",
+  "level": "CATEGORY",
+  "name": "Gift cards",
+  "parentId": "18666886-157f-5fe7-90b5-7abe4e8873fe",
+  "path": "Other & Specialty › Gift cards",
+  "productType": null,
+  "taxStatus": "NEEDS_APPROVAL"
+ },
+ {
+  "code": "gift-cards-item",
+  "id": "49c112da-ba55-5633-8f4b-aaf1631074e8",
+  "level": "PRODUCT_TYPE",
+  "name": "Gift cards",
+  "parentId": "70d5bba2-b6f4-579a-a5ae-3452d805ca25",
+  "path": "Other & Specialty › Gift cards › Gift cards",
+  "productType": "gift-cards",
+  "taxStatus": null
+ },
+ {
+  "code": "handmade-products",
+  "id": "d87b0d71-7cb6-5302-9571-a2bd5730bd0e",
+  "level": "CATEGORY",
+  "name": "Handmade products",
+  "parentId": "18666886-157f-5fe7-90b5-7abe4e8873fe",
+  "path": "Other & Specialty › Handmade products",
+  "productType": null,
+  "taxStatus": "REFINE_CODE"
+ },
+ {
+  "code": "handmade-products-item",
+  "id": "075fa6c7-37a8-5dfd-98fb-bf4dd2cc1e10",
+  "level": "PRODUCT_TYPE",
+  "name": "Handmade products",
+  "parentId": "d87b0d71-7cb6-5302-9571-a2bd5730bd0e",
+  "path": "Other & Specialty › Handmade products › Handmade products",
+  "productType": "handmade-products",
+  "taxStatus": null
+ },
+ {
+  "code": "school-office-supplies",
+  "id": "b48fabb7-12db-5550-9a47-f086788b78f4",
+  "level": "CATEGORY",
+  "name": "School & office supplies",
+  "parentId": "18666886-157f-5fe7-90b5-7abe4e8873fe",
+  "path": "Other & Specialty › School & office supplies",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "school-office-supplies-item",
+  "id": "2af2563e-21b0-5e42-be5e-79b417ccf387",
+  "level": "PRODUCT_TYPE",
+  "name": "School & office supplies",
+  "parentId": "b48fabb7-12db-5550-9a47-f086788b78f4",
+  "path": "Other & Specialty › School & office supplies › School & office supplies",
+  "productType": "school-office-supplies",
+  "taxStatus": null
+ },
+ {
+  "code": "sports-goods",
+  "id": "5d1d16d7-090e-5e70-9ee0-135d3134184b",
+  "level": "CATEGORY",
+  "name": "Sports goods",
+  "parentId": "18666886-157f-5fe7-90b5-7abe4e8873fe",
+  "path": "Other & Specialty › Sports goods",
+  "productType": null,
+  "taxStatus": "ACTIVE"
+ },
+ {
+  "code": "sports-goods-item",
+  "id": "359c9c16-eda7-5b83-bac6-6f53bedffa4c",
+  "level": "PRODUCT_TYPE",
+  "name": "Sports goods",
+  "parentId": "5d1d16d7-090e-5e70-9ee0-135d3134184b",
+  "path": "Other & Specialty › Sports goods › Sports goods",
+  "productType": "sports-goods",
+  "taxStatus": null
+ },
+ {
+  "code": "fabrics-textiles",
+  "id": "ec8e841f-98c3-594b-b22c-58fb1aa4db86",
+  "level": "CATEGORY",
+  "name": "Fabrics & textiles",
+  "parentId": "022f548b-20e4-5be7-b74a-86b82c46a5ab",
+  "path": "Fashion & Accessories › Fabrics & textiles",
+  "productType": null,
+  "taxStatus": "NEEDS_APPROVAL"
+ },
+ {
+  "code": "fabrics-textiles-item",
+  "id": "a81ffd4a-61e6-5ae5-b6bd-34cbc9d2443f",
+  "level": "PRODUCT_TYPE",
+  "name": "Fabrics & textiles",
+  "parentId": "ec8e841f-98c3-594b-b22c-58fb1aa4db86",
+  "path": "Fashion & Accessories › Fabrics & textiles › Fabrics & textiles",
+  "productType": "fabrics-textiles",
+  "taxStatus": null
+ }
+]

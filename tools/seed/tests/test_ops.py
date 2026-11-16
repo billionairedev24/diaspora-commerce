@@ -146,7 +146,7 @@ class PayoutTest(unittest.TestCase):
         payments = Fake()
         requests = []
         payments.on("GET", "/v1/payouts/requests", lambda *a: [])
-        payments.on("GET", "/v1/connected-accounts/" + O.FINANCE_ORG, lambda *a: {"stripeAccountId": "acct_1x"})
+        payments.on("GET", "/v1/connected-accounts/*", lambda *a: {"stripeAccountId": "acct_1x"})
         payments.on("GET", "/v1/payouts/balance", lambda *a: {"availableMinor": 4503, "minimumPayoutMinor": 2500})
         payments.on("POST", "/v1/payouts/requests", lambda p, b, kw: requests.append(b) or {"id": "r1", "status": "REQUESTED"})
         s = seeder(payments=payments)

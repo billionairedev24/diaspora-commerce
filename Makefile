@@ -24,7 +24,7 @@ CONFTEST     ?= $(shell command -v conftest 2>/dev/null || echo $(HOME)/go/bin/c
         java-verify go-verify verify tools dev-up dev-down dev-status dev-logs dev-restart dev-links repair-orgs reindex-search \
         taxonomy-check category-tax-verify helm-lint gitops-render rules dashboards observability-check \
         env-check render tf-check security coverage smoke-carriers perf-k6 perf-k6-smoke perf-ab perf-hey perf-wrk \
-        web-dev web-build backlog tax-gate-sweep seed seed-test mobile-lan lan-env mobile-adb-reverse mobile-android-device \
+        web-dev web-build backlog tax-gate-sweep seed seed-test seed-check mobile-lan lan-env mobile-adb-reverse mobile-android-device \
         mobile-ios-device mobile-apk mobile-brand mobile-hero
 
 help: ## List targets
@@ -277,6 +277,10 @@ seed: ## Demo data via the services' APIs: sellers, products with real photos, o
 
 seed-test: ## Unit tests of the demo-data seeder (tools/seed/tests, Python stdlib unittest)
 	python3 -m unittest discover -s tools/seed/tests -t tools/seed
+
+seed-check: ## Offline, read-only: every demo product against the catalog's recorded schemas and publish gate (tools/seed/testdata)
+	python3 tools/seed/gen_testdata.py --check
+	python3 tools/seed/seed_check.py $(ARGS)
 
 web-dev: ## Web apps on mock data (no back end needed): storefront :3000, seller center :3010, staff console :3002
 	@command -v pnpm >/dev/null || { echo "pnpm not installed (corepack enable)"; exit 1; }
