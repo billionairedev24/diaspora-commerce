@@ -17,6 +17,10 @@ import org.springframework.core.env.Environment;
  * is still reachable on its old standalone port (8101 for catalog ...), so a module left in {@code http} mode, a tool, a script
  * or gateway-bff configured as before keeps working while the modules run in one JVM. Off by default; the local profile turns
  * it on. In production the one port and in-process calls are used.
+ *
+ * <p>Switch: {@code at.core.legacy-ports.enabled}, default {@code false}; only the {@code local} profile sets it to {@code true}, and only until
+ * mcp-server's tool edges are converted to in-process calls (they are the last Java-to-Java HTTP calls). With it {@code false} no extra
+ * listener is opened even when {@code module-ports} is set. The ports are compatibility only: no module calls another over them.
  */
 @Configuration(proxyBeanMethods = false)
 class LegacyPortsConfiguration {
@@ -26,6 +30,9 @@ class LegacyPortsConfiguration {
             Environment environment) {
         Set<Integer> ports = Binder.get(environment).bind("at.core.module-ports",
                 Bindable.mapOf(Integer.class, String.class)).orElse(Map.of()).keySet();
+        if (!environment.getProperty("at.core.legacy-ports.enabled", Boolean.class, false)) {
+            return factory -> { };
+        }
         return factory -> ports.stream().filter(p -> p != null && p > 0).forEach(port -> {
             Connector connector = new Connector(TomcatServletWebServerFactory.DEFAULT_PROTOCOL);
             connector.setPort(port);

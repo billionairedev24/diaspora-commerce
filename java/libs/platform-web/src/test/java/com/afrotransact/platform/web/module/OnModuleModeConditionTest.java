@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.afrotransact.module.ModuleMode;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.type.AnnotationMetadata;
 import org.springframework.mock.env.MockEnvironment;
 
 /** Which adapter an edge selects: the edge's own mode, else the caller's, else http; a default gives way to a callee that is off. */
@@ -43,5 +44,12 @@ class OnModuleModeConditionTest {
     void dashesAreLeftOutOfThePropertyNames() {
         MockEnvironment env = new MockEnvironment().withProperty("at.taxreturns.aigateway.mode", "in-process");
         assertThat(OnModuleModeCondition.effective(env, "tax-returns", "ai-gateway")).isEqualTo(ModuleMode.IN_PROCESS);
+    }
+
+    @Test
+    void aScanThatReachesTheAnnotationTypeItselfIsNotAnEdge() {
+        // the annotation carries @Conditional as a meta-annotation, so a classpath scan evaluates the condition on it: no attributes
+        AnnotationMetadata annotationType = AnnotationMetadata.introspect(ConditionalOnModuleMode.class);
+        assertThat(new OnModuleModeCondition().matches(null, annotationType)).isTrue();
     }
 }

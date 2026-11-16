@@ -4,6 +4,10 @@ server:
   port: ${PORT:8120}   # afrotransact-core, every module's paths on this one port (docs/runbooks/release-1-local.md)
 at:
   core:
+    # Old standalone ports are compatibility only (no module calls another over them). Local keeps them until mcp-server's tool edges are
+    # in-process; every other profile has at.core.legacy-ports.enabled=false (the default), so the one port is the only listener.
+    legacy-ports:
+      enabled: true
     # Old standalone ports served by this one JVM (local only): a module left in http mode, a script or gateway-bff configured as
     # before keeps working. A request on a module's port prefers that module where two modules map the same route.
     module-ports:

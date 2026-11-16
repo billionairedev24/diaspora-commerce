@@ -14,6 +14,10 @@ final class OnModuleModeCondition implements Condition {
     @Override
     public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
         Map<String, Object> attributes = metadata.getAnnotationAttributes(ConditionalOnModuleMode.class.getName());
+        if (attributes == null) {
+            // a scan that reaches the annotation type itself (it carries @Conditional as a meta-annotation) is not an edge
+            return true;
+        }
         String caller = (String) attributes.get("caller");
         String callee = (String) attributes.get("callee");
         ModuleMode wanted = (ModuleMode) attributes.get("value");
