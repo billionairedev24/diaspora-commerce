@@ -28,7 +28,7 @@ export function CheckoutState({ kind, retrying = false, onRetry }: Props) {
         : { title: t('co.noneSelectedTitle'), body: t('co.noneSelectedBody') };
   return (
     <div className={styles.empty} data-testid={`checkout-${kind}`}>
-      <h1 className={styles.title}>{text.title}</h1>
+      <h2 className={styles.title}>{text.title}</h2>
       <p className={kind === 'error' ? styles.error : styles.muted} role={kind === 'error' ? 'alert' : undefined}>
         {text.body}
       </p>

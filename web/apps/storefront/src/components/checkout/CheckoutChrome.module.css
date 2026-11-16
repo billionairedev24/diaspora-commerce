@@ -1,0 +1,38 @@
+/* Checkout chrome: white canvas, hairlines, no dark bars. Logo | heading | secure label on one grid so the heading is truly centred. */
+.shell { min-height: 100dvh; display: flex; flex-direction: column; background: var(--at-color-surface); color: var(--at-color-text); }
+
+.header { border-block-end: 1px solid var(--at-color-border); background: var(--at-color-surface); }
+.bar {
+  max-width: 1120px;
+  margin-inline: auto;
+  min-height: 64px;
+  padding-inline: var(--at-page-gutter);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--at-space-3);
+}
+.logo { justify-self: start; display: inline-flex; align-items: center; gap: var(--at-space-2); min-height: var(--at-size-touch); color: var(--at-color-text); text-decoration: none; }
+.wordmark { font-size: var(--at-text-lg); }
+.heading { margin: 0; justify-self: center; font-size: var(--at-text-2xl); font-weight: var(--at-weight-bold); line-height: 1.2; text-align: center; white-space: nowrap; }
+.secure { justify-self: end; display: inline-flex; align-items: center; gap: var(--at-space-1); color: var(--at-color-text-muted); font-size: var(--at-text-sm); white-space: nowrap; }
+
+.main { flex: 1; width: 100%; max-width: 1120px; margin-inline: auto; padding: var(--at-space-6) var(--at-page-gutter) var(--at-space-12); }
+.main:focus { outline: none; }
+
+.footer { border-block-start: 1px solid var(--at-color-border); padding: var(--at-space-5) var(--at-page-gutter); display: flex; flex-direction: column; align-items: center; gap: var(--at-space-2); color: var(--at-color-text-muted); font-size: var(--at-text-xs); }
+.legal { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; justify-content: center; gap: var(--at-space-1) var(--at-space-4); }
+.legalLink { display: inline-flex; align-items: center; min-height: 24px; color: var(--at-color-link); text-decoration: none; }
+@media (hover: hover) {
+  .legalLink:hover { text-decoration: underline; }
+}
+.copy { margin: 0; }
+
+/* Phones: logo mark, a shorter heading and the lock only; the heading stays centred. */
+@media (max-width: 599px) {
+  .wordmark, .secureText { display: none; }
+  .heading { font-size: var(--at-text-lg); }
+  .bar { min-height: 56px; }
+  .main { padding-top: var(--at-space-4); }
+}
+@media print { .header, .footer { display: none; } }

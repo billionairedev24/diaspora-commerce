@@ -58,7 +58,7 @@ describe('checkout tax', () => {
     const summary = await screen.findByTestId('order-summary');
     expect(within(summary).getByText('Estimated tax')).toBeInTheDocument();
     await waitFor(() => expect(within(summary).getByTestId('checkout-tax-amount')).toHaveTextContent('$0.00'));
-    expect(screen.queryByTestId('checkout-blocked')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('checkout-blocked-line')).not.toBeInTheDocument();
     // Owner rule: the value is the whole story. No place line, no per-category reason, no "no tax" sentence or tag.
     expect(document.body.textContent).not.toMatch(/Estimated for|no sales tax applies|No tax on/i);
     expect(screen.queryByTestId('checkout-item-no-tax')).not.toBeInTheDocument();
@@ -88,7 +88,8 @@ describe('checkout tax', () => {
       okSummary = real;
       mockServer.use(http.get('*/v1/checkout/summary', () => HttpResponse.json({ ...real, ...patch(real) })));
       renderWithProviders(<CheckoutView />);
-      await screen.findByTestId('checkout-package');
+      // Without an address the items section is collapsed (only the first incomplete section is open).
+      await screen.findByTestId(opts.noAddress ? 'checkout-step-1' : 'checkout-package');
       return within(await screen.findByTestId('order-summary'));
     };
     const NEVER = /\$0\.00|0(\.0+)?\s*%|not taxable|no tax/i;
@@ -224,9 +225,11 @@ describe('checkout tax', () => {
       mockServer.use(http.get('*/v1/checkout/summary', () => HttpResponse.json(removed() ? clean : held)));
       const user = userEvent.setup();
       renderWithProviders(<CheckoutView />);
-      const box = await screen.findByTestId('checkout-blocked');
+      // Said on the item itself, in the items section.
+      const box = await screen.findByTestId('checkout-blocked-line');
       const title = held.blockedLines[0]?.title ?? '';
-      expect(within(box).getByTestId('checkout-blocked-line')).toHaveTextContent(`We can’t sell ${title} yet.`);
+      expect(within(screen.getByTestId('checkout-item')).getByTestId('checkout-blocked-line')).toBe(box);
+      expect(box).toHaveTextContent(`We can’t sell ${title} yet.`);
       expect(box).toHaveTextContent('Remove it from this order to continue');
       expect(box.textContent).not.toMatch(/AT0000|tax|ATIN/i);
       expect(screen.getByTestId('tax-blocked-note')).toBeInTheDocument();
@@ -234,7 +237,7 @@ describe('checkout tax', () => {
 
       // Remove takes the line out of this order (it stays in the cart), then the summary is read again.
       await user.click(within(box).getByRole('button', { name: `Remove ${title} from this order` }));
-      await waitFor(() => expect(screen.queryByTestId('checkout-blocked')).not.toBeInTheDocument());
+      await waitFor(() => expect(screen.queryByTestId('checkout-blocked-line')).not.toBeInTheDocument());
       expect(sent.some((r) => r.method === 'PATCH' && r.url.includes('/v1/cart/items/'))).toBe(true);
       expect(screen.queryByTestId('tax-blocked-note')).not.toBeInTheDocument();
     });
