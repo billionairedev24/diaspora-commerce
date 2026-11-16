@@ -37,11 +37,14 @@ def paths_of(args):
     if args is None or not args.strip():
         return [""]
     m = re.search(r"\b(?:path|value)\s*=\s*(\{[^}]*\}|\"[^\"]*\"|[A-Za-z_.]+)", args)
-    body = m.group(1) if m else (args.split(",")[0] if not re.match(r"\s*\w+\s*=", args) else "")
-    if not m and re.match(r"\s*\w+\s*=", args):
-        return [""]
+    if m:
+        body = m.group(1)
+    elif re.match(r"\s*\w+\s*=", args):
+        return [""]  # only other attributes (produces = ..., method = ...)
+    else:
+        body = re.split(r",\s*\w+\s*=", args)[0]
     found = STRING.findall(body)
-    if not found and body.strip() and not body.strip().startswith('"') and not body.strip().startswith("{"):
+    if not found and body.strip() and not body.strip().startswith(('"', "{")):
         return None
     return found or [""]
 
@@ -50,8 +53,7 @@ def verbs_of(kind, args):
     if kind != "Request":
         return [kind.upper()]
     m = re.search(r"method\s*=\s*(\{[^}]*\}|[A-Za-z_.]+)", args or "")
-    return [v.upper() for v in re.findall(r"RequestMethod\.(\w+)|\b(GET|POST|PUT|DELETE|PATCH)\b", m.group(1))[0:0]] if False else \
-        [x for t in re.findall(r"RequestMethod\.(\w+)", m.group(1) if m else "") for x in [t]] or ["ANY"]
+    return re.findall(r"RequestMethod\.(\w+)", m.group(1) if m else "") or ["ANY"]
 
 
 def scan_file(text):
