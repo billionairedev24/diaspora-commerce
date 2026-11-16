@@ -13,10 +13,20 @@ import (
 
 // Why a status is not on offer (domain.ShipmentStep.Blocked).
 const (
-	blockedPermission = "PERMISSION"
-	blockedSeller     = "SELLER"
-	blockedSequence   = "SEQUENCE"
-	blockedState      = "STATE"
+	blockedPermission         = "PERMISSION"
+	blockedDeliveryPermission = "DELIVERY_PERMISSION" // AfroTransact delivers it and the role lacks delivery:manage
+	blockedSeller             = "SELLER"
+	blockedSellerUpdates      = "SELLER_UPDATES" // the seller ships it and updates it themselves
+	blockedPickupOrder        = "PICKUP_ORDER"
+	blockedSequence           = "SEQUENCE"
+	blockedState              = "STATE"
+)
+
+// Which API takes a step (domain.ShipmentStep.Via): the order's own status action, or the Delivery module, which the
+// Delivery queue uses too, so the two screens offer the same steps with the same proof and audit.
+const (
+	viaOrders   = "orders"
+	viaDelivery = "delivery"
 )
 
 // forwardSteps is the happy path in order; the steps after it are the exceptions, which are always candidates.
@@ -27,10 +37,22 @@ var exceptionSteps = []string{"DELIVERY_FAILED", "RETURNED", "CANCELLED"}
 var terminalStatuses = []string{"DELIVERED", "RETURNED", "CANCELLED"}
 
 var blockedReasons = map[string]string{
-	blockedPermission: "No permission",
-	blockedSeller:     "Only the seller does this step",
-	blockedSequence:   "Earlier steps come first",
-	blockedState:      "Not available from here",
+	blockedPermission:         "No permission",
+	blockedDeliveryPermission: "You need the delivery permission",
+	blockedSeller:             "Only the seller does this step",
+	blockedSellerUpdates:      "Updated by the seller",
+	blockedPickupOrder:        "Not available for pickup orders",
+	blockedSequence:           "Earlier steps come first",
+	blockedState:              "Not available from here",
+}
+
+// deliverySteps are the steps of an AfroTransact-delivered shipment taken through the Delivery module.
+var deliverySteps = map[string]bool{"PICKED_UP": true, "IN_TRANSIT": true, "OUT_FOR_DELIVERY": true, "DELIVERED": true, "DELIVERY_FAILED": true, "RETURNED": true}
+
+// shipmentCaps is what the signed-in staff member may do to shipments, by the three ways a shipment is moved.
+type shipmentCaps struct {
+	orders   bool // orders:manage or orders:update-status, with the Orders module at Edit
+	delivery bool // delivery:manage, with the Delivery module at Edit
 }
 
 func fulfilmentLabel(fulfilmentType string) string {
@@ -44,6 +66,8 @@ func deliveryLabel(method string) string {
 	switch strings.ToUpper(method) {
 	case "AFROTRANSACT_DELIVERY":
 		return "AfroTransact Delivery"
+	case "SELLER_SHIPS":
+		return "Seller ships"
 	case "PICKUP":
 		return "Pickup"
 	case "CARRIER":
@@ -57,9 +81,17 @@ func mayChangeShipments(sc staffCtx) bool {
 	return (sc.access.Can("orders:manage") || sc.access.CanAny("orders:update-status")) && sc.access.Allows("orders", domain.LevelEdit)
 }
 
+// mayDeliver: delivery:manage with the Delivery module at Edit (the same check the Delivery queue makes).
+func mayDeliver(sc staffCtx) bool {
+	return sc.access.Can(domain.PermDeliveryManage) && sc.access.Allows(domain.DeliveryModule, domain.LevelEdit)
+}
+
+// permOverrideShipment lets a person override the status of a shipment the seller ships (identity V52, Super Admin only).
+const permOverrideShipment = "orders:override-shipment"
+
 // orderShipments lays out every package of the order for the sheet.
 func orderShipments(sc staffCtx, o jobj) []domain.RecordShipment {
-	may := mayChangeShipments(sc)
+	caps := shipmentCaps{orders: mayChangeShipments(sc), delivery: mayDeliver(sc)}
 	out := []domain.RecordShipment{}
 	for _, s := range objs(o, "shipments") {
 		status := strings.ToUpper(jstr(s, "status"))
@@ -74,7 +106,12 @@ func orderShipments(sc staffCtx, o jobj) []domain.RecordShipment {
 		sh := domain.RecordShipment{
 			ID: firstNonEmpty(jstr(s, "shipmentId"), jstr(s, "id")), Label: jstr(s, "label"), SellerName: firstNonEmpty(jstr(s, "sellerName"), "AfroTransact"),
 			Status: status, Tone: domain.StatusTone(status), FulfilmentLabel: fulfilmentLabel(jstr(s, "fulfilmentType")), DeliveryLabel: deliveryLabel(jstr(s, "deliveryMethod")),
-			ItemCount: count, ItemTitles: titles, Transitions: shipmentTransitions(s, status, may), History: shipmentHistory(s),
+			ItemCount: count, ItemTitles: titles, Transitions: shipmentTransitionsFor(s, status, caps), History: shipmentHistory(s),
+			Mode: shipmentMode(s), OverrideSteps: overrideSteps(s),
+		}
+		sh.CanOverride = len(sh.OverrideSteps) > 0 && sc.access.Can(permOverrideShipment)
+		if !sh.CanOverride {
+			sh.OverrideSteps = []string{}
 		}
 		if v := jstr(s, "carrier"); v != "" {
 			sh.Carrier = &v
@@ -87,14 +124,37 @@ func orderShipments(sc staffCtx, o jobj) []domain.RecordShipment {
 	return out
 }
 
-// shipmentTransitions lists what staff can set on the shipment now (its nextActions: orders-service applies the state
-// machine for the caller) and, so nothing silently goes missing, the later steps and exceptions they cannot, each with
-// the reason.
+// shipmentMode is the fulfilment mode of an order's shipment as orders returned it (see domain.FulfilmentModeOf).
+func shipmentMode(s jobj) string {
+	return domain.FulfilmentModeOf(jstr(s, "fulfilmentType"), jstr(s, "deliveryMethod"), len(objOf(s, "localDelivery")) > 0)
+}
+
+// overrideSteps are the statuses orders-service says an override may set (it answers only holders of
+// orders:override-shipment, and only for seller-shipped shipments).
+func overrideSteps(s jobj) []string {
+	out := []string{}
+	for _, a := range strs(s, "overrideActions") {
+		out = append(out, strings.ToUpper(a))
+	}
+	return out
+}
+
+// shipmentTransitions is shipmentTransitionsFor for someone who may change shipments by every route or by none.
 func shipmentTransitions(s jobj, status string, may bool) []domain.ShipmentStep {
+	return shipmentTransitionsFor(s, status, shipmentCaps{orders: may, delivery: may})
+}
+
+// shipmentTransitionsFor lists what staff can set on the shipment now (its nextActions: orders-service applies the state
+// machine for the caller) and, so nothing silently goes missing, the later steps and exceptions they cannot, each with
+// the accurate reason. Who owns a step depends on the fulfilment mode: Fulfilled by AfroTransact steps are taken with the
+// delivery permission, a pickup order's steps are Ready, Collected and Not collected, and a seller-shipped order is
+// updated by the seller.
+func shipmentTransitionsFor(s jobj, status string, caps shipmentCaps) []domain.ShipmentStep {
 	next := map[string]bool{}
 	for _, a := range strs(s, "nextActions") {
 		next[strings.ToUpper(a)] = true
 	}
+	mode := shipmentMode(s)
 	fulfilment, method := strings.ToUpper(jstr(s, "fulfilmentType")), strings.ToUpper(jstr(s, "deliveryMethod"))
 	sellerFulfilled := fulfilment == "SELLER_FULFILLED"
 	handover := boolean(s, "handoverRequired")
@@ -117,20 +177,34 @@ func shipmentTransitions(s jobj, status string, may bool) []domain.ShipmentStep 
 			candidates = append(candidates, step)
 		}
 	}
+	if status == "DELIVERY_FAILED" && !slices.Contains(candidates, "OUT_FOR_DELIVERY") {
+		candidates = append(candidates, "OUT_FOR_DELIVERY") // a failed attempt is tried again
+	}
 	if slices.Contains(terminalStatuses, status) && len(next) == 0 {
 		return []domain.ShipmentStep{} // nothing more can happen to it
 	}
+	staffDelivers := mode == domain.ModeSellerStore || mode == domain.ModeFulfilled
 	out := make([]domain.ShipmentStep, 0, len(candidates))
 	for _, step := range candidates {
-		st := domain.ShipmentStep{To: step, NoteRequired: reasonRequired(step), CodeAccepted: step == "DELIVERED" && handover && method == "PICKUP",
-			DriverStep: method == "AFROTRANSACT_DELIVERY" && driverSteps[step]}
+		desk := staffDelivers && deliverySteps[step] && (step != "RETURNED" || status != "DELIVERED")
+		st := domain.ShipmentStep{To: step, NoteRequired: reasonRequired(step, mode), Via: viaOrders,
+			CodeAccepted: step == "DELIVERED" && handover && method == "PICKUP", ProofRequired: step == "DELIVERED" && staffDelivers}
+		if desk {
+			st.Via = viaDelivery
+		}
 		blocked := ""
 		switch {
-		case !may:
+		case mode == domain.ModeSellerShips && sellerFulfilled && step != "CANCELLED":
+			blocked = blockedSellerUpdates
+		case mode == domain.ModePickup && (step == "PICKED_UP" || step == "IN_TRANSIT" || step == "OUT_FOR_DELIVERY" || step == "DELIVERY_FAILED"):
+			blocked = blockedPickupOrder
+		case desk && !caps.delivery:
+			blocked = blockedDeliveryPermission
+		case !desk && !caps.orders:
 			blocked = blockedPermission
 		case next[step]:
 			st.Allowed = true
-		case sellerFulfilled && (step == "CONFIRMED" || step == "PACKED" || step == "READY"):
+		case sellerFulfilled && (step == "CONFIRMED" || step == "PACKED" || step == "READY") && mode != domain.ModePickup:
 			blocked = blockedSeller
 		case firstOpen >= 0 && slices.Index(forwardSteps, step) > firstOpen:
 			blocked = blockedSequence
@@ -150,7 +224,8 @@ func shipmentTransitions(s jobj, status string, may bool) []domain.ShipmentStep 
 func shipmentHistory(s jobj) []domain.ShipmentChange {
 	out := []domain.ShipmentChange{}
 	for _, t := range objs(s, "timeline") {
-		c := domain.ShipmentChange{At: timeOf(t, "at"), To: strings.ToUpper(jstr(t, "to")), Actor: domain.Humanize(firstNonEmpty(jstr(t, "actorType"), jstr(t, "source")))}
+		// A change made at the staff console says who by name (orders-service only fills it for staff).
+		c := domain.ShipmentChange{At: timeOf(t, "at"), To: strings.ToUpper(jstr(t, "to")), Actor: firstNonEmpty(jstr(t, "actorName"), domain.Humanize(firstNonEmpty(jstr(t, "actorType"), jstr(t, "source"))))}
 		if v := jstr(t, "from"); v != "" {
 			c.From = ptr(strings.ToUpper(v))
 		}

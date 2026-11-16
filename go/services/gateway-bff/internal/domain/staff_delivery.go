@@ -141,6 +141,8 @@ type DeliveryActionRequest struct {
 	// Version is the job version the console saw (optional: 409 when it is stale).
 	Version *int64 `json:"version"`
 	Note    string `json:"note"`
+	// ExpectedStatus is the shipment status the screen showed (lower case): another person's earlier change answers 409.
+	ExpectedStatus string `json:"expectedStatus"`
 }
 
 // DeliveryAssignRequest assigns the delivery to a named person.
@@ -152,8 +154,9 @@ type DeliveryAssignRequest struct {
 
 // DeliveryFailedRequest records a failed attempt.
 type DeliveryFailedRequest struct {
-	Reason  string `json:"reason"`
-	Version *int64 `json:"version"`
+	Reason         string `json:"reason"`
+	Version        *int64 `json:"version"`
+	ExpectedStatus string `json:"expectedStatus"`
 }
 
 // DeliveryProofRequest is the proof of a delivery (delivered) or its correction (proof, with a reason).
@@ -165,8 +168,9 @@ type DeliveryProofRequest struct {
 	Latitude  *float64 `json:"latitude"`
 	Longitude *float64 `json:"longitude"`
 	// Reason is required to correct a saved proof.
-	Reason  string `json:"reason"`
-	Version *int64 `json:"version"`
+	Reason         string `json:"reason"`
+	Version        *int64 `json:"version"`
+	ExpectedStatus string `json:"expectedStatus"`
 }
 
 // DeliveryUploadRequest asks for a direct upload of a proof photo.
