@@ -17,7 +17,7 @@ on:
       - .github/actions/tofu-init/**
       - .github/actions/cloud-login/**
   push:
-    branches: [main]
+    branches: [main, release-1]
     paths:
       - infra/tofu/**
       - infra/cloudflare/**

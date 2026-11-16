@@ -9,7 +9,7 @@ on:
       - contracts/**
       - .github/workflows/docs.yml
   push:
-    branches: [main]
+    branches: [main, release-1]
     paths:
       - docs/**
       - contracts/**

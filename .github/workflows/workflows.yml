@@ -9,7 +9,7 @@ on:
       - tools/ci/**
       - infra/local/PORTS.md
   push:
-    branches: [main]
+    branches: [main, release-1]
     paths:
       - .github/**
       - tools/ci/**

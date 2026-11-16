@@ -21,7 +21,7 @@ on:
       - tools/ops/dlq-topics.sh
       - .github/workflows/kafka-topics.yml
   push:
-    branches: [main]
+    branches: [main, release-1]
     paths:
       - contracts/asyncapi/**
       - infra/tofu/kafka-topics.json

@@ -114,7 +114,11 @@ jobs:
       - name: Contract route diff (every default-enabled module against /v3/api-docs of the built jar)
         run: |
           pip install -q -r tools/release/requirements-ci.txt
-          jar="$(ls java/apps/core/target/afrotransact-core-*.jar | grep -v -- '-plain.jar' | head -1)"
+          jar=""
+          for f in java/apps/core/target/afrotransact-core-*.jar; do
+            case "$f" in *-plain.jar) ;; *) jar="$f"; break ;; esac
+          done
+          [[ -n "$jar" ]] || { echo "::error::no executable core jar was built"; exit 1; }
           # One database (core), one schema and role per module: the production layout. Consumers and relays off, no Kafka here.
           export CORE_DB_URL="jdbc:postgresql://localhost:5432/core"
           export CATALOG_DB_USER=catalog CATALOG_DB_PASSWORD=catalog TAX_RETURNS_DB_USER=tax_returns TAX_RETURNS_DB_PASSWORD=tax_returns

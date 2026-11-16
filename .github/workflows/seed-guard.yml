@@ -10,7 +10,7 @@ on:
       - tools/seed/**
       - .github/workflows/seed-guard.yml
   push:
-    branches: [main]
+    branches: [main, release-1]
     paths:
       - java/services/content/src/main/resources/db/migration/**
       - tools/seed/**

@@ -48,6 +48,15 @@ jobs:
       exists: ${{ steps.check.outputs.exists }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Production deploys come from the release-1 line
+        if: inputs.target == 'prod'
+        run: |
+          # release-1 is the production line (ADR 0011): only a commit that release-1 contains reaches the prod Workers.
+          git fetch --no-tags origin +refs/heads/release-1:refs/remotes/origin/release-1
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/release-1 || {
+            echo "::error::prod web deploys come from release-1; $GITHUB_SHA is not on it (merge or cherry-pick it there first)"; exit 1; }
       - id: check
         run: |
           if [[ -f "$APP_DIR/package.json" ]]; then echo "exists=true" >> "$GITHUB_OUTPUT"

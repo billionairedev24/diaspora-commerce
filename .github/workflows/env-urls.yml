@@ -6,7 +6,7 @@ name: env-urls
 
 on:
   push:
-    branches: [main]
+    branches: [main, release-1]
     paths: [java/**, go/**, web/**, mobile/**, infra/**, tools/ci/check_env_urls.py, tools/ci/check_env_config.py, tools/ci/check_security_off.py, tools/ci/env_hosts.py,
             .github/workflows/env-urls.yml]
   pull_request:

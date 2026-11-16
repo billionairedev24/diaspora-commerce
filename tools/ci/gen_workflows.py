@@ -157,12 +157,13 @@ def web_workflow(app: str) -> str:
         ".github/workflows/_web-app.yml",
     ]
     path_yaml = "\n".join(f"      - {p}" for p in paths)
-    return f"""{HEADER}# {app} (web): PR -> Cloudflare preview URL; main -> dev; manual dispatch -> uat/prod (prod needs approval).
+    return f"""{HEADER}# {app} (web): PR -> Cloudflare preview URL; main and release-1 -> dev; manual dispatch -> uat/prod (prod needs approval, and only
+# a commit that release-1 contains: _web-app.yml). Pushes to the two lines share one concurrency group so dev is never deployed twice at once.
 name: web-{app}
 
 on:
   push:
-    branches: [main]
+    branches: [main, release-1]
     paths:
 {path_yaml}
   pull_request:
@@ -184,7 +185,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: web-{app}-${{{{ github.ref }}}}-${{{{ inputs.environment || 'auto' }}}}
+  group: web-{app}-${{{{ github.event_name == 'push' && 'push' || github.ref }}}}-${{{{ inputs.environment || 'auto' }}}}
   cancel-in-progress: ${{{{ github.event_name == 'pull_request' }}}}
 
 jobs:
@@ -207,7 +208,9 @@ def promote_workflow(services: list[tuple[str, str]]) -> str:
     return f"""{HEADER}# Promote an already-built, signed image of ONE service to uat, trial or prod (prod waits for the
 # `production` reviewers configured on the GitHub environment `prod`). Only launch-set services can be promoted
 # (infra/argocd/launch-set). uat: empty tag = what dev runs now. trial and prod: the tag is REQUIRED (the full sha of a build that
-# passed CI on main): the single production has no uat to copy from (ADR 0004, ADR 0008). Each environment has its OWN pin file
+# passed CI on release-1 for afrotransact-core / afrotransact-go, on main for a per-service image): the single production has no uat to
+# copy from (ADR 0004, ADR 0008). release-1 is the production line (ADR 0011): run it from release-1 ("Use workflow from"), the pins are
+# committed to release-1 (_deploy.yml), which is what the Argo CD root apps track. Each environment has its OWN pin file
 # (values-uat.yaml, values-trial.yaml, values-prod.yaml in the service's chart): promoting to the trial never edits the prod pin.
 name: promote
 
@@ -238,12 +241,18 @@ jobs:
       tag: ${{{{ steps.tag.outputs.tag }}}}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - id: tag
         env:
           SERVICE: ${{{{ inputs.service }}}}
           TARGET: ${{{{ inputs.environment }}}}
           TAG: ${{{{ inputs.tag }}}}
         run: |
+          # Production line: the pins land on release-1 and the Argo CD apps track it, so promote runs there (the workflow file, the
+          # charts and the launch set it reads are release-1's).
+          [[ "$GITHUB_REF" == refs/heads/release-1 ]] || {{ echo "::error::run promote from release-1 (Use workflow from: release-1); got $GITHUB_REF"; exit 1; }}
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main +refs/heads/release-1:refs/remotes/origin/release-1
           case "$SERVICE" in
             afrotransact-core) dir="java/apps/core" ;;      # Release 1 deployables: always deployed (infra/argocd/applicationsets/deployables.yaml)
             afrotransact-go) dir="go/apps/afrotransact-go" ;;
@@ -255,10 +264,19 @@ jobs:
               fi ;;
           esac
           if [[ -z "$TAG" ]]; then
-            [[ "$TARGET" == uat ]] || {{ echo "::error::$TARGET needs an explicit tag (full git sha of a green main build)"; exit 1; }}
+            [[ "$TARGET" == uat ]] || {{ echo "::error::$TARGET needs an explicit tag (full git sha of a green build: release-1 for the deployables, main for a per-service image)"; exit 1; }}
             TAG="$(yq '.image.tag // ""' "$dir/deploy/helm/values-dev.yaml")"
           fi
           [[ "$TAG" =~ ^[0-9a-f]{{40}}$ ]] || {{ echo "::error::no deployable tag for $SERVICE ($TAG)"; exit 1; }}
+          # The image must come from the line that builds it: a deployable from release-1, a per-service image from main (or release-1).
+          git cat-file -e "$TAG^{{commit}}" 2>/dev/null || {{ echo "::error::commit $TAG is not in the repository"; exit 1; }}
+          case "$SERVICE" in
+            afrotransact-core|afrotransact-go)
+              git merge-base --is-ancestor "$TAG" origin/release-1 || {{ echo "::error::$TAG is not on release-1: $SERVICE images are built by release-1 only"; exit 1; }} ;;
+            *)
+              git merge-base --is-ancestor "$TAG" origin/main || git merge-base --is-ancestor "$TAG" origin/release-1 \
+                || {{ echo "::error::$TAG is on neither main nor release-1"; exit 1; }} ;;
+          esac
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
   deploy:

@@ -5,7 +5,7 @@ name: deploy-guide
 
 on:
   push:
-    branches: [main]
+    branches: [main, release-1]
     paths: [tools/deploy/**, tools/ovh/**, infra/helm/library/at-service/**, infra/ovh-vps/*.sh, infra/ovh-vps/terraform/locations.json, .github/workflows/ovh-*.yml, .github/workflows/deploy-guide.yml]
   pull_request:
     paths: [tools/deploy/**, tools/ovh/**, infra/helm/library/at-service/**, infra/ovh-vps/*.sh, infra/ovh-vps/terraform/locations.json, .github/workflows/ovh-*.yml, .github/workflows/deploy-guide.yml]

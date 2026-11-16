@@ -7,7 +7,7 @@ name: legal-documents
 
 on:
   push:
-    branches: [main]
+    branches: [main, release-1]
     paths: [docs/legal/**, tools/legal/**, java/services/content/src/main/resources/db/migration/**,
             java/services/content/src/main/java/com/afrotransact/content/domain/legal/LegalDocumentType.java,
             .github/workflows/legal-documents.yml]

@@ -11,7 +11,7 @@ on:
       - "mobile-v*"
       - "mobile-customer-v*"
       - "mobile-driver-v*"
-    branches: [main]
+    branches: [main, release-1]
     paths:
       - mobile/**
   workflow_dispatch:
@@ -48,6 +48,8 @@ jobs:
       profile: ${{ steps.p.outputs.profile }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - id: p
         env:
           EVENT: ${{ github.event_name }}
@@ -64,6 +66,12 @@ jobs:
             case "$REF_NAME" in mobile-customer-v*) app=customer ;; mobile-driver-v*) app=driver ;; *) app=both ;; esac
           else
             action=update; profile=preview; app=both
+          fi
+          # release-1 is the production line (ADR 0011): a store build ships only a commit that release-1 contains.
+          if [[ "$profile" == production && "$action" == build ]]; then
+            git fetch --no-tags origin +refs/heads/release-1:refs/remotes/origin/release-1
+            git merge-base --is-ancestor "$GITHUB_SHA" origin/release-1 || {
+              echo "::error::production store builds come from release-1; $GITHUB_SHA is not on it (merge or cherry-pick it there first)"; exit 1; }
           fi
           if [[ "$app" == both ]]; then candidates=(customer driver); else candidates=("$app"); fi
           apps=()

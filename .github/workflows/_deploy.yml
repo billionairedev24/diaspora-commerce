@@ -63,8 +63,10 @@ jobs:
       CLOUD: ${{ inputs.cloud || vars.CLOUD }}
       TAG: ${{ inputs.tag }}
       REGISTRY_URL: ${{ vars.REGISTRY_URL }}
-      # Release 1: the deployables' pins live on the release-1 branch (their Applications track it); per-service pins stay on the GitOps branch.
-      GITOPS_BRANCH: ${{ (inputs.service == 'afrotransact-core' || inputs.service == 'afrotransact-go') && 'release-1' || vars.GITOPS_BRANCH || 'main' }}
+      # Release 1 (production line): the Argo CD apps of uat, trial and prod track release-1, so EVERY pin for those environments is committed
+      # there (the deployables' and a per-service image's alike: a pin written to main would be invisible to prod until a sync merge).
+      # dev pins of a per-service image stay on the GitOps branch (main's per-service pipelines write them; sync-main carries them over).
+      GITOPS_BRANCH: ${{ (inputs.service == 'afrotransact-core' || inputs.service == 'afrotransact-go' || inputs.environment != 'dev') && 'release-1' || vars.GITOPS_BRANCH || 'main' }}
       HAS_GITOPS_APP: ${{ secrets.GITOPS_APP_ID != '' }}
       # Keyless certs from reusable workflows carry the called workflow as identity.
       # Per-service images are signed by the reusable pipelines on main; the deployables by their own workflows on release-1.

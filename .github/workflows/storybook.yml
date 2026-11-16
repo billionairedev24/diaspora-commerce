@@ -29,7 +29,7 @@ on:
       - pnpm-workspace.yaml
       - .github/workflows/storybook.yml
   push:
-    branches: [main]
+    branches: [main, release-1]
     paths:
       - web/packages/ui/**
       - web/packages/tokens/**
