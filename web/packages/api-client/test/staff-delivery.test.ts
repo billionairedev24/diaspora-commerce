@@ -100,12 +100,13 @@ describe('Delivery module mock', () => {
 
   it('runs a delivery end to end with a photo and shows the proof, audit and actor names', async () => {
     const api = staff(MANAGER);
-    await expect(api.markDeliveryPickedUp(READY_FBA, {})).rejects.toSatisfy((e) => status(e) === 409);
-    const taken = await api.takeDelivery(READY_FBA, {});
-    expect(taken.job.assigneeName).toBe('Ifeoma Okafor');
-    expect(taken.row.assigneeMe).toBe(true);
+    // Nobody has it yet: whoever takes the first step takes the job, audited as a take (the order sheet and the queue offer the same steps).
+    const taken = await api.getDelivery(READY_FBA);
     expect(taken.nextStatuses).toEqual(['picked_up']);
-    await api.markDeliveryPickedUp(READY_FBA, { version: taken.job.version });
+    await api.markDeliveryPickedUp(READY_FBA, { note: 'Collected from the warehouse, 2 boxes', expectedStatus: 'ready' });
+    const mine = await api.getDelivery(READY_FBA);
+    expect(mine.job.assigneeName).toBe('Ifeoma Okafor');
+    expect(mine.row.assigneeMe).toBe(true);
     await expect(api.markDeliveryDelivered(READY_FBA, { photoAssetIds: ['11111111-1111-4111-8111-111111111111'] })).rejects.toSatisfy((e) => status(e) === 409);
     await api.markDeliveryOutForDelivery(READY_FBA, {});
     // A photo is required: none, malformed and unknown ids are refused and change nothing.
@@ -118,6 +119,7 @@ describe('Delivery module mock', () => {
     expect(done.proof).toMatchObject({ recipientName: 'Ada Obi', note: 'Left with the neighbour', recordedByName: 'Ifeoma Okafor', latitude: null, corrections: 0 });
     expect(done.proof?.photoUrls[0]).toMatch(/^data:image\/jpeg/);
     expect(done.audit.map((a) => a.action)).toEqual(['TAKE', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED']);
+    expect(done.audit[1]?.note).toBe('Collected from the warehouse, 2 boxes');
     expect(done.audit.every((a) => a.actorName === 'Ifeoma Okafor')).toBe(true);
     // The same step again changes nothing and never replaces the saved proof.
     const again = await api.markDeliveryDelivered(READY_FBA, { photoAssetIds: [assetId], recipientName: 'Someone else' });
@@ -151,9 +153,25 @@ describe('Delivery module mock', () => {
     await expect(api.markDeliveryFailed(READY_FBA, '  ')).rejects.toSatisfy((e) => status(e) === 422);
     const failed = await api.markDeliveryFailed(READY_FBA, 'Nobody home, left a card');
     expect(failed.job).toMatchObject({ attempts: 1, lastFailure: 'Nobody home, left a card' });
-    expect(failed.nextStatuses).toEqual(['out_for_delivery']);
+    expect(failed.nextStatuses).toEqual(['out_for_delivery', 'returned']);
     const again = await api.markDeliveryOutForDelivery(READY_FBA, {});
     expect(again.audit.at(-1)?.action).toBe('REATTEMPT');
+  });
+
+  it('puts a parcel in transit (optional), returns it after a failure with a reason, and tells a stale screen', async () => {
+    const api = staff(MANAGER);
+    await api.markDeliveryPickedUp(READY_FBA, {});
+    await expect(api.markDeliveryInTransit(READY_FBA, { expectedStatus: 'ready' })).rejects.toSatisfy((e) => status(e) === 409);
+    const transit = await api.markDeliveryInTransit(READY_FBA, { expectedStatus: 'picked_up' });
+    expect(transit.row.status).toBe('in_transit');
+    await expect(api.markDeliveryReturned(READY_FBA, 'too early')).rejects.toSatisfy((e) => status(e) === 409);
+    await api.markDeliveryOutForDelivery(READY_FBA, {});
+    await api.markDeliveryFailed(READY_FBA, 'Nobody home twice');
+    await expect(api.markDeliveryReturned(READY_FBA, ' ')).rejects.toSatisfy((e) => status(e) === 422);
+    const back = await api.markDeliveryReturned(READY_FBA, 'Customer asked for a refund', 'delivery_failed');
+    expect(back.row.status).toBe('returned');
+    expect(back.audit.map((a) => a.action)).toEqual(['TAKE', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'FAILED', 'RETURNED']);
+    expect(back.nextStatuses).toEqual([]);
   });
 
   it('corrects a saved proof only with a reason and keeps the correction on the record', async () => {
