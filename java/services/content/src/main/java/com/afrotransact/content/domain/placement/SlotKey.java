@@ -22,7 +22,9 @@ public enum SlotKey {
     /** Paid: editorial card from a partner. */
     HOME_ADVERTORIAL,
     /** Rule-based home module (deals, spotlights, bands). */
-    HOME_BLOCK;
+    HOME_BLOCK,
+    /** Fills the empty columns of a short product rail: a Sponsored promo (with an advertiser) or a staff editorial tile. */
+    RAIL_FILL;
 
     /** Wire key, for example {@code hero_carousel}. */
     public String key() {
