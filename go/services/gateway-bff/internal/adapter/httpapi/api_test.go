@@ -416,10 +416,11 @@ func TestContentBackedScreens(t *testing.T) {
 		t.Fatalf("home = %v", home)
 	}
 	// Both terms are searched, but the garri hit is out of stock: rails only show in-stock products with a real photo.
-	if items := rails[0].(map[string]any)["items"].([]any); len(items) != 1 || items[0].(map[string]any)["atin"] != "ATJOLLOF01" {
+	// (A short rail is then topped up with more eligible products of the same department; its own stay first.)
+	if items := rails[0].(map[string]any)["items"].([]any); len(items) < 1 || items[0].(map[string]any)["atin"] != "ATJOLLOF01" {
 		t.Fatalf("OR rail should keep only the in-stock jollof hit: %v", items)
 	}
-	if picked := rails[1].(map[string]any)["items"].([]any); len(picked) != 1 || picked[0].(map[string]any)["offerId"] != "ATSHEAV001" {
+	if picked := rails[1].(map[string]any)["items"].([]any); len(picked) < 1 || picked[0].(map[string]any)["offerId"] != "ATSHEAV001" {
 		t.Fatalf("atin rail = %v", picked)
 	}
 	if jobs := b.do("GET", "/v1/careers/jobs", nil).json(t)["jobs"].([]any); len(jobs) != 1 {

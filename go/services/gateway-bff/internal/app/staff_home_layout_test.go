@@ -2,6 +2,7 @@ package app
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
@@ -153,8 +154,8 @@ func TestEditorFieldsFollowTheSlot(t *testing.T) {
 	}
 	create := adFields(jobj{}, true)
 	for _, f := range create {
-		if f.Key == "skus" && (f.ShowWhen == nil || len(f.ShowWhen.In) != 1 || f.ShowWhen.In[0] != slotBrandBanner) {
-			t.Errorf("skus must show only for the brand banner: %+v", f.ShowWhen)
+		if f.Key == "skus" && (f.ShowWhen == nil || len(f.ShowWhen.In) != 2 || f.ShowWhen.In[0] != slotBrandBanner || f.ShowWhen.In[1] != slotRailFill) {
+			t.Errorf("skus must show only for the brand banner and the rail fill tile: %+v", f.ShowWhen)
 		}
 	}
 	seen := map[string]bool{}
@@ -181,5 +182,34 @@ func TestPreviewDescribesDisclosureAndTargeting(t *testing.T) {
 	organic := jobj{"slot": "home_block", "payload": map[string]any{"type": "deals"}}
 	if disclosure(organic) != "Organic (no label)" || layoutKind(organic) != "Deals of the day" || targetingSummary(organic) != "Everywhere" {
 		t.Errorf("organic = %s %s %s", disclosure(organic), layoutKind(organic), targetingSummary(organic))
+	}
+}
+
+func TestRailFillPlacementIsPaidOnlyWithAnAdvertiserAndKeepsItsLimits(t *testing.T) {
+	v := jobj{"text": "Jollof week", "href": "/s?q=jollof", "cta": "Shop", "body": "Rice and spice", "departments": "Groceries, Fashion", "skus": "at1, at2"}
+	p := jobj{"title": "Jollof week", "href": "/s?q=jollof"}
+	if errs := applyAdFields(slotRailFill, "", v, p, ""); len(errs) != 0 {
+		t.Fatalf("editorial tile needs no advertiser: %v", errs)
+	}
+	if _, has := p["advertiser"]; has || p["headline"] != "Jollof week" || p["text"] != "Rice and spice" {
+		t.Fatalf("payload = %v", p)
+	}
+	if d, _ := p["departments"].([]string); len(d) != 2 {
+		t.Fatalf("departments = %v", p["departments"])
+	}
+	p = jobj{"title": "Jollof week", "href": "/s"}
+	if errs := applyAdFields(slotRailFill, "", v, p, "Acme"); len(errs) != 0 || p["advertiser"] != "Acme" {
+		t.Fatalf("paid tile names its advertiser: %v %v", errs, p)
+	}
+	bad := jobj{"text": "x", "href": "/s", "body": strings.Repeat("a", 141)}
+	if errs := applyAdFields(slotRailFill, "", bad, jobj{"title": "x"}, ""); errs["body"] == "" || errs["cta"] == "" {
+		t.Fatalf("expected limits: %v", errs)
+	}
+	found := false
+	for _, o := range slotChoices() {
+		found = found || o.Value == slotRailFill
+	}
+	if !found {
+		t.Fatal("rail_fill is a choice of the create form")
 	}
 }

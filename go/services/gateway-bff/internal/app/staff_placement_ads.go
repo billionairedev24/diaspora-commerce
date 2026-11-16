@@ -21,6 +21,7 @@ const (
 	slotSponsored     = "home_sponsored_products"
 	slotAdRow         = "home_ad_row"
 	slotAdvertorial   = "home_advertorial"
+	slotRailFill      = "rail_fill"
 	slotHomeBlock     = "home_block"
 	slotProductRow    = "home_product_row"
 	slotDisplayBanner = "display_banner"
@@ -52,6 +53,7 @@ func slotChoices() []domain.FieldOption {
 		{Value: slotSponsored, Label: "Sponsored products rail (paid)"},
 		{Value: slotAdRow, Label: "Display ad row, 2 or 3 image ads (paid)"},
 		{Value: slotAdvertorial, Label: "Advertorial: From our partners (paid)"},
+		{Value: slotRailFill, Label: "Rail fill tile: fills the empty space beside a short product row (Sponsored when an advertiser is given)"},
 	}
 	for _, k := range homeBlockKinds {
 		out = append(out, domain.FieldOption{Value: blockPrefix + k.typ, Label: "Home module: " + k.label})
@@ -105,7 +107,7 @@ const (
 )
 
 // ctaChoices are the slot choices that have a button.
-var ctaChoices = append([]string{slotHomeTiles, slotBrandBanner, slotAdvertorial}, blockValues(domain.BlockMembership, domain.BlockSignIn, domain.BlockServices, domain.BlockCommunity, domain.BlockSeller)...)
+var ctaChoices = append([]string{slotHomeTiles, slotBrandBanner, slotAdvertorial, slotRailFill}, blockValues(domain.BlockMembership, domain.BlockSignIn, domain.BlockServices, domain.BlockCommunity, domain.BlockSeller)...)
 
 // ctaField is the button text field, shown for the slots that have a button.
 func ctaField(prev jobj, create bool) []domain.FormField {
@@ -140,11 +142,12 @@ func adFields(prev jobj, create bool) []domain.FormField {
 
 	add(withValue(withMax(ff("sub", "Second line (optional)", "text", false), 160), p("sub")), adsSection,
 		append([]string{slotBrandBanner}, blocks(domain.BlockMembership, domain.BlockSignIn, domain.BlockServices, domain.BlockCommunity, domain.BlockSeller, domain.BlockDeals)...)...)
-	add(withValue(withMax(ff("body", "Text (two lines at most)", "textarea", true), 200), p("text")), adsSection, slotAdvertorial)
+	add(withValue(withMax(ff("body", "Text (two lines at most; a rail fill tile allows 140 characters and may leave it empty)", "textarea", true), 200), p("text")), adsSection, slotAdvertorial, slotRailFill)
+	add(withValue(withMax(ff("departments", "Shows beside rails of these departments, comma separated (empty = every rail)", "text", false), 200), list("departments")), targetSection, slotRailFill)
 	add(withValue(withPattern(ff("imageUrl", "Image address (https, media CDN)", "text", false), `^https://`, "An https:// image address"), p("imageUrl")), adsSection,
-		append([]string{slotBrandBanner, slotAdvertorial}, blocks(domain.BlockMembership, domain.BlockSignIn)...)...)
+		append([]string{slotBrandBanner, slotAdvertorial, slotRailFill}, blocks(domain.BlockMembership, domain.BlockSignIn)...)...)
 	add(withValue(withPattern(ff("logoUrl", "Advertiser logo (https, transparent background)", "text", false), `^https://`, "An https:// image address"), p("logoUrl")), adsSection, slotBrandBanner)
-	add(withValue(withMax(ff("skus", "Product strip: up to 3 ATINs, comma separated", "text", false), 100), list("skus")), adsSection, slotBrandBanner)
+	add(withValue(withMax(ff("skus", "Product strip: up to 3 ATINs, comma separated", "text", false), 100), list("skus")), adsSection, slotBrandBanner, slotRailFill)
 	add(withValue(withMax(ff("query", "Search words", "text", false), 200), p("query")), adsSection,
 		append([]string{slotSponsored}, blocks(domain.BlockDeals)...)...)
 	add(withValue(withOptions(ff("department", "Department", "select", false), tileDepartments()), p("department")), adsSection,
@@ -164,7 +167,7 @@ func adFields(prev jobj, create bool) []domain.FormField {
 	}
 	// Position and targeting for everything on the page body.
 	add(withValue(withRange(ff("priority", "Position on the page (higher shows first; see Home page layout)", "number", false), 1000), numStr(prev, "priority")), targetSection, bodyChoices...)
-	add(withValue(withMax(ff("states", "US states (e.g. TX, GA; empty = everywhere)", "text", false), 160), list("states")), targetSection, bodyChoices...)
+	add(withValue(withMax(ff("states", "US states (e.g. TX, GA; empty = everywhere)", "text", false), 160), list("states")), targetSection, append([]string{slotRailFill}, bodyChoices...)...)
 	out = append(out, domain.FormField{Key: "zipPrefixes", Label: "ZIP prefixes (e.g. 77, 750; empty = everywhere)", Type: "text", MaxLength: 120,
 		Value: joinStrings(prev, "targeting.zipPrefixes"), Section: targetSection})
 	return out
@@ -272,6 +275,44 @@ func applyAdFields(slot, blockType string, v jobj, p jobj, advertiser string) ma
 		set("tone", vs(v, "tone"))
 		if vs(v, "cta") == "" {
 			errs["cta"] = "Required"
+		}
+		if skus := upperList(vs(v, "skus")); len(skus) > 3 {
+			errs["skus"] = "At most 3 products"
+		} else if len(skus) > 0 {
+			p["skus"] = skus
+		} else {
+			delete(p, "skus")
+		}
+	case slotRailFill:
+		// An advertiser makes the tile paid (always labelled Sponsored); without one it is a staff editorial tile.
+		if advertiser != "" {
+			p["advertiser"] = advertiser
+		} else {
+			delete(p, "advertiser")
+		}
+		if t, ok := p["title"].(string); ok {
+			p["headline"] = t
+			delete(p, "title")
+		}
+		if h, _ := p["headline"].(string); len([]rune(h)) > 60 {
+			errs["text"] = "At most 60 characters for the headline"
+		}
+		if len([]rune(vs(v, "body"))) > 140 {
+			errs["body"] = "At most 140 characters"
+		}
+		set("text", vs(v, "body"))
+		set("cta", vs(v, "cta"))
+		set("imageUrl", vs(v, "imageUrl"))
+		if vs(v, "cta") == "" {
+			errs["cta"] = "Required"
+		}
+		if vs(v, "href") == "" && p["href"] == nil {
+			errs["href"] = "Required"
+		}
+		if deps := commaList(vs(v, "departments")); len(deps) > 0 {
+			p["departments"] = deps
+		} else {
+			delete(p, "departments")
 		}
 		if skus := upperList(vs(v, "skus")); len(skus) > 3 {
 			errs["skus"] = "At most 3 products"
