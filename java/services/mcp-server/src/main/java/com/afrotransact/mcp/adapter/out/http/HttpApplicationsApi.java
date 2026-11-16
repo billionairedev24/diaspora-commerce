@@ -2,14 +2,18 @@ package com.afrotransact.mcp.adapter.out.http;
 
 import java.time.Duration;
 
+import com.afrotransact.mcp.port.CallerCredentials;
 import com.afrotransact.mcp.port.ApplicationsApi;
 import com.afrotransact.mcp.port.Downstream;
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 /** seller-service (port 8106): onboarding applications review queue and detail (masked view). */
 @Component
+@ConditionalOnModuleMode(caller = "mcp-server", callee = "seller", value = ModuleMode.HTTP)
 class HttpApplicationsApi implements ApplicationsApi {
 
     private final JsonHttp http;
@@ -20,14 +24,14 @@ class HttpApplicationsApi implements ApplicationsApi {
     }
 
     @Override
-    public Downstream queue(String status, int page, int size, String bearerToken) {
-        return http.call(bearerToken, c -> c.get().uri(u -> u.path("/v1/applications").queryParam("status", status)
+    public Downstream queue(String status, int page, int size, CallerCredentials credentials) {
+        return http.call(credentials.bearerToken(), c -> c.get().uri(u -> u.path("/v1/applications").queryParam("status", status)
                 .queryParam("page", page).queryParam("size", size).build()));
     }
 
     @Override
-    public Downstream application(String applicationId, String bearerToken) {
-        return http.call(bearerToken, c -> c.get().uri(u -> u.path("/v1/applications/{id}")
+    public Downstream application(String applicationId, CallerCredentials credentials) {
+        return http.call(credentials.bearerToken(), c -> c.get().uri(u -> u.path("/v1/applications/{id}")
                 .queryParam("pii", "MASKED").build(applicationId)));
     }
 }

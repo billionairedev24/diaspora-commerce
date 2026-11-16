@@ -41,7 +41,7 @@ class TaxToolsServiceImpl implements TaxToolsService {
             return ToolResult.of("REJECTED", "status must be one of " + String.join(", ", STATUSES));
         }
         return Results.from(tax.reviewQueue(wanted, query == null ? null : query.trim(),
-                page == null ? 0 : Math.max(page, 0), PAGE_SIZE, caller.bearerToken()), "tax review queue");
+                page == null ? 0 : Math.max(page, 0), PAGE_SIZE, caller.credentials()), "tax review queue");
     }
 
     @Override
@@ -57,6 +57,6 @@ class TaxToolsServiceImpl implements TaxToolsService {
         }
         LocalDate to = LocalDate.now(clock.withZone(ZoneOffset.UTC));
         return Results.from(tax.shadowReport(to.minusDays(window).toString(), to.toString(), wanted, SHADOW_ROWS,
-                caller.bearerToken()), "tax shadow report");
+                caller.credentials()), "tax shadow report");
     }
 }

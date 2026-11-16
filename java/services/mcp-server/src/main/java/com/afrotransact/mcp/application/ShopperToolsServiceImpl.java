@@ -70,7 +70,7 @@ class ShopperToolsServiceImpl implements ShopperToolsService {
     @Override
     public ToolResult getProduct(McpCaller caller, String atin) {
         guard.require(caller.profile(), ToolCatalog.GET_PRODUCT);
-        return Results.from(catalog.publicProduct(normalise(atin), caller.bearerToken()), "live product");
+        return Results.from(catalog.publicProduct(normalise(atin), caller.credentials()), "live product");
     }
 
     @Override
@@ -108,8 +108,8 @@ class ShopperToolsServiceImpl implements ShopperToolsService {
     public ToolResult proposeAddToCart(McpCaller caller, String atin, Integer quantity) {
         guard.require(caller.profile(), ToolCatalog.PROPOSE_ADD_TO_CART);
         String a = normalise(atin);
-        Downstream variant = catalog.publicVariant(a, caller.bearerToken());
-        if (!variant.ok() && !catalog.publicProduct(a, caller.bearerToken()).ok()) {
+        Downstream variant = catalog.publicVariant(a, caller.credentials());
+        if (!variant.ok() && !catalog.publicProduct(a, caller.credentials()).ok()) {
             return ToolResult.of("NOT_FOUND", "No live product with ATIN " + a + "; search first");
         }
         int qty = quantity == null ? 1 : Math.max(1, Math.min(quantity, 99));
@@ -120,7 +120,7 @@ class ShopperToolsServiceImpl implements ShopperToolsService {
     @Override
     public ToolResult myOrderHistory(McpCaller caller, String cursor) {
         guard.require(caller.profile(), ToolCatalog.MY_ORDER_HISTORY);
-        return Results.from(orders.myOrders(cursor, 20, caller.bearerToken()), "order history");
+        return Results.from(orders.myOrders(cursor, 20, caller.credentials()), "order history");
     }
 
     @Override
@@ -129,7 +129,7 @@ class ShopperToolsServiceImpl implements ShopperToolsService {
         if (orderId == null || orderId.isBlank()) {
             return ToolResult.of("REJECTED", "Ask the user for their order number");
         }
-        return Results.from(orders.order(orderId.trim(), caller.bearerToken()), "order tracking");
+        return Results.from(orders.order(orderId.trim(), caller.credentials()), "order tracking");
     }
 
     @Override
@@ -150,7 +150,7 @@ class ShopperToolsServiceImpl implements ShopperToolsService {
     @Override
     public ToolResult findService(McpCaller caller, String query, String zip) {
         guard.require(caller.profile(), ToolCatalog.FIND_SERVICE);
-        Downstream d = bookings.findServices(query == null ? "" : query.trim(), zip, caller.bearerToken());
+        Downstream d = bookings.findServices(query == null ? "" : query.trim(), zip, caller.credentials());
         if (d.status() == Downstream.Status.UNAVAILABLE) {
             return new ToolResult("UNAVAILABLE", Map.of("services", List.of()),
                     "Service search is not available yet; do not invent providers");

@@ -36,8 +36,8 @@ class StaffToolsServiceImpl implements StaffToolsService {
     @Override
     public ToolResult applicationsQueue(McpCaller caller, String status, Integer page) {
         guard.require(caller.profile(), ToolCatalog.APPLICATIONS_QUEUE);
-        String s = status == null || status.isBlank() ? "IN_REVIEW" : status.trim().toUpperCase(Locale.ROOT);
-        Downstream d = applications.queue(s, page == null ? 0 : Math.max(page, 0), 25, caller.bearerToken());
+        String s = status == null || status.isBlank() ? "PENDING_REVIEW" : status.trim().toUpperCase(Locale.ROOT);
+        Downstream d = applications.queue(s, page == null ? 0 : Math.max(page, 0), 25, caller.credentials());
         return d.ok() ? ToolResult.ok(masker.mask(d.body())) : Results.from(d, "application queue");
     }
 
@@ -45,7 +45,7 @@ class StaffToolsServiceImpl implements StaffToolsService {
     public ToolResult applicationDetail(McpCaller caller, String applicationId) {
         guard.require(caller.profile(), ToolCatalog.APPLICATION_DETAIL);
         Downstream d = applications.application(applicationId == null ? "" : applicationId.trim(),
-                caller.bearerToken());
+                caller.credentials());
         if (!d.ok()) {
             return Results.from(d, "application");
         }
@@ -57,27 +57,27 @@ class StaffToolsServiceImpl implements StaffToolsService {
     public ToolResult moderationQueue(McpCaller caller, Integer page) {
         guard.require(caller.profile(), ToolCatalog.MODERATION_QUEUE);
         return Results.from(catalog.products(null, "IN_REVIEW", null, page == null ? 0 : Math.max(page, 0), 25,
-                caller.bearerToken()), "moderation queue");
+                caller.credentials()), "moderation queue");
     }
 
     @Override
     public ToolResult categoryRequestsQueue(McpCaller caller, String status) {
         guard.require(caller.profile(), ToolCatalog.CATEGORY_REQUESTS_QUEUE);
         String wanted = status == null || status.isBlank() ? null : status.trim().toUpperCase(Locale.ROOT);
-        return Results.from(catalog.categoryRequests(wanted, caller.bearerToken()), "category requests");
+        return Results.from(catalog.categoryRequests(wanted, caller.credentials()), "category requests");
     }
 
     @Override
     public ToolResult orderPaymentSplit(McpCaller caller, String orderId) {
         guard.require(caller.profile(), ToolCatalog.ORDER_PAYMENT_SPLIT);
-        return Results.from(payments.orderSplit(orderId == null ? "" : orderId.trim(), caller.bearerToken()),
+        return Results.from(orders.paymentSplit(orderId == null ? "" : orderId.trim(), caller.credentials()),
                 "payment split");
     }
 
     @Override
     public ToolResult orderLookup(McpCaller caller, String orderId) {
         guard.require(caller.profile(), ToolCatalog.ORDER_LOOKUP);
-        Downstream d = orders.order(orderId == null ? "" : orderId.trim(), caller.bearerToken());
+        Downstream d = orders.order(orderId == null ? "" : orderId.trim(), caller.credentials());
         return d.ok() ? new ToolResult("OK", masker.mask(d.body()), "Personal data is masked.")
                 : Results.from(d, "order");
     }
@@ -88,7 +88,7 @@ class StaffToolsServiceImpl implements StaffToolsService {
         if (orgId == null || orgId.isBlank()) {
             return ToolResult.of("REJECTED", "orgId is required");
         }
-        return Results.from(payments.payoutBalance(orgId.trim(), caller.bearerToken()), "payout balance");
+        return Results.from(payments.payoutBalance(orgId.trim(), caller.credentials()), "payout balance");
     }
 
     @Override
@@ -97,7 +97,7 @@ class StaffToolsServiceImpl implements StaffToolsService {
         if (orgId == null || orgId.isBlank()) {
             return ToolResult.of("REJECTED", "orgId is required");
         }
-        Downstream d = sellers.accountHealth(orgId.trim(), caller.bearerToken());
+        Downstream d = sellers.accountHealth(orgId.trim(), caller.credentials());
         return d.ok() ? ToolResult.ok(masker.mask(d.body())) : Results.from(d, "account health");
     }
 }

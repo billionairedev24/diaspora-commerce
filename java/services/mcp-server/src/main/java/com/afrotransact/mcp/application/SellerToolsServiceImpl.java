@@ -44,13 +44,13 @@ class SellerToolsServiceImpl implements SellerToolsService {
             return ToolResult.of("REJECTED", "status must be one of " + PRODUCT_STATUSES);
         }
         return Results.from(catalog.products(caller.profile().orgId(), s, query, page(page), 25,
-                caller.bearerToken()), "product list");
+                caller.credentials()), "product list");
     }
 
     @Override
     public ToolResult productStatus(McpCaller caller, String productIdOrAtin) {
         guard.require(caller.profile(), ToolCatalog.PRODUCT_STATUS);
-        Downstream d = catalog.product(productIdOrAtin == null ? "" : productIdOrAtin.trim(), caller.bearerToken());
+        Downstream d = catalog.product(productIdOrAtin == null ? "" : productIdOrAtin.trim(), caller.credentials());
         if (d.ok() && !ownedByCaller(caller, Results.asMap(d.body()))) {
             return ToolResult.of("NOT_FOUND", "No product " + productIdOrAtin + " in your organisation");
         }
@@ -71,14 +71,14 @@ class SellerToolsServiceImpl implements SellerToolsService {
     public ToolResult listMyOrders(McpCaller caller, String status, String cursor) {
         guard.require(caller.profile(), ToolCatalog.LIST_MY_ORDERS);
         return Results.from(orders.sellerShipments(status == null || status.isBlank() ? null
-                : status.trim().toLowerCase(Locale.ROOT), cursor, 25, caller.bearerToken()), "order list");
+                : status.trim().toLowerCase(Locale.ROOT), cursor, 25, caller.credentials()), "order list");
     }
 
     @Override
     public ToolResult updateShipmentStatus(McpCaller caller, String orderId, String shipmentId, String status,
                                            String carrier, String trackingNumber, String handoverCode) {
         guard.require(caller.profile(), ToolCatalog.UPDATE_SHIPMENT_STATUS);
-        Downstream order = orders.order(orderId, caller.bearerToken());
+        Downstream order = orders.order(orderId, caller.credentials());
         if (!order.ok()) {
             return Results.from(order, "order");
         }
@@ -101,7 +101,7 @@ class SellerToolsServiceImpl implements SellerToolsService {
         String target = status.trim().toUpperCase(Locale.ROOT);
         if ("SHIPPED".equals(target) && givenTracking && !useTracking.equals(Results.text(shipment, "trackingNumber"))) {
             Downstream tracked = orders.attachTracking(shipmentId, useCarrier.toLowerCase(Locale.ROOT), useTracking,
-                    caller.bearerToken());
+                    caller.credentials());
             if (!tracked.ok()) {
                 return Results.from(tracked, "shipment tracking");
             }
@@ -111,14 +111,14 @@ class SellerToolsServiceImpl implements SellerToolsService {
         if ("DELIVERED".equals(target)) {
             body.put("handoverCode", handoverCode.trim());
         }
-        return Results.from(orders.transitionShipment(shipmentId, body, caller.bearerToken()), "shipment update");
+        return Results.from(orders.transitionShipment(shipmentId, body, caller.credentials()), "shipment update");
     }
 
     @Override
     public ToolResult checkInventory(McpCaller caller, String sku, Boolean lowStockOnly) {
         guard.require(caller.profile(), ToolCatalog.CHECK_INVENTORY);
         return Results.from(inventory.positions(caller.profile().orgId(), sku == null || sku.isBlank() ? null
-                : sku.trim().toUpperCase(Locale.ROOT), Boolean.TRUE.equals(lowStockOnly), caller.bearerToken()),
+                : sku.trim().toUpperCase(Locale.ROOT), Boolean.TRUE.equals(lowStockOnly), caller.credentials()),
                 "inventory");
     }
 
@@ -134,7 +134,7 @@ class SellerToolsServiceImpl implements SellerToolsService {
             body.put("parentId", parentCategoryId.trim());
         }
         body.put("reason", reason == null ? "" : reason.trim());
-        return Results.from(catalog.requestCategory(body, caller.bearerToken()), "category request");
+        return Results.from(catalog.requestCategory(body, caller.credentials()), "category request");
     }
 
     private static boolean ownedByCaller(McpCaller caller, Map<String, Object> product) {

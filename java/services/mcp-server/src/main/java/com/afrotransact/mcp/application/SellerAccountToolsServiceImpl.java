@@ -44,20 +44,20 @@ class SellerAccountToolsServiceImpl implements SellerAccountToolsService {
     @Override
     public ToolResult payoutBalance(McpCaller caller) {
         guard.require(caller.profile(), ToolCatalog.PAYOUT_BALANCE);
-        Downstream d = payments.payoutBalance(caller.profile().orgId(), caller.bearerToken());
+        Downstream d = payments.payoutBalance(caller.profile().orgId(), caller.credentials());
         return d.ok() ? new ToolResult("OK", d.body(), PAYOUT_RULES) : Results.from(d, "payout balance");
     }
 
     @Override
     public ToolResult listPayouts(McpCaller caller) {
         guard.require(caller.profile(), ToolCatalog.LIST_PAYOUTS);
-        return Results.from(payments.payoutRequests(caller.profile().orgId(), 20, caller.bearerToken()), "payout list");
+        return Results.from(payments.payoutRequests(caller.profile().orgId(), 20, caller.credentials()), "payout list");
     }
 
     @Override
     public ToolResult accountHealth(McpCaller caller) {
         guard.require(caller.profile(), ToolCatalog.ACCOUNT_HEALTH);
-        return Results.from(sellers.accountHealth(caller.profile().orgId(), caller.bearerToken()), "account health");
+        return Results.from(sellers.accountHealth(caller.profile().orgId(), caller.credentials()), "account health");
     }
 
     @Override
@@ -66,7 +66,7 @@ class SellerAccountToolsServiceImpl implements SellerAccountToolsService {
         if (orderId == null || orderId.isBlank()) {
             return ToolResult.of("REJECTED", "orderId is required");
         }
-        Downstream d = orders.order(orderId.trim(), caller.bearerToken());
+        Downstream d = orders.order(orderId.trim(), caller.credentials());
         if (!d.ok()) {
             return Results.from(d, "order");
         }

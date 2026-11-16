@@ -10,6 +10,7 @@ import java.util.Set;
 
 import com.afrotransact.mcp.domain.CallerProfile;
 import com.afrotransact.mcp.domain.ToolDescriptor;
+import com.afrotransact.mcp.port.CallerCredentials;
 import com.afrotransact.mcp.port.Downstream;
 import com.afrotransact.mcp.port.OrdersApi;
 import com.afrotransact.mcp.port.PaymentsApi;
@@ -29,49 +30,49 @@ class SellerAccountToolsServiceTest {
     private final SellerAccountToolsService tools = new SellerAccountToolsServiceImpl(new AllowAll(),
             new PaymentsApi() {
                 @Override
-                public Downstream orderSplit(String orderId, String bearerToken) {
-                    return Downstream.ok(Map.of());
-                }
-
-                @Override
-                public Downstream payoutBalance(String orgId, String bearerToken) {
+                public Downstream payoutBalance(String orgId, CallerCredentials credentials) {
                     calls.add("balance " + orgId);
                     return balance;
                 }
 
                 @Override
-                public Downstream payoutRequests(String orgId, int limit, String bearerToken) {
+                public Downstream payoutRequests(String orgId, int limit, CallerCredentials credentials) {
                     calls.add("requests " + orgId + " " + limit);
                     return Downstream.ok(List.of());
                 }
-            }, (orgId, bearerToken) -> {
+            }, (orgId, credentials) -> {
                 calls.add("health " + orgId);
                 return health;
             }, new OrdersApi() {
                 @Override
-                public Downstream order(String orderId, String bearerToken) {
+                public Downstream paymentSplit(String orderId, CallerCredentials credentials) {
+                    return Downstream.ok(Map.of());
+                }
+
+                @Override
+                public Downstream order(String orderId, CallerCredentials credentials) {
                     return order;
                 }
 
                 @Override
-                public Downstream myOrders(String cursor, int limit, String bearerToken) {
+                public Downstream myOrders(String cursor, int limit, CallerCredentials credentials) {
                     return Downstream.ok(List.of());
                 }
 
                 @Override
-                public Downstream sellerShipments(String status, String cursor, int limit, String bearerToken) {
+                public Downstream sellerShipments(String status, String cursor, int limit, CallerCredentials credentials) {
                     return Downstream.ok(List.of());
                 }
 
                 @Override
                 public Downstream transitionShipment(String shipmentId, Map<String, Object> body,
-                                                     String bearerToken) {
+                                                     CallerCredentials credentials) {
                     return Downstream.ok(Map.of());
                 }
 
                 @Override
                 public Downstream attachTracking(String shipmentId, String carrier, String trackingNumber,
-                                                 String bearerToken) {
+                                                 CallerCredentials credentials) {
                     return Downstream.ok(Map.of());
                 }
             });

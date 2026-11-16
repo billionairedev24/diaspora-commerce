@@ -2,14 +2,18 @@ package com.afrotransact.mcp.adapter.out.http;
 
 import java.time.Duration;
 
+import com.afrotransact.mcp.port.CallerCredentials;
 import com.afrotransact.mcp.port.BookingsApi;
 import com.afrotransact.mcp.port.Downstream;
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 /** bookings-service (port 8109): {@code GET /v1/services/search} (UNAVAILABLE until deployed). */
 @Component
+@ConditionalOnModuleMode(caller = "mcp-server", callee = "bookings", value = ModuleMode.HTTP)
 class HttpBookingsApi implements BookingsApi {
 
     private final JsonHttp http;
@@ -20,8 +24,8 @@ class HttpBookingsApi implements BookingsApi {
     }
 
     @Override
-    public Downstream findServices(String query, String zip, String bearerToken) {
-        return http.call(bearerToken, c -> c.get().uri(u -> {
+    public Downstream findServices(String query, String zip, CallerCredentials credentials) {
+        return http.call(credentials.bearerToken(), c -> c.get().uri(u -> {
             u.path("/v1/services/search").queryParam("q", query).queryParam("size", 10);
             if (zip != null && !zip.isBlank()) {
                 u.queryParam("zip", zip);

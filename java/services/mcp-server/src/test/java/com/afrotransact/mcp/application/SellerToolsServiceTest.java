@@ -12,6 +12,7 @@ import java.util.Set;
 import com.afrotransact.mcp.domain.CallerProfile;
 import com.afrotransact.mcp.domain.DefaultShipmentStatusPolicy;
 import com.afrotransact.mcp.domain.ToolDescriptor;
+import com.afrotransact.mcp.port.CallerCredentials;
 import com.afrotransact.mcp.port.CatalogApi;
 import com.afrotransact.mcp.port.Downstream;
 import com.afrotransact.mcp.port.InventoryApi;
@@ -184,71 +185,76 @@ class SellerToolsServiceTest {
         private final List<Map<String, Object>> bodies = new ArrayList<>();
 
         @Override
-        public Downstream categoryRequests(String status, String bearerToken) {
+        public Downstream categoryRequests(String status, CallerCredentials credentials) {
             calls.add("categoryRequests " + status);
             return next;
         }
 
         @Override
-        public Downstream publicProduct(String atin, String bearerToken) {
+        public Downstream publicProduct(String atin, CallerCredentials credentials) {
             return next;
         }
 
         @Override
-        public Downstream publicVariant(String atin, String bearerToken) {
+        public Downstream publicVariant(String atin, CallerCredentials credentials) {
             return next;
         }
 
         @Override
         public Downstream products(String orgId, String status, String query, int page, int size,
-                                  String bearerToken) {
+                                  CallerCredentials credentials) {
             calls.add("products " + orgId + " " + status + " " + query + " " + page + " " + size);
             return next;
         }
 
         @Override
-        public Downstream product(String idOrAtin, String bearerToken) {
+        public Downstream product(String idOrAtin, CallerCredentials credentials) {
             return next;
         }
 
         @Override
-        public Downstream requestCategory(Map<String, Object> request, String bearerToken) {
+        public Downstream requestCategory(Map<String, Object> request, CallerCredentials credentials) {
             bodies.add(new HashMap<>(request));
             return next;
         }
     }
 
     private static final class FakeOrders implements OrdersApi {
+
+        @Override
+        public Downstream paymentSplit(String orderId, CallerCredentials credentials) {
+            return Downstream.ok(Map.of());
+        }
         private Downstream order = Downstream.ok(Map.of());
         private Downstream next = Downstream.ok(Map.of());
         private final List<String> calls = new ArrayList<>();
         private final List<Map<String, Object>> changes = new ArrayList<>();
 
         @Override
-        public Downstream order(String orderId, String bearerToken) {
+        public Downstream order(String orderId, CallerCredentials credentials) {
             return order;
         }
 
         @Override
-        public Downstream myOrders(String cursor, int limit, String bearerToken) {
+        public Downstream myOrders(String cursor, int limit, CallerCredentials credentials) {
             return next;
         }
 
         @Override
-        public Downstream sellerShipments(String status, String cursor, int limit, String bearerToken) {
+        public Downstream sellerShipments(String status, String cursor, int limit, CallerCredentials credentials) {
             calls.add("sellerShipments " + status + " " + cursor + " " + limit);
             return next;
         }
 
         @Override
-        public Downstream transitionShipment(String shipmentId, Map<String, Object> body, String bearerToken) {
+        public Downstream transitionShipment(String shipmentId, Map<String, Object> body, CallerCredentials credentials) {
             changes.add(new HashMap<>(body));
             return next;
         }
 
         @Override
         public Downstream attachTracking(String shipmentId, String carrier, String trackingNumber,
-                                         String bearerToken) {
+                                         CallerCredentials credentials) {
             calls.add("attachTracking " + shipmentId + " " + carrier + " " + trackingNumber);
             return Downstream.ok(Map.of());
         }
@@ -259,12 +265,12 @@ class SellerToolsServiceTest {
         private final List<String> calls = new ArrayList<>();
 
         @Override
-        public Downstream availability(List<String> skus, String bearerToken) {
+        public Downstream availability(List<String> skus, CallerCredentials credentials) {
             return next;
         }
 
         @Override
-        public Downstream positions(String ownerOrg, String sku, boolean lowStock, String bearerToken) {
+        public Downstream positions(String ownerOrg, String sku, boolean lowStock, CallerCredentials credentials) {
             calls.add("positions " + ownerOrg + " " + sku + " " + lowStock);
             return next;
         }

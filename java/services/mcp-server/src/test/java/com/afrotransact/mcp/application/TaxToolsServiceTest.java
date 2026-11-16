@@ -13,6 +13,7 @@ import java.util.Set;
 
 import com.afrotransact.mcp.domain.CallerProfile;
 import com.afrotransact.mcp.domain.ToolDescriptor;
+import com.afrotransact.mcp.port.CallerCredentials;
 import com.afrotransact.mcp.port.Downstream;
 import com.afrotransact.mcp.port.TaxApi;
 import org.junit.jupiter.api.Test;
@@ -107,13 +108,13 @@ class TaxToolsServiceTest {
         private final List<String> calls = new ArrayList<>();
 
         @Override
-        public Downstream reviewQueue(String status, String query, int page, int size, String bearerToken) {
+        public Downstream reviewQueue(String status, String query, int page, int size, CallerCredentials credentials) {
             calls.add("queue " + status + " " + query + " " + page + " " + size);
             return next;
         }
 
         @Override
-        public Downstream shadowReport(String from, String to, String provider, int size, String bearerToken) {
+        public Downstream shadowReport(String from, String to, String provider, int size, CallerCredentials credentials) {
             calls.add("shadow " + from + " " + to + " " + provider + " " + size);
             return next;
         }

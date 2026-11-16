@@ -2,14 +2,18 @@ package com.afrotransact.mcp.adapter.out.http;
 
 import java.time.Duration;
 
+import com.afrotransact.mcp.port.CallerCredentials;
 import com.afrotransact.mcp.port.Downstream;
 import com.afrotransact.mcp.port.TaxApi;
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 /** tax-returns (port 8111): the review queue and the shadow report. */
 @Component
+@ConditionalOnModuleMode(caller = "mcp-server", callee = "tax-returns", value = ModuleMode.HTTP)
 class HttpTaxApi implements TaxApi {
 
     private final JsonHttp http;
@@ -20,8 +24,8 @@ class HttpTaxApi implements TaxApi {
     }
 
     @Override
-    public Downstream reviewQueue(String status, String query, int page, int size, String bearerToken) {
-        return http.call(bearerToken, c -> c.get().uri(u -> {
+    public Downstream reviewQueue(String status, String query, int page, int size, CallerCredentials credentials) {
+        return http.call(credentials.bearerToken(), c -> c.get().uri(u -> {
             u.path("/v1/tax/variant-classifications").queryParam("status", status).queryParam("page", page)
                     .queryParam("size", size);
             if (query != null && !query.isBlank()) {
@@ -32,8 +36,8 @@ class HttpTaxApi implements TaxApi {
     }
 
     @Override
-    public Downstream shadowReport(String from, String to, String provider, int size, String bearerToken) {
-        return http.call(bearerToken, c -> c.get().uri(u -> {
+    public Downstream shadowReport(String from, String to, String provider, int size, CallerCredentials credentials) {
+        return http.call(credentials.bearerToken(), c -> c.get().uri(u -> {
             u.path("/v1/tax/shadow/report").queryParam("from", from).queryParam("to", to).queryParam("size", size)
                     .queryParam("onlyDifferences", true);
             if (provider != null && !provider.isBlank()) {

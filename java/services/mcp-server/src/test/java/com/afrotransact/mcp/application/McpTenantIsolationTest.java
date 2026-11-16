@@ -53,9 +53,9 @@ class McpTenantIsolationTest {
     void orderOfA() {
         Map<String, Object> mine = Map.of("id", "shp-b", "sellerOrgId", B, "status", "PENDING");
         Map<String, Object> theirs = Map.of("id", "shp-a", "sellerOrgId", A, "status", "PENDING");
-        when(orders.order("ord-1", TOKEN_B)).thenReturn(Downstream.ok(Map.of("id", "ord-1", "status", "PAID",
+        when(orders.order("ord-1", sellerB.credentials())).thenReturn(Downstream.ok(Map.of("id", "ord-1", "status", "PAID",
                 "shipments", List.of(mine, theirs))));
-        when(orders.order("ord-a-only", TOKEN_B)).thenReturn(Downstream.ok(Map.of("id", "ord-a-only", "status", "PAID",
+        when(orders.order("ord-a-only", sellerB.credentials())).thenReturn(Downstream.ok(Map.of("id", "ord-a-only", "status", "PAID",
                 "shipments", List.of(theirs))));
     }
 
@@ -99,7 +99,7 @@ class McpTenantIsolationTest {
 
     @Test
     void productOfAnotherOrganisationLooksNonexistent() {
-        when(catalog.product("AT1AAAAAAA", TOKEN_B)).thenReturn(Downstream.ok(Map.of("id", "p1", "atin", "AT1AAAAAAA",
+        when(catalog.product("AT1AAAAAAA", sellerB.credentials())).thenReturn(Downstream.ok(Map.of("id", "p1", "atin", "AT1AAAAAAA",
                 "ownerOrgId", A, "title", "Egusi", "status", "LIVE")));
         assertThat(sellerTools().productStatus(sellerB, "AT1AAAAAAA").status()).isEqualTo("NOT_FOUND");
     }
@@ -107,13 +107,13 @@ class McpTenantIsolationTest {
     @Test
     void sellerListsAndBalancesUseTheTokenOrgNeverAnArgument() {
         sellerTools().listMyProducts(sellerB, null, null, null);
-        verify(catalog).products(B, null, null, 0, 25, TOKEN_B);
+        verify(catalog).products(B, null, null, 0, 25, sellerB.credentials());
         sellerTools().checkInventory(sellerB, null, null);
-        verify(inventory).positions(B, null, false, TOKEN_B);
+        verify(inventory).positions(B, null, false, sellerB.credentials());
         accountTools().payoutBalance(sellerB);
-        verify(payments).payoutBalance(B, TOKEN_B);
+        verify(payments).payoutBalance(B, sellerB.credentials());
         accountTools().accountHealth(sellerB);
-        verify(sellers).accountHealth(B, TOKEN_B);
+        verify(sellers).accountHealth(B, sellerB.credentials());
     }
 
     @Test

@@ -18,6 +18,7 @@ import com.afrotransact.mcp.domain.TokenBucketRateLimiter;
 import com.afrotransact.mcp.domain.ToolAccessPolicy;
 import com.afrotransact.mcp.port.AuditSpool;
 import com.afrotransact.platform.security.ActorResolver;
+import com.afrotransact.platform.security.EndUsers;
 import com.afrotransact.platform.security.PlatformSecurityProperties;
 import io.modelcontextprotocol.json.jackson3.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.server.transport.DefaultServerTransportSecurityValidator;
@@ -94,11 +95,12 @@ class McpConfiguration {
     @Bean
     WebMvcStatelessServerTransport webMvcStatelessServerTransport(
             @Qualifier("mcpServerJsonMapper") JsonMapper mcpJson, McpServerStreamableHttpProperties http,
-            ActorResolver actors, PlatformSecurityProperties security, McpProperties props) {
+            ActorResolver actors, EndUsers endUsers, PlatformSecurityProperties security,
+            McpProperties props) {
         return WebMvcStatelessServerTransport.builder()
                 .jsonMapper(new JacksonMcpJsonMapper(mcpJson))
                 .messageEndpoint(http.getMcpEndpoint())
-                .contextExtractor(new McpCallerExtractor(actors, security.enabled()))
+                .contextExtractor(new McpCallerExtractor(actors, endUsers, security.enabled()))
                 .securityValidator(DefaultServerTransportSecurityValidator.builder()
                         .allowedOrigins(props.allowedOrigins()).build())
                 .build();

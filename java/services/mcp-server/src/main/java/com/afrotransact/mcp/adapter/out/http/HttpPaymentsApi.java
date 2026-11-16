@@ -2,14 +2,18 @@ package com.afrotransact.mcp.adapter.out.http;
 
 import java.time.Duration;
 
+import com.afrotransact.mcp.port.CallerCredentials;
 import com.afrotransact.mcp.port.PaymentsApi;
 import com.afrotransact.mcp.port.Downstream;
+import com.afrotransact.module.ModuleMode;
+import com.afrotransact.platform.web.module.ConditionalOnModuleMode;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
-/** payments-service (port 8105): staff payment split of an order. */
+/** payments-service (port 8105): payout balance and payout requests of an organisation. */
 @Component
+@ConditionalOnModuleMode(caller = "mcp-server", callee = "payments", value = ModuleMode.HTTP)
 class HttpPaymentsApi implements PaymentsApi {
 
     private final JsonHttp http;
@@ -20,19 +24,14 @@ class HttpPaymentsApi implements PaymentsApi {
     }
 
     @Override
-    public Downstream orderSplit(String orderId, String bearerToken) {
-        return http.call(bearerToken, c -> c.get().uri("/v1/orders/{orderId}/payment-split", orderId));
-    }
-
-    @Override
-    public Downstream payoutBalance(String orgId, String bearerToken) {
-        return http.call(bearerToken, c -> c.get().uri(u -> u.path("/v1/payouts/balance").queryParam("orgId", orgId)
+    public Downstream payoutBalance(String orgId, CallerCredentials credentials) {
+        return http.call(credentials.bearerToken(), c -> c.get().uri(u -> u.path("/v1/payouts/balance").queryParam("orgId", orgId)
                 .build()));
     }
 
     @Override
-    public Downstream payoutRequests(String orgId, int limit, String bearerToken) {
-        return http.call(bearerToken, c -> c.get().uri(u -> u.path("/v1/payouts/requests").queryParam("orgId", orgId)
+    public Downstream payoutRequests(String orgId, int limit, CallerCredentials credentials) {
+        return http.call(credentials.bearerToken(), c -> c.get().uri(u -> u.path("/v1/payouts/requests").queryParam("orgId", orgId)
                 .queryParam("limit", limit).build()));
     }
 }
