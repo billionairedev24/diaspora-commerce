@@ -4139,6 +4139,26 @@ components:
         imageAlt: {type: string, maxLength: 160}
         startsAt: {type: [string, 'null'], format: date-time}
         endsAt: {type: [string, 'null'], format: date-time}
+    RailFillPayload:
+      type: object
+      description: |
+        Payload of a rail_fill placement: the tile that fills the empty columns of a short product rail. With `advertiser` the
+        tile is paid and always labelled Sponsored; without it it is a staff editorial tile. It targets rails by `departments`
+        (empty = any), and by the placement's own market, ZIP prefixes and schedule. `skus` names up to three products to show;
+        only those in stock with a real photo are shown. `imageUrl` is used only when it is a real photograph. Slot `rail_fill`
+        is a catalogue row added by migration V22; no placement is created by a migration (demo tiles come from the local seed).
+      required: [headline, cta, href]
+      properties:
+        advertiser: {type: string, maxLength: 120}
+        headline: {type: string, maxLength: 60}
+        text: {type: string, maxLength: 140}
+        cta: {type: string, maxLength: 40}
+        href: {type: string, maxLength: 300, pattern: '^(/|https://)'}
+        imageUrl: {type: [string, 'null'], maxLength: 500}
+        departments: {type: array, maxItems: 12, items: {type: string, maxLength: 60}}
+        skus: {type: array, maxItems: 3, items: {type: string}}
+        maxPerSession: {type: integer, minimum: 1, maximum: 20}
+        states: {type: array, maxItems: 52, items: {type: string, pattern: '^[A-Z]{2}$'}}
     TileCellSource:
       type: object
       description: A rule that picks the product shown in a home tile cell (the same shape as a product rail's source). The
