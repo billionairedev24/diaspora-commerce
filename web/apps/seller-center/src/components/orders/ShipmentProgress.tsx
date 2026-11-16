@@ -5,7 +5,7 @@ import { Button, cx, TextField } from '@afrotransact/ui';
 import { CheckCircle, Circle } from '@phosphor-icons/react/ssr';
 import { useState } from 'react';
 
-import { useT } from '@/i18n/t';
+import { type MessageKey, useT } from '@/i18n/t';
 
 const STEPS = ['CONFIRMED', 'PACKED', 'READY', 'PICKED_UP', 'DELIVERED'] as const;
 
@@ -26,6 +26,22 @@ function stepOf(status: string): number | null {
       return 3;
     case 'DELIVERED':
       return 4;
+    default:
+      return null;
+  }
+}
+
+/** What a seller reads while AfroTransact holds the shipment (read-only): the title says who has it, the help what they need to do. */
+function afroNoteKey(status: string, mode: string): { title: MessageKey; help: MessageKey } | null {
+  switch (status) {
+    case 'READY':
+      return mode === 'afrotransact_delivery' ? { title: 'sc.ship.afro.picksUp', help: 'sc.ship.afro.picksUpHelp' } : null;
+    case 'PICKED_UP':
+    case 'IN_TRANSIT':
+    case 'OUT_FOR_DELIVERY':
+      return { title: 'sc.ship.afro.hasIt', help: 'sc.ship.afro.hasItHelp' };
+    case 'DELIVERY_FAILED':
+      return { title: 'sc.ship.afro.failed', help: 'sc.ship.afro.failedHelp' };
     default:
       return null;
   }
@@ -70,6 +86,10 @@ export function ShipmentProgress({ shipment, editable, loading, onMove }: Props)
               : '';
   const doLabel = next === 'DELIVERED' && !needsCode ? t('sc.ship.do.DELIVERED_SHIPPED') : next ? t(`sc.ship.do.${next}`) : '';
   const codeOk = /^\d{4}$/.test(code);
+  // Fulfilled by AfroTransact: AfroTransact collects the parcel and delivers it, so the seller only sees where it is. Never a
+  // button here, whatever the role: AfroTransact staff move it with the delivery steps (docs/engineering/delivery-fulfilment.md).
+  const byAfroTransact = shipment.fulfilmentMode === 'afrotransact_delivery' || shipment.fulfilmentMode === 'fulfilled_by_afrotransact';
+  const afroNote = byAfroTransact && !next ? afroNoteKey(shipment.status, shipment.fulfilmentMode) : null;
   return (
     <div className="flex flex-col gap-3" data-testid="shipment-progress">
       {at !== null ? (
@@ -84,6 +104,11 @@ export function ShipmentProgress({ shipment, editable, loading, onMove }: Props)
             );
           })}
         </ol>
+      ) : null}
+      {afroNote ? (
+        <p className="m-0 text-sm" data-testid="afrotransact-note">
+          <strong>{t(afroNote.title)}</strong> <span className="text-muted">{t(afroNote.help)}</span>
+        </p>
       ) : null}
       {next ? (
         <div className="flex flex-col items-start gap-1">

@@ -64,13 +64,16 @@ function NavGroupSection({ group, active }: { group: StaffNavGroup; active: Staf
                 href={hrefOf(m.key)}
                 data-tour={`nav-${m.key}`}
                 aria-current={current ? 'page' : undefined}
+                title={m.dormant ? m.description : undefined}
                 className={cx(
                   'flex h-[34px] items-center gap-3 rounded-sm pr-3 pl-4 text-md text-text no-underline hover:bg-surface-hover hover:text-text hover:no-underline pointer-coarse:h-11',
-                  current ? 'bg-gold-100 font-bold hover:bg-gold-100' : 'font-normal'
+                  current ? 'bg-gold-100 font-bold hover:bg-gold-100' : 'font-normal',
+                  m.dormant && !current && 'text-muted hover:text-text'
                 )}
               >
                 <Icon size={18} aria-hidden weight={current ? 'fill' : 'regular'} />
                 <span className="flex-1 truncate">{m.label}</span>
+                {m.dormant ? <span className="text-2xs text-muted" data-testid="nav-dormant">{t('st.nav.dormant')}</span> : null}
                 {m.badge ? <span className="min-w-5 rounded-pill bg-gold-500 px-1.5 text-center text-2xs font-bold text-ink-1000">{m.badge}</span> : null}
               </Link>
             </li>
@@ -118,11 +121,11 @@ export function SidebarRail({ session, active, settingsActive = false }: { sessi
                 <Link
                   href={hrefOf(m.key)}
                   aria-current={current ? 'page' : undefined}
-                  title={m.label}
+                  title={m.dormant ? `${m.label} · ${t('st.nav.dormant')}` : m.label}
                   className={cx('relative flex size-11 items-center justify-center rounded-sm text-text no-underline hover:bg-surface-hover hover:text-text hover:no-underline', current && 'bg-gold-100 hover:bg-gold-100')}
                 >
                   <Icon size={20} aria-hidden weight={current ? 'fill' : 'regular'} />
-                  <span className="at-visually-hidden">{m.badge ? `${m.label} (${m.badge})` : m.label}</span>
+                  <span className="at-visually-hidden">{m.dormant ? `${m.label} (${t('st.nav.dormant')})` : m.badge ? `${m.label} (${m.badge})` : m.label}</span>
                   {m.badge ? <span aria-hidden className="absolute top-1.5 right-1.5 size-2 rounded-pill bg-gold-500" /> : null}
                 </Link>
               </li>

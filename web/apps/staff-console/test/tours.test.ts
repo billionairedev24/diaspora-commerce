@@ -12,7 +12,7 @@ function session(modules: [StaffModuleKey, AccessLevel][], over: Partial<StaffSe
     roles: [{ key: 'platform.admin', label: 'Administrator' }],
     roleLabel: 'Administrator',
     permissions: ['catalog.moderate'],
-    navGroups: [{ key: 'overview', label: 'All', modules: modules.map(([key, level]) => ({ key, label: key, description: '', level, badge: null })) }],
+    navGroups: [{ key: 'overview', label: 'All', modules: modules.map(([key, level]) => ({ key, label: key, description: '', level, badge: null, dormant: false })) }],
     landing: 'dash',
     accessNote: '',
     refundLimitMinor: null,
