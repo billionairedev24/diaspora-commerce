@@ -17,6 +17,7 @@ import com.afrotransact.module.CallerPrincipal;
 import com.afrotransact.module.InProcessCalls;
 import com.afrotransact.taxreturns.api.TaxClassificationApi;
 import com.afrotransact.taxreturns.port.ProductFacts;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.BeansException;
@@ -156,6 +157,8 @@ class CoreModulesTest {
 
     @Test
     void inProcessModeWithTheTargetModuleOffFailsTheStartNamingBothModules() {
+        // an assumption failing inside the lambda would be swallowed by assertThatThrownBy and fail the test instead of skipping it
+        Assumptions.assumeTrue(CoreRun.databaseAvailable(), "CORE_IT_DB=host:port is not set: no PostgreSQL for the core context test");
         assertThatThrownBy(() -> CoreRun.start("at.modules.tax-returns.enabled=false"))
                 .hasRootCauseMessage("Module 'catalog' is configured at.catalog.mode=in-process but module 'tax-returns' "
                         + "is not running in this JVM: enable it (at.modules.tax-returns.enabled=true) or set "
@@ -174,6 +177,7 @@ class CoreModulesTest {
 
     @Test
     void aFailedMigrationStopsTheStartAndNamesTheModule() {
+        Assumptions.assumeTrue(CoreRun.databaseAvailable(), "CORE_IT_DB=host:port is not set: no PostgreSQL for the core context test");
         assertThatThrownBy(() -> CoreRun.start("at.modules.catalog.datasource.url=jdbc:postgresql://"
                 + System.getenv("CORE_IT_DB") + "/no_such_database"))
                 .hasStackTraceContaining("Module 'catalog' failed to migrate database 'no_such_database'");
