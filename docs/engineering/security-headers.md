@@ -39,6 +39,11 @@ form-action 'self' <origin of the post-sign-in home URL> <origin of the pending 
 - `Cache-Control: no-cache, no-store, max-age=0, must-revalidate` on dynamic pages is Spring Security's default (verified in
   `SecurityHeadersTest`); static assets keep their own caching. No devtools/livereload dependency is on the identity classpath.
 
+- **Storefront `Permissions-Policy`** (Next.js, `web/apps/storefront/next.config.ts`): `microphone=(self)` so Lola dictation can use the
+  browser's speech recognition; `camera=()` stays blocked. `microphone=()` would disable the mic button in Chrome regardless of the
+  user's site permission (guarded by `test/permissions-policy.test.ts`). seller-center and staff-console keep `microphone=()` until
+  they get a Lola mic. Identity's hosted pages (above) never need the microphone.
+
 Change it: edit `HostedPageContentSecurityPolicy.BASE` (policy), `IdentitySecurityHeaders` (other headers); a new third-party host
 must be added to the exact directive and to `SecurityHeadersTest`. Debug a blocked sign-in in the browser console
 (`Refused to ... because it violates the following Content Security Policy directive`). Identity has no report endpoint: it is
