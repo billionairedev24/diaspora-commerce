@@ -66,10 +66,9 @@ describe('cart (mock BFF) — stock caps and packages per seller', () => {
     const sellers = cart.packages.map((p) => `${p.seller.name}|${p.fulfilment}`).sort();
     expect(sellers).toEqual(['Addis Spice House|AFROTRANSACT', 'Addis Spice House|SELLER', 'AfroTransact|AFROTRANSACT']);
     const selfShip = cart.packages.find((p) => p.fulfilment === 'SELLER');
-    expect(selfShip?.heading).toMatch(/^Shipped by Addis Spice House/);
-    // Launch shipping: AfroTransact delivers a seller's package at the flat fee; no carrier option while the staff switch is off.
-    expect(selfShip?.deliveryOptions.map((o) => o.key)).toEqual(['afrotransact_delivery']);
-    expect(selfShip?.deliveryOptions[0]).toMatchObject({ label: 'Delivery', feeMinor: 599, free: false });
+    expect(selfShip?.heading).toMatch(/^Sold by Addis Spice House/);
+    // Sellers do not ship themselves: a plain seller package has no delivery, only pickup (added at checkout when offered).
+    expect(selfShip?.deliveryOptions.map((o) => o.key)).toEqual([]);
     expect(selfShip?.freeShippingNudge).toBeNull();
     expect(cart.itemCount).toBe(4);
     expect(cart.sellerCount).toBe(2);

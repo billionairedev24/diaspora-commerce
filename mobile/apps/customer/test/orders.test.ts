@@ -28,19 +28,19 @@ describe('tracking', () => {
     expect(deliveredByAfroTransact('afrotransact_delivery')).toBe(true);
     expect(deliveredByAfroTransact('fulfilled_by_afrotransact')).toBe(true);
     expect(deliveredByAfroTransact('preorder_run')).toBe(true);
-    expect(deliveredByAfroTransact('seller_ships')).toBe(false);
+    expect(deliveredByAfroTransact('legacy_seller_shipped')).toBe(false);
     expect(deliveredByAfroTransact('pickup')).toBe(false);
   });
 
   it('never says the fulfilment centre or AfroTransact Delivery moves a seller-shipped order', () => {
-    const texts = TRACKING_STEPS.map((st) => stepDetail(st, 'seller_ships'));
+    const texts = TRACKING_STEPS.map((st) => stepDetail(st, 'legacy_seller_shipped'));
     expect(texts.join(' ')).not.toMatch(/AfroTransact|fulfilment centre|driver/i);
-    expect(stepDetail(TRACKING_STEPS[1], 'seller_ships')).toBe('Packed by the seller');
-    expect(stepDetail(TRACKING_STEPS[2], 'seller_ships')).toBe('Shipped by the seller');
+    expect(stepDetail(TRACKING_STEPS[1], 'legacy_seller_shipped')).toBe('Packed by the seller');
+    expect(stepDetail(TRACKING_STEPS[2], 'legacy_seller_shipped')).toBe('Shipped by the seller');
     expect(stepDetail(TRACKING_STEPS[1], 'fulfilled_by_afrotransact')).toBe('Packed at the fulfilment centre');
   });
 
   it('the delivery code is only for AfroTransact Delivery, never a seller-shipped order', () => {
-    expect(showDeliveryCode({ method: 'seller_ships', handover: 'hand', perishable: true, deliveryCode: '4821', status: 'out_for_delivery' })).toBe(false);
+    expect(showDeliveryCode({ method: 'legacy_seller_shipped', handover: 'hand', perishable: true, deliveryCode: '4821', status: 'out_for_delivery' })).toBe(false);
   });
 });

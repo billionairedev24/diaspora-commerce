@@ -252,10 +252,9 @@ export function deliveryOptions(pkg: { from: ShipFrom; sellerName: string; arriv
   const a = pkg.arrival;
   const dates = a.basis === 'PROMISE' ? { earliestDate: a.earliestDate, latestDate: a.latestDate } : {};
   const delivery: DeliveryOption = { key: 'afrotransact_delivery', label: isAT ? LABEL_DELIVERY : LABEL_STORE_DELIVERY, eta: a.label, feeMinor: fee, free: fee === 0, ...dates };
-  const sellerShips = pkg.from.fulfilment === 'SELLER' && settings.sellerCarrierShippingEnabled;
-  if (!sellerShips) return [delivery];
-  const free = pkg.subtotalMinor >= FREE_SHIPPING_THRESHOLD_MINOR;
-  return [{ key: 'carrier', label: LABEL_SELLER_SHIPPING, eta: a.label, feeMinor: free ? 0 : SELLER_SHIPPING_MINOR, free, ...dates }, delivery];
+  // Sellers do not ship themselves (and the old carrier switch changes nothing): a plain seller package has no delivery, pickup only.
+  if (pkg.from.fulfilment === 'SELLER') return [];
+  return [delivery];
 }
 
 /** Whether an address is inside a delivery zone (the mock's zones: the metros AfroTransact delivers in). */

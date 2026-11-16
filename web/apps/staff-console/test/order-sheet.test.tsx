@@ -60,7 +60,7 @@ describe('Order sheet: shipments', () => {
     expect(within(afro).getByText('Shipment 1 of 2')).toBeInTheDocument();
     const patel = rowOf(sheet, 'Patel Grocers');
     expect(within(patel).getByText('Packed')).toBeInTheDocument();
-    expect(within(patel).getByText('Seller ships this order')).toBeInTheDocument();
+    expect(within(patel).getByText('Shipped by the seller (retired: history only, no longer supported)')).toBeInTheDocument();
     // No sentence-long buttons, no carrier names, no driver talk.
     expect(within(sheet).queryByRole('button', { name: /Mark picked up/ })).toBeNull();
     expect(within(sheet).queryByRole('button', { name: /More options/ })).toBeNull();
@@ -86,8 +86,8 @@ describe('Order sheet: shipments', () => {
     const menu = await openMenu(user, patel, 'Patel Grocers');
     const ready = within(menu).getByRole('menuitem', { name: /Ready/ });
     expect(ready).toHaveAttribute('aria-disabled', 'true');
-    expect(ready).toHaveTextContent('Updated by the seller');
-    expect(within(menu).getByRole('menuitem', { name: /Delivered/ })).toHaveTextContent('Updated by the seller');
+    expect(ready).toHaveTextContent('Old seller-shipped order: use Override status');
+    expect(within(menu).getByRole('menuitem', { name: /Delivered/ })).toHaveTextContent('Old seller-shipped order: use Override status');
     await user.keyboard('{Escape}');
     expect(within(patel).queryByRole('button', { name: 'Override status' })).toBeNull();
   });
@@ -248,9 +248,9 @@ describe('Order sheet: shipments', () => {
     });
     const { user, sheet } = await openOrder();
     const patel = rowOf(sheet, 'Patel Grocers');
-    expect(within(rowOf(sheet, 'AfroTransact')).queryByRole('button', { name: 'Override status' })).toBeNull();
+    // The override also corrects Fulfilled by AfroTransact (forward only), so that row may offer it; pickup orders never do (below).
     await user.click(within(patel).getByRole('button', { name: 'Override status' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Override the seller’s status' });
+    const dialog = await screen.findByRole('dialog', { name: 'Override the shipment status' });
     await user.click(within(dialog).getByRole('button', { name: 'Override' }));
     expect(await within(dialog).findByText('Say why to continue.')).toBeInTheDocument();
     expect(calls).toHaveLength(0);
@@ -260,7 +260,7 @@ describe('Order sheet: shipments', () => {
     const body = (await calls[0]?.json()) as { values: { step: string; reason: string } };
     expect(body.values.reason).toBe('Seller phoned, it left this morning');
     expect(body.values.step).toMatch(/^shp-0-2\|/);
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Override the seller’s status' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Override the shipment status' })).toBeNull());
     await user.click(within(rowOf(sheet, 'Patel Grocers')).getByText(/History \(\d+\)/));
     expect(within(rowOf(sheet, 'Patel Grocers')).getByText('Seller phoned, it left this morning')).toBeVisible();
   });

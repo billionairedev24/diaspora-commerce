@@ -228,7 +228,7 @@ export type ShipmentStep = z.infer<typeof ShipmentStepSchema>;
 export const ShipmentChangeSchema = z.object({ at: z.string(), from: nullableString, to: z.string(), actor: z.string(), note: nullableString });
 export type ShipmentChange = z.infer<typeof ShipmentChangeSchema>;
 /** Who moves a shipment: Fulfilled by AfroTransact (both delivery modes), seller pickup, or the seller ships it. */
-export const ShipmentModeSchema = z.enum(['seller_ships', 'afrotransact_delivery', 'fulfilled_by_afrotransact', 'pickup', 'preorder_run']);
+export const ShipmentModeSchema = z.enum(['legacy_seller_shipped', 'afrotransact_delivery', 'fulfilled_by_afrotransact', 'pickup', 'preorder_run']);
 export type ShipmentMode = z.infer<typeof ShipmentModeSchema>;
 /** One package of an order sheet with the statuses the caller may set (`via` says which API takes each step). */
 export const RecordShipmentSchema = z.object({

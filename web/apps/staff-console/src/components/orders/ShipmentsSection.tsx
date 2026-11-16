@@ -42,7 +42,7 @@ const MODE_KEYS: Partial<Record<ShipmentMode, MessageKey>> = {
   afrotransact_delivery: 'st.order.mode.afrotransactStore',
   fulfilled_by_afrotransact: 'st.order.mode.afrotransactCentre',
   pickup: 'st.order.mode.pickup',
-  seller_ships: 'st.order.mode.sellerShips'
+  legacy_seller_shipped: 'st.order.mode.legacySellerShipped'
 };
 
 const FULFILMENT_KEYS: Record<string, MessageKey> = { AfroTransact: 'st.order.packedBy.afrotransact', Seller: 'st.order.packedBy.seller' };

@@ -237,7 +237,7 @@ function tracking(orderNumber: string): OrderTracking | null {
     orderNumber: o.orderNumber, placedAt: o.placedAt, totalMinor: o.totalMinor, currency: 'USD',
     shipments: o.shipments.map((s) => ({
       shipmentId: s.shipmentId, label: s.label, status: s.status, eta: s.eta, method: s.method, handover: s.handover, perishable: s.perishable, deliveryCode: s.deliveryCode,
-      fulfilmentMode: s.fulfilmentMode ?? (s.method === 'afrotransact_delivery' ? 'fulfilled_by_afrotransact' : s.method === 'pickup' ? 'pickup' : 'seller_ships'),
+      fulfilmentMode: s.fulfilmentMode ?? (s.method === 'afrotransact_delivery' ? 'fulfilled_by_afrotransact' : s.method === 'pickup' ? 'pickup' : 'legacy_seller_shipped'),
       proof: s.proof ?? null,
       driver: null,
       items: s.items.map((it) => { const p = productByAtin(it.atin); return { atin: it.atin, title: p?.title ?? it.atin, quantity: it.quantity, priceMinor: p?.priceMinor ?? 0, returnable: s.status === 'delivered' }; })

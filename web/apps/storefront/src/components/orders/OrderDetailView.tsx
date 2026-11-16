@@ -21,12 +21,12 @@ type Shipment = OrderDetail['shipments'][number];
 
 /**
  * What the badge says. AfroTransact is named only when AfroTransact delivers it (Fulfilled by AfroTransact, or the seller opted
- * into delivery by AfroTransact); a seller-shipped order says the seller ships it. Never a carrier's name.
+ * into delivery by AfroTransact); an old seller-shipped order (history) says the seller shipped it. Never a carrier's name.
  */
 function modeKey(s: Shipment): MessageKey {
   switch (s.fulfilmentMode) {
-    case 'seller_ships':
-      return 'ord.mode.seller_ships';
+    case 'legacy_seller_shipped':
+      return 'ord.mode.legacy_seller_shipped';
     case 'afrotransact_delivery':
     case 'fulfilled_by_afrotransact':
     case 'preorder_run':

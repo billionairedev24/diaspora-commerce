@@ -180,10 +180,11 @@ function seedOrders(now: Date): SellerOrderDetail[] {
     const stripe = Math.floor(((itemsMinor + shippingMinor) * 290 + 5000) / 10_000) + 30;
     const deliveryFee = local ? 200 : 0;
     const keptShipping = local || fba ? 0 : shippingMinor;
-    // A seller-packed shipment that did not opt into delivery by AfroTransact is the seller's to ship: half of the seed uses the
-    // carrier-label flow (the staff carrier switch on), half ships it themselves (the launch default: tracking or handover details).
+    // A seller-packed shipment that is neither Fulfilled by AfroTransact nor pickup is history from before self-shipping was
+    // retired (legacy_seller_shipped): half were carrier-label parcels, half the seller shipped themselves. The seller has no
+    // steps on the second kind any more (staff finish those with the override).
     const own = !fba && !local && i % 2 === 0;
-    const next = fba
+    const next = fba || own
       ? []
       : status === 'PLACED'
         ? ['CONFIRMED' as const]
@@ -191,11 +192,7 @@ function seedOrders(now: Date): SellerOrderDetail[] {
           ? ['PACKED' as const]
           : status === 'PACKED'
             ? ['READY' as const]
-            : own && status === 'READY'
-              ? ['PICKED_UP' as const]
-              : own && status === 'IN_TRANSIT'
-                ? ['DELIVERED' as const]
-                : [];
+            : [];
     const total = itemsMinor + shippingMinor;
     return {
       orderNumber: `AT-2026-${String(400123 + i * 37).padStart(6, '0')}`,
@@ -212,8 +209,7 @@ function seedOrders(now: Date): SellerOrderDetail[] {
           status,
           statusLabel: SHIPMENT_LABELS[status],
           fulfilment: fba ? 'AFROTRANSACT' : local ? 'AFROTRANSACT_DELIVERY' : 'SELLER',
-          fulfilmentMode: fba ? 'fulfilled_by_afrotransact' : local ? 'afrotransact_delivery' : 'seller_ships',
-          needsShipDetails: own && status === 'READY',
+          fulfilmentMode: fba ? 'fulfilled_by_afrotransact' : local ? 'afrotransact_delivery' : 'legacy_seller_shipped',
           perishable: false,
           lines: [{ title, quantity: qty, unitPriceMinor: price, itemsMinor, variantAtin: `ATADEV${String(i).padStart(4, '0')}`, imageUrl: null }],
           itemsMinor,

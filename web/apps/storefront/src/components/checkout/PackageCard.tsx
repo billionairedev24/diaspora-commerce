@@ -324,7 +324,12 @@ export function PackageCard({
               </div>
             )
           )}
-          {!canPickup && pickupReasonKey(pkg.pickupUnavailableReason) ? (
+          {pkg.noFulfilment ? (
+            <p className={styles.optionDesc} role="alert" data-testid="no-fulfilment">
+              {t('co.noFulfilment')}
+            </p>
+          ) : null}
+          {!canPickup && !pkg.noFulfilment && pickupReasonKey(pkg.pickupUnavailableReason) ? (
             <p className={styles.optionDesc} data-testid="pickup-unavailable">
               {t(pickupReasonKey(pkg.pickupUnavailableReason) ?? 'co.pickupNone.seller')}
             </p>

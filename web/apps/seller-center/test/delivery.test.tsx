@@ -63,7 +63,7 @@ describe('AfroTransact pickup and delivery fee', () => {
     expect((await mockApi().listShipFrom())[1]?.afrotransactPickup.hours).toHaveLength(5);
   });
 
-  it('says plainly who fulfils the orders, and a seller who turns AfroTransact off must confirm they ship them themselves', async () => {
+  it('says plainly who fulfils the orders, and turning AfroTransact off needs no tick (sellers do not ship themselves) but warns that nobody can buy', async () => {
     const user = userEvent.setup();
     await renderScreen(<ShippingView />);
     const cards = await screen.findAllByTestId('shipping-location');
@@ -71,16 +71,26 @@ describe('AfroTransact pickup and delivery fee', () => {
     const toggle = within(mama).getByRole('switch', { name: /AfroTransact picks up here/ });
     expect(toggle).toHaveAttribute('aria-checked', 'true');
     expect(within(mama).getByTestId('fulfilment-mode')).toHaveTextContent('Fulfilled by AfroTransact');
+    expect(within(mama).getByTestId('fulfilment-mode')).toHaveTextContent('paid by the customer');
     expect(within(mama).queryByTestId('self-ship-ack')).toBeNull();
     await user.click(toggle);
-    expect(within(mama).getByTestId('fulfilment-mode')).toHaveTextContent('You ship the orders from this location yourself');
+    expect(within(mama).getByTestId('fulfilment-mode')).not.toHaveTextContent('ship the orders from this location yourself');
+    // Mama Put's kitchen also offers Seller pickup, so customers can still buy from it: no warning.
+    expect(within(mama).queryByText(/No customer can buy from this location yet/)).toBeNull();
+    expect(within(mama).queryByRole('checkbox')).toBeNull();
     const save = within(mama).getByRole('button', { name: 'Save pickup settings' });
-    expect(save).toBeDisabled();
-    expect(within(mama).getByText('Tick the box to confirm you will ship these orders yourself.')).toBeInTheDocument();
-    await user.click(within(within(mama).getByTestId('self-ship-ack')).getByRole('checkbox'));
     expect(save).toBeEnabled();
     await user.click(save);
     await waitFor(async () => expect((await mockApi().listShipFrom())[0]?.afrotransactPickup.enabled).toBe(false));
+  });
+
+  it('tells the seller what to enable when a location offers neither Fulfilled by AfroTransact nor Seller pickup', async () => {
+    await renderScreen(<ShippingView />);
+    const cards = await screen.findAllByTestId('shipping-location');
+    const second = within(cards[1] as HTMLElement).getByRole('form', { name: 'AfroTransact pickup' });
+    expect(within(second).getByRole('switch', { name: /AfroTransact picks up here/ })).toHaveAttribute('aria-checked', 'false');
+    expect(within(second).getByText(/No customer can buy from this location yet/)).toBeInTheDocument();
+    expect(within(second).getByText(/Turn on Fulfilled by AfroTransact below, or Seller pickup in Settings > Pickup/)).toBeInTheDocument();
   });
 
   it('explains why driver pickup can’t be turned on: outside the area, not geocoded', async () => {

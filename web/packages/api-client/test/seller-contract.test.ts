@@ -205,27 +205,18 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
     expect(again.trackingNumber).toBe(label.trackingNumber);
   });
 
-  it('lets a seller who ships it themselves mark it shipped with details and confirm delivery, never offering a label', async () => {
+  it('gives a seller no shipped, tracking or delivered step on an old seller-shipped order: self-shipping is retired', async () => {
     const api = client();
     const row = (await api.listOrders({ status: 'PLACED', limit: 50 })).items.find((r) => Number(r.shipmentId.replace(/\D/g, '')) % 2 === 0 && r.fulfilment === 'SELLER');
-    if (!row) throw new Error('fixture has a seller-shipped placed order');
-    for (const st of ['CONFIRMED', 'PACKED', 'READY'] as const) await api.updateShipmentStatus(row.orderNumber, row.shipmentId, st);
-    let o = await api.getOrder(row.orderNumber);
-    let s = o.shipments[0];
-    expect(s?.fulfilmentMode).toBe('seller_ships');
+    if (!row) throw new Error('fixture has an old seller-shipped placed order');
+    const o = await api.getOrder(row.orderNumber);
+    const s = o.shipments[0];
+    expect(s?.fulfilmentMode).toBe('legacy_seller_shipped');
     expect(s?.canBuyLabel).toBe(false);
-    expect(s?.needsShipDetails).toBe(true);
-    expect(s?.nextActions).toEqual(['PICKED_UP']);
-    // How it left is the seller's to say: nothing, spaces or a path-like tracking number are refused.
-    await expect(api.updateShipmentStatus(row.orderNumber, row.shipmentId, 'PICKED_UP')).rejects.toSatisfy((e) => isApiError(e) && e.status === 422);
-    o = await api.updateShipmentStatus(row.orderNumber, row.shipmentId, 'PICKED_UP', undefined, undefined, { shipNote: 'Handed to Tunde’s courier at 3pm' });
-    s = o.shipments[0];
-    expect(s?.status).toBe('PICKED_UP');
-    expect(s?.proof).toBeNull();
-    expect(s?.nextActions).toEqual(['DELIVERED']);
-    o = await api.updateShipmentStatus(row.orderNumber, row.shipmentId, 'DELIVERED');
-    expect(o.shipments[0]?.status).toBe('DELIVERED');
-    expect(o.shipments[0]?.proof).toBeNull();
+    expect(s?.nextActions).toEqual([]);
+    expect(s).not.toHaveProperty('needsShipDetails');
+    await expect(api.updateShipmentStatus(row.orderNumber, row.shipmentId, 'CONFIRMED')).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);
+    await expect(api.updateShipmentStatus(row.orderNumber, row.shipmentId, 'PICKED_UP')).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);
   });
 
   it('submits a product for review or pending category approval', async () => {

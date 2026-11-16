@@ -3459,7 +3459,7 @@ export interface components {
              *     STOCK_CHANGED, RATE_LIMITED, UPSTREAM_UNAVAILABLE, PHONE_MISSING; product reviews (S324): REVIEW_NOT_VERIFIED_PURCHASE,
              *     REVIEW_ALREADY_EXISTS, REVIEW_EDIT_WINDOW_CLOSED; AfroTransact Delivery from the seller's store
              *     (S255, 422 on place order, `errors.deliverySelections` explains it): DELIVERY_OUT_OF_RANGE, DELIVERY_UNAVAILABLE,
-             *     DELIVERY_PICKUP_UNAVAILABLE, DELIVERY_ADDRESS_NOT_LOCATED; CHECKOUT_ITEM_BLOCKED (422 on place order: a cart line
+             *     DELIVERY_PICKUP_UNAVAILABLE, DELIVERY_ADDRESS_NOT_LOCATED, FULFILMENT_UNAVAILABLE (the seller offers neither Seller pickup nor Fulfilled by AfroTransact for an item); CHECKOUT_ITEM_BLOCKED (422 on place order: a cart line
              *     has no definite tax decision yet; `detail` names the item in plain words, remove it from the cart or try again
              *     later; the summary lists it in `blockedLines`); the sign-out policy (401 on any `/v1` route except
              *     `/v1/auth/*`, the session is already ended and the person must sign in again): SESSION_IDLE_TIMEOUT (no real user
@@ -4206,8 +4206,8 @@ export interface components {
             /**
              * @description Launch shipping (listing rules section 3): `afrotransact_delivery` (plain "Delivery": one flat fee set by staff), `pickup` ($0), `quote_required` (the address
              *     is outside every delivery zone: "Too far for standard delivery. Ask us for a quote"; disabled for payment,
-             *     the order cannot be placed with it) and `carrier` (seller-shipped, only while the staff switch
-             *     sellerCarrierShippingEnabled is on; off at launch). There is no express. No label ever names a carrier.
+             *     the order cannot be placed with it) and `carrier` (retired with seller self-shipping: never offered, whatever
+             *     the old staff switch says). There is no express. No label ever names a carrier.
              * @enum {string}
              */
             key: "carrier" | "afrotransact_delivery" | "pickup" | "quote_required";
@@ -5147,6 +5147,8 @@ export interface components {
                  * @enum {string}
                  */
                 pickupUnavailableReason?: "NEEDS_ADDRESS" | "SELLER_NOT_ENABLED" | "TOO_FAR" | "OTHER_AREA" | "NO_PLATFORM_POINT" | "LOOKUP_FAILED";
+                /** @description The seller offers neither Seller pickup (for this address) nor Fulfilled by AfroTransact for this package, so it cannot be bought (the summary has canPlaceOrder false). Sellers do not ship themselves. Never true while the pickup facts are unknown (no address yet, lookup failed). */
+                noFulfilment?: boolean;
             })[];
             addresses: components["schemas"]["Address"][];
             paymentMethods: components["schemas"]["PaymentMethod"][];
@@ -6063,7 +6065,7 @@ export interface components {
         };
         /**
          * @description How AfroTransact handed the parcel over, shown on a delivered shipment (a driver, or AfroTransact staff with a photo).
-         *     Null for seller-shipped orders (the seller ships and confirms those), carrier deliveries, pickups and deliveries staff
+         *     Null for old seller-shipped orders (history), carrier deliveries, pickups and deliveries staff
          *     confirmed by hand. It is never shown for an order AfroTransact did not deliver. The photo and signature links are
          *     short-lived (about 5 minutes): read the order again for fresh ones. The driver's GPS position is for staff only.
          */
@@ -6154,13 +6156,16 @@ export interface components {
                 statusLabel: string;
                 items: string;
                 sellerName: string;
-                /** @enum {string} */
-                deliveryMethod: "carrier" | "express" | "seller_ships" | "afrotransact_delivery" | "pickup";
                 /**
-                 * @description Who moves it. The app says AfroTransact delivers, and shows delivery proof, only for afrotransact_delivery, fulfilled_by_afrotransact and preorder_run
+                 * @description An order the seller shipped themselves before self-shipping was retired is legacy_seller_shipped (history only, never produced for a new order)
                  * @enum {string}
                  */
-                fulfilmentMode: "seller_ships" | "afrotransact_delivery" | "fulfilled_by_afrotransact" | "pickup" | "preorder_run";
+                deliveryMethod: "carrier" | "express" | "legacy_seller_shipped" | "afrotransact_delivery" | "pickup";
+                /**
+                 * @description Who moves it. Two modes exist: Seller pickup and Fulfilled by AfroTransact (afrotransact_delivery from the seller's location, fulfilled_by_afrotransact from AfroTransact stock); legacy_seller_shipped is history. The app says AfroTransact delivers, and shows delivery proof, only for afrotransact_delivery, fulfilled_by_afrotransact and preorder_run
+                 * @enum {string}
+                 */
+                fulfilmentMode: "legacy_seller_shipped" | "afrotransact_delivery" | "fulfilled_by_afrotransact" | "pickup" | "preorder_run";
                 /** @description Cancel is offered: before the parcel is packed and inside the cancellation window */
                 cancellable: boolean;
                 /**
@@ -6218,12 +6223,12 @@ export interface components {
                 status: string;
                 eta: string | null;
                 /** @enum {string} */
-                method: "carrier" | "express" | "seller_ships" | "afrotransact_delivery" | "pickup";
+                method: "carrier" | "express" | "legacy_seller_shipped" | "afrotransact_delivery" | "pickup";
                 /**
-                 * @description Who moves it. The app names AfroTransact as the deliverer, and shows proof, only for afrotransact_delivery, fulfilled_by_afrotransact and preorder_run
+                 * @description Who moves it. Two modes exist: Seller pickup and Fulfilled by AfroTransact (afrotransact_delivery from the seller's location, fulfilled_by_afrotransact from AfroTransact stock); legacy_seller_shipped is history. The app names AfroTransact as the deliverer, and shows proof, only for afrotransact_delivery, fulfilled_by_afrotransact and preorder_run
                  * @enum {string}
                  */
-                fulfilmentMode: "seller_ships" | "afrotransact_delivery" | "fulfilled_by_afrotransact" | "pickup" | "preorder_run";
+                fulfilmentMode: "legacy_seller_shipped" | "afrotransact_delivery" | "fulfilled_by_afrotransact" | "pickup" | "preorder_run";
                 proof: components["schemas"]["DeliveryProof"];
                 /** @enum {string|null} */
                 handover: "hand" | "door" | "desk" | null;
