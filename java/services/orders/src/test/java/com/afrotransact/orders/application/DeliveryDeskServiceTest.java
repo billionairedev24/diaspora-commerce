@@ -33,6 +33,7 @@ import com.afrotransact.orders.domain.OrdersStateConflict;
 import com.afrotransact.orders.domain.ShipTo;
 import com.afrotransact.orders.domain.Shipment;
 import com.afrotransact.orders.domain.ShipmentStatus;
+import com.afrotransact.orders.domain.TransitionRefused;
 import com.afrotransact.orders.port.FollowUpRepository;
 import com.afrotransact.orders.port.OrderRepository;
 import com.afrotransact.orders.port.ShipmentFeed;
@@ -186,10 +187,75 @@ class DeliveryDeskServiceTest {
     }
 
     @Test
-    void aStepNeedsAnAssigneeFirst() {
-        assertThatThrownBy(() -> desk.pickedUp(shipmentId, key("k1"))).isInstanceOf(OrdersStateConflict.class)
-                .extracting("code").isEqualTo("orders.delivery-unassigned");
+    void aStepWithNoJobTakesTheJobAutomaticallyAndAuditsTheTake() {
+        DeliveryDeskService.Detail d = desk.pickedUp(shipmentId, new DeliveryDeskService.Command(null, "k1",
+                "Collected from the shop, 2 boxes"));
+        assertThat(status()).isEqualTo(ShipmentStatus.PICKED_UP);
+        assertThat(d.row().assigneeName()).isEqualTo("Chidi Nwosu");
+        assertThat(store.audit(shipmentId)).extracting(l -> l.action()).containsExactly("TAKE", "PICKED_UP");
+        assertThat(store.audit(shipmentId).get(1).detail()).containsEntry("note", "Collected from the shop, 2 boxes");
+    }
+
+    @Test
+    void anIllegalStepWithNoJobTakesNothing() {
+        assertThatThrownBy(() -> desk.outForDelivery(shipmentId, key("k1")))
+                .isInstanceOf(TransitionRefused.class);
         assertThat(status()).isEqualTo(ShipmentStatus.READY);
+        assertThat(store.jobs).isEmpty();
+    }
+
+    @Test
+    void inTransitIsOptionalAndNothingElseCanBeSkipped() {
+        assertThatThrownBy(() -> desk.delivered(shipmentId, proof(), key("k0")))
+                .isInstanceOf(TransitionRefused.class);
+        desk.pickedUp(shipmentId, key("k1"));
+        desk.inTransit(shipmentId, key("k2"));
+        assertThat(status()).isEqualTo(ShipmentStatus.IN_TRANSIT);
+        desk.outForDelivery(shipmentId, key("k3"));
+        assertThat(status()).isEqualTo(ShipmentStatus.OUT_FOR_DELIVERY);
+        assertThat(store.audit(shipmentId)).extracting(l -> l.action())
+                .containsExactly("TAKE", "PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY");
+    }
+
+    @Test
+    void aFailedDeliveryNeedsAReasonThenIsReattemptedOrReturned() {
+        desk.pickedUp(shipmentId, key("k1"));
+        desk.outForDelivery(shipmentId, key("k2"));
+        assertThatThrownBy(() -> desk.failed(shipmentId, " ", key("k3"))).isInstanceOf(OrdersRuleViolation.class);
+        desk.failed(shipmentId, "Nobody home, left a card", key("k4"));
+        assertThat(status()).isEqualTo(ShipmentStatus.DELIVERY_FAILED);
+        assertThatThrownBy(() -> desk.returned(shipmentId, "", key("k5"))).isInstanceOf(OrdersRuleViolation.class);
+        desk.returned(shipmentId, "Customer asked for a refund", key("k6"));
+        assertThat(status()).isEqualTo(ShipmentStatus.RETURNED);
+        assertThat(store.audit(shipmentId).getLast().action()).isEqualTo("RETURNED");
+    }
+
+    @Test
+    void returnedIsOnlyAfterAFailedAttempt() {
+        desk.pickedUp(shipmentId, key("k1"));
+        assertThatThrownBy(() -> desk.returned(shipmentId, "changed my mind", key("k2")))
+                .isInstanceOf(TransitionRefused.class);
+        assertThat(status()).isEqualTo(ShipmentStatus.PICKED_UP);
+    }
+
+    @Test
+    void aCallerWhoSawAnOlderStatusIsToldNotOverruled() {
+        desk.pickedUp(shipmentId, key("k1"));
+        assertThatThrownBy(() -> desk.inTransit(shipmentId, new DeliveryDeskService.Command(null, "k2", null,
+                "ready"))).isInstanceOf(OrdersStateConflict.class).extracting("code")
+                .isEqualTo("orders.delivery-status-changed");
+        assertThat(status()).isEqualTo(ShipmentStatus.PICKED_UP);
+    }
+
+    @Test
+    void everyDeskStepIsRefusedWithoutDeliveryManage() {
+        tenants.as(TenantFixture.staff("delivery:read", "orders:manage"));
+        assertThatThrownBy(() -> desk.pickedUp(shipmentId, key("k1"))).isInstanceOf(ForbiddenActionException.class);
+        assertThatThrownBy(() -> desk.inTransit(shipmentId, key("k2"))).isInstanceOf(ForbiddenActionException.class);
+        assertThatThrownBy(() -> desk.returned(shipmentId, "x y z", key("k3")))
+                .isInstanceOf(ForbiddenActionException.class);
+        assertThat(status()).isEqualTo(ShipmentStatus.READY);
+        assertThat(store.audit(shipmentId)).isEmpty();
     }
 
     @Test
@@ -244,7 +310,7 @@ class DeliveryDeskServiceTest {
         assertThat(status()).isEqualTo(ShipmentStatus.DELIVERY_FAILED);
         assertThat(failed.job().attempts()).isEqualTo(1);
         assertThat(failed.job().lastFailure()).isEqualTo("Nobody home, left a card");
-        assertThat(failed.nextStatuses()).containsExactly("out_for_delivery");
+        assertThat(failed.nextStatuses()).containsExactly("out_for_delivery", "returned");
 
         desk.outForDelivery(shipmentId, key("k6"));
         assertThat(status()).isEqualTo(ShipmentStatus.OUT_FOR_DELIVERY);

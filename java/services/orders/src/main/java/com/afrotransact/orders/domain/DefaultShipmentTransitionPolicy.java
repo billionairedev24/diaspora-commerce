@@ -43,6 +43,9 @@ public final class DefaultShipmentTransitionPolicy implements ShipmentTransition
         if (actor == ActorKind.PICKUP_POINT) {
             return pickupReady(shipment, to);
         }
+        if (actor == ActorKind.ADMIN_OVERRIDE) {
+            return override(shipment, to);
+        }
         if (actor == ActorKind.DELIVERY_STAFF && !shipment.fulfilmentMode().staffDelivers()) {
             throw TransitionRefused.forbidden("AfroTransact only delivers shipments fulfilled by AfroTransact or "
                     + "sent to AfroTransact Delivery by their seller; the seller ships this one");
@@ -139,6 +142,31 @@ public final class DefaultShipmentTransitionPolicy implements ShipmentTransition
         return TransitionDecision.allow();
     }
 
+    /**
+     * An administrator with orders:override-shipment correcting a shipment the seller ships (SELLER_SHIPS): any later
+     * step, never backwards, never a terminal shipment (a delivered one can still be marked returned). A reason is
+     * required by the use case. It never applies to AfroTransact-delivered or pickup shipments.
+     */
+    private static TransitionDecision override(Shipment s, ShipmentStatus to) {
+        if (s.fulfilmentMode() != FulfilmentMode.SELLER_SHIPS) {
+            throw TransitionRefused.forbidden("Only a shipment the seller ships can be overridden; AfroTransact "
+                    + "moves the others with the delivery steps");
+        }
+        ShipmentStatus from = s.status();
+        if (from == to) {
+            return TransitionDecision.unchanged();
+        }
+        boolean returnAfterDelivery = from == ShipmentStatus.DELIVERED && to == ShipmentStatus.RETURNED;
+        boolean forward = to != ShipmentStatus.CANCELLED && to.rank() > from.rank() && !from.terminal()
+                && from != ShipmentStatus.PENDING_PAYMENT && from != ShipmentStatus.PLACED
+                && to.rank() >= ShipmentStatus.CONFIRMED.rank();
+        boolean cancel = to == ShipmentStatus.CANCELLED && BEFORE_PICKUP.contains(from);
+        if (!(forward || returnAfterDelivery || cancel)) {
+            throw TransitionRefused.invalid(from, to);
+        }
+        return TransitionDecision.allow();
+    }
+
     private static Map<ShipmentStatus, Set<ShipmentStatus>> rules(ActorKind actor, FulfilmentType type,
                                                                   DeliveryMethod method) {
         return switch (actor) {
@@ -150,7 +178,7 @@ public final class DefaultShipmentTransitionPolicy implements ShipmentTransition
             case PLATFORM_ADMIN -> type == FulfilmentType.SELLER_FULFILLED ? oversight(method) : everyStep(method);
             case FULFILMENT_OPS -> type == FulfilmentType.SELLER_FULFILLED ? Map.of() : everyStep(method);
             case DELIVERY_STAFF -> deliveryStaffSteps();
-            case CARRIER, COURIER, PICKUP_POINT -> Map.of();
+            case CARRIER, COURIER, PICKUP_POINT, ADMIN_OVERRIDE -> Map.of();
         };
     }
 
@@ -195,19 +223,31 @@ public final class DefaultShipmentTransitionPolicy implements ShipmentTransition
         m.put(ShipmentStatus.RETURNED, EnumSet.of(ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY,
                 ShipmentStatus.DELIVERY_FAILED, ShipmentStatus.DELIVERED));
         m.put(ShipmentStatus.CANCELLED, EnumSet.copyOf(BEFORE_PICKUP));
+        if (method == DeliveryMethod.PICKUP) {
+            // Store pickup: staff can say it is ready when the shop has not (the seller's own step otherwise) and that
+            // nobody came: "not collected" is a return of the order to the seller, refunded through Returns.
+            m.put(ShipmentStatus.READY, EnumSet.of(ShipmentStatus.CONFIRMED, ShipmentStatus.PACKED));
+            m.get(ShipmentStatus.RETURNED).add(ShipmentStatus.READY);
+        }
         return m;
     }
 
     /**
-     * Delivery staff (Delivery module): the steps after the package is ready. A failed attempt may be tried again
-     * (out for delivery from delivery failed). Returns and cancellations stay with orders:manage.
+     * Delivery staff (Delivery module, delivery:manage): the steps after the package is ready: picked up from the
+     * seller, in transit (optional), out for delivery, delivered (with proof), failed (with a reason). A failed attempt
+     * is tried again (out for delivery from delivery failed) or the parcel is returned. Nothing can be skipped.
+     * Cancellations and returns of a delivered order stay with orders:manage.
      */
     private static Map<ShipmentStatus, Set<ShipmentStatus>> deliveryStaffSteps() {
         Map<ShipmentStatus, Set<ShipmentStatus>> m = new EnumMap<>(ShipmentStatus.class);
         m.put(ShipmentStatus.PICKED_UP, EnumSet.of(ShipmentStatus.READY));
+        // In transit is optional (a short local run goes straight from picked up to out for delivery).
+        m.put(ShipmentStatus.IN_TRANSIT, EnumSet.of(ShipmentStatus.PICKED_UP));
         m.put(ShipmentStatus.OUT_FOR_DELIVERY, EnumSet.of(ShipmentStatus.PICKED_UP, ShipmentStatus.IN_TRANSIT,
                 ShipmentStatus.DELIVERY_FAILED));
         m.put(ShipmentStatus.DELIVERED, EnumSet.of(ShipmentStatus.OUT_FOR_DELIVERY));
+        // A parcel that cannot be delivered after a failed attempt goes back to the seller.
+        m.put(ShipmentStatus.RETURNED, EnumSet.of(ShipmentStatus.DELIVERY_FAILED));
         m.put(ShipmentStatus.DELIVERY_FAILED, EnumSet.of(ShipmentStatus.PICKED_UP, ShipmentStatus.IN_TRANSIT,
                 ShipmentStatus.OUT_FOR_DELIVERY));
         return m;

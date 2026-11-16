@@ -130,12 +130,14 @@ class FulfilmentModeTransitionTest {
         assertThat(POLICY.nextFor(s, ActorKind.DELIVERY_STAFF)).containsExactly(ShipmentStatus.PICKED_UP);
         s = fba(ShipmentStatus.PICKED_UP);
         assertThat(POLICY.nextFor(s, ActorKind.DELIVERY_STAFF))
-                .containsExactlyInAnyOrder(ShipmentStatus.OUT_FOR_DELIVERY, ShipmentStatus.DELIVERY_FAILED);
+                .containsExactlyInAnyOrder(ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY,
+                        ShipmentStatus.DELIVERY_FAILED);
         s = fba(ShipmentStatus.OUT_FOR_DELIVERY);
         assertThat(POLICY.nextFor(s, ActorKind.DELIVERY_STAFF))
                 .containsExactlyInAnyOrder(ShipmentStatus.DELIVERED, ShipmentStatus.DELIVERY_FAILED);
         s = fba(ShipmentStatus.DELIVERY_FAILED);
-        assertThat(POLICY.nextFor(s, ActorKind.DELIVERY_STAFF)).containsExactly(ShipmentStatus.OUT_FOR_DELIVERY);
+        assertThat(POLICY.nextFor(s, ActorKind.DELIVERY_STAFF))
+                .containsExactlyInAnyOrder(ShipmentStatus.OUT_FOR_DELIVERY, ShipmentStatus.RETURNED);
     }
 
     @Test

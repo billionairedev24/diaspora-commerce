@@ -70,6 +70,7 @@ public class TransitionRefused extends RuntimeException {
             case FULFILMENT_OPS -> "Fulfilment ops";
             case CARRIER -> "Carriers";
             case DELIVERY_STAFF -> "Delivery staff";
+            case ADMIN_OVERRIDE -> "An administrator";
             case COURIER -> "AfroTransact Delivery couriers";
             case PICKUP_POINT -> "Pickup points";
             case SYSTEM -> "The checkout saga";

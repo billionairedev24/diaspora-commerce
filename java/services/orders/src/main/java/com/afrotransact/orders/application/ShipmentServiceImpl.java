@@ -2,7 +2,9 @@ package com.afrotransact.orders.application;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.EnumSet;
 import java.util.Locale;
+import java.util.Set;
 
 import com.afrotransact.orders.domain.ActorKind;
 import com.afrotransact.orders.domain.CourierProofPolicy;
@@ -19,12 +21,18 @@ import com.afrotransact.orders.domain.TransitionSource;
 import com.afrotransact.orders.port.OrderRepository;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PrincipalType;
+import com.afrotransact.platform.web.error.ForbiddenActionException;
 import com.afrotransact.platform.web.error.NotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 class ShipmentServiceImpl implements ShipmentService {
+
+    /** The delivery steps of an AfroTransact-delivered shipment (see {@link #requireDeliverySteps}). */
+    private static final Set<ShipmentStatus> DESK_STEPS = EnumSet.of(ShipmentStatus.PICKED_UP,
+            ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY, ShipmentStatus.DELIVERED,
+            ShipmentStatus.DELIVERY_FAILED);
 
     private final OrdersAccess access;
     private final OrderRepository orders;
@@ -56,9 +64,46 @@ class ShipmentServiceImpl implements ShipmentService {
         ShipmentTransitions.Outcome outcome = transitions.apply(new ShipmentTransitions.Request(shipmentId, target,
                 (o, s) -> access.transitionActor(o, s), reason, TransitionSource.API, idempotencyKey, null, null,
                 s -> {
+                    requireDeliverySteps(s, target);
                     checkSellerShipDetails(s, target, reason);
                     checkPickupHandover(s, target, handoverCode, reason);
                 }));
+        return result(outcome);
+    }
+
+    /**
+     * The statuses of an AfroTransact-delivered shipment that people at the console set with the delivery steps (the
+     * Delivery module, delivery:manage): the same steps, proof and audit as the Delivery queue. The general transition
+     * endpoint refuses them for people, so the proof and the audit cannot be skipped by calling it directly. Services
+     * (fulfilment relay, carriers, couriers) are unaffected.
+     */
+    private void requireDeliverySteps(Shipment s, ShipmentStatus target) {
+        if (!s.fulfilmentMode().staffDelivers() || s.status() == target || !access.humanStaff()) {
+            return;
+        }
+        boolean deskStep = DESK_STEPS.contains(target)
+                || target == ShipmentStatus.RETURNED && s.status() == ShipmentStatus.DELIVERY_FAILED;
+        if (deskStep) {
+            throw new ForbiddenActionException("orders.use-delivery-steps", "AfroTransact delivers this order: "
+                    + "move it with the delivery steps (permission delivery:manage), not the general status change");
+        }
+    }
+
+    @Override
+    @Transactional
+    public ShipmentActionResult override(String shipmentId, String to, String reason, String idempotencyKey) {
+        ShipmentStatus target = status(to);
+        String why = reason == null ? "" : reason.strip();
+        if (why.length() < 3) {
+            throw new OrdersRuleViolation("orders.override-reason-required",
+                    "Say why you are overriding the seller's status (at least a few words)");
+        }
+        if (why.length() > 500) {
+            throw new OrdersRuleViolation("orders.reason-too-long", "The reason can be up to 500 characters");
+        }
+        String key = idempotencyKey == null || idempotencyKey.isBlank() ? null : "override:" + idempotencyKey.trim();
+        ShipmentTransitions.Outcome outcome = transitions.apply(new ShipmentTransitions.Request(shipmentId, target,
+                (o, s) -> access.overrideActor(o, s), why, TransitionSource.API, key, null, null, s -> { }));
         return result(outcome);
     }
 
