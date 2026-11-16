@@ -147,9 +147,9 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
     }
 
     /**
-     * The fulfilment mode of this shipment. A seller-packed shipment sent to AfroTransact Delivery without the
-     * seller-store snapshot is one the old checkout mislabelled (the seller never opted in); it is treated as
-     * seller-ships, which is also what the data fix migration makes of it.
+     * The fulfilment mode of this shipment. Only Seller pickup and Fulfilled by AfroTransact exist. What the old checkout
+     * let a seller ship themselves (the SELLER_SHIPS and CARRIER methods, or a seller-packed AfroTransact Delivery
+     * without the seller-store snapshot) reads as {@link FulfilmentMode#LEGACY_SELLER_SHIPPED}: history, never new.
      */
     public FulfilmentMode fulfilmentMode() {
         if (fulfilmentType == FulfilmentType.PREORDER) {
@@ -159,21 +159,26 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
             return FulfilmentMode.PICKUP;
         }
         if (deliveryMethod == DeliveryMethod.SELLER_SHIPS || deliveryMethod == DeliveryMethod.CARRIER) {
-            return FulfilmentMode.SELLER_SHIPS;
+            return FulfilmentMode.LEGACY_SELLER_SHIPPED;
         }
         if (fulfilmentType.afrotransactFulfilled()) {
             return FulfilmentMode.FULFILLED_BY_AFROTRANSACT;
         }
-        return localDelivery != null ? FulfilmentMode.AFROTRANSACT_DELIVERY : FulfilmentMode.SELLER_SHIPS;
+        return localDelivery != null ? FulfilmentMode.AFROTRANSACT_DELIVERY : FulfilmentMode.LEGACY_SELLER_SHIPPED;
     }
 
     /**
-     * The seller is responsible for moving this shipment: a seller-packed shipment the seller sends themselves (their own
-     * courier, a label they bought). A shipment AfroTransact packs is never the seller's to update, even when it travels
-     * by carrier.
+     * A seller-packed shipment from before self-shipping was retired (their own courier, a label they bought): history.
+     * Nobody moves it except staff with orders:override-shipment (and the carrier's tracking for a carrier parcel).
      */
-    public boolean sellerResponsible() {
-        return fulfilmentMode() == FulfilmentMode.SELLER_SHIPS && fulfilmentType == FulfilmentType.SELLER_FULFILLED;
+    public boolean legacySellerShipped() {
+        return fulfilmentMode().legacy() && fulfilmentType == FulfilmentType.SELLER_FULFILLED;
+    }
+
+    /** The shipments the admin override may correct: Fulfilled by AfroTransact, and legacy seller-shipped history. */
+    public boolean overridable() {
+        FulfilmentMode mode = fulfilmentMode();
+        return mode.staffDelivers() || mode.legacy();
     }
 
     /** A community pre-order shipment (S272). */
@@ -281,9 +286,9 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
 
     /** Records the carrier label so tracking webhooks can be matched to this shipment. */
     public Shipment withTracking(String newCarrier, String newTrackingNumber) {
-        if (deliveryMethod != DeliveryMethod.CARRIER && deliveryMethod != DeliveryMethod.SELLER_SHIPS) {
+        if (deliveryMethod != DeliveryMethod.CARRIER) {
             throw new OrdersRuleViolation("orders.not-carrier-shipment",
-                    "Only seller-shipped shipments have tracking numbers");
+                    "Only legacy carrier parcels have tracking numbers; sellers no longer ship orders themselves");
         }
         if (status.terminal()) {
             throw new OrdersStateConflict("orders.shipment-closed", "The shipment is already " + status.wire());

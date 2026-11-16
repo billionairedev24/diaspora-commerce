@@ -12,15 +12,14 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 /**
- * The state machine per fulfilment mode, including the regression behind "waiting for admin to assign a driver":
- * a seller-shipped order must be shipped and delivered by the seller and must never need an AfroTransact driver or
- * delivery staff.
+ * The state machine per fulfilment mode. Only Seller pickup and Fulfilled by AfroTransact exist; seller self-shipping
+ * is retired, so a legacy seller-shipped shipment is history: the seller cannot move it, delivery staff never see it.
  */
 class FulfilmentModeTransitionTest {
 
     private static final ShipmentTransitionPolicy POLICY = new DefaultShipmentTransitionPolicy();
 
-    private static Shipment sellerShips(ShipmentStatus status) {
+    private static Shipment legacySellerShipped(ShipmentStatus status) {
         return Shipments.of(FulfilmentType.SELLER_FULFILLED, DeliveryMethod.SELLER_SHIPS, status);
     }
 
@@ -40,7 +39,7 @@ class FulfilmentModeTransitionTest {
 
     @Test
     void modeIsDerivedFromWhatTheShipmentCarries() {
-        assertThat(sellerShips(ShipmentStatus.READY).fulfilmentMode()).isEqualTo(FulfilmentMode.SELLER_SHIPS);
+        assertThat(legacySellerShipped(ShipmentStatus.READY).fulfilmentMode()).isEqualTo(FulfilmentMode.LEGACY_SELLER_SHIPPED);
         assertThat(sellerOptedIn(ShipmentStatus.READY).fulfilmentMode())
                 .isEqualTo(FulfilmentMode.AFROTRANSACT_DELIVERY);
         assertThat(fba(ShipmentStatus.READY).fulfilmentMode()).isEqualTo(FulfilmentMode.FULFILLED_BY_AFROTRANSACT);
@@ -52,45 +51,34 @@ class FulfilmentModeTransitionTest {
 
     /** A package the old checkout mislabelled (AfroTransact Delivery, seller-packed, no seller-store snapshot). */
     @Test
-    void mislabelledLegacySellerPackageCountsAsSellerShips() {
+    void mislabelledLegacySellerPackageIsLegacyHistory() {
         Shipment legacy = Shipments.of(FulfilmentType.SELLER_FULFILLED, DeliveryMethod.AFROTRANSACT_DELIVERY,
                 ShipmentStatus.READY);
-        assertThat(legacy.fulfilmentMode()).isEqualTo(FulfilmentMode.SELLER_SHIPS);
+        assertThat(legacy.fulfilmentMode()).isEqualTo(FulfilmentMode.LEGACY_SELLER_SHIPPED);
         assertThat(legacy.fulfilmentMode().staffDelivers()).isFalse();
     }
 
     @Test
     void onlyAfroTransactDeliveredModesEnterTheStaffQueue() {
-        assertThat(FulfilmentMode.SELLER_SHIPS.staffDelivers()).isFalse();
+        assertThat(FulfilmentMode.LEGACY_SELLER_SHIPPED.staffDelivers()).isFalse();
         assertThat(FulfilmentMode.PICKUP.staffDelivers()).isFalse();
         assertThat(FulfilmentMode.PREORDER_RUN.staffDelivers()).isFalse();
         assertThat(FulfilmentMode.AFROTRANSACT_DELIVERY.staffDelivers()).isTrue();
         assertThat(FulfilmentMode.FULFILLED_BY_AFROTRANSACT.staffDelivers()).isTrue();
-        assertThat(FulfilmentMode.SELLER_SHIPS.deliveredByAfroTransact()).isFalse();
+        assertThat(FulfilmentMode.LEGACY_SELLER_SHIPPED.deliveredByAfroTransact()).isFalse();
     }
 
     @Test
-    void sellerShipsSellerMarksShippedFromPackedOrReadyAndDelivered() {
-        assertThat(POLICY.nextFor(sellerShips(ShipmentStatus.PACKED), ActorKind.SELLER))
-                .contains(ShipmentStatus.READY, ShipmentStatus.PICKED_UP);
-        assertThat(POLICY.nextFor(sellerShips(ShipmentStatus.READY), ActorKind.SELLER))
-                .containsExactly(ShipmentStatus.PICKED_UP);
-        assertThat(POLICY.nextFor(sellerShips(ShipmentStatus.PICKED_UP), ActorKind.SELLER))
-                .containsExactly(ShipmentStatus.DELIVERED);
-        assertThat(POLICY.nextFor(sellerShips(ShipmentStatus.OUT_FOR_DELIVERY), ActorKind.SELLER))
-                .containsExactly(ShipmentStatus.DELIVERED);
-    }
-
-    /** The regression: a seller-shipped order at READY is not waiting for anybody at AfroTransact. */
-    @Test
-    void sellerShipsAtReadyOffersTheSellerAStepAndNeverNeedsDeliveryStaff() {
-        Shipment ready = sellerShips(ShipmentStatus.READY);
-        assertThat(POLICY.nextFor(ready, ActorKind.SELLER)).isNotEmpty();
-        assertThat(POLICY.nextFor(ready, ActorKind.DELIVERY_STAFF)).isEmpty();
-        assertThatThrownBy(() -> POLICY.decide(ready, ShipmentStatus.OUT_FOR_DELIVERY, ActorKind.DELIVERY_STAFF))
-                .isInstanceOf(TransitionRefused.class);
-        assertThatThrownBy(() -> POLICY.decide(ready, ShipmentStatus.PICKED_UP, ActorKind.DELIVERY_STAFF))
-                .isInstanceOf(TransitionRefused.class);
+    void legacySellerShippedOffersTheSellerNothing() {
+        for (ShipmentStatus status : ShipmentStatus.values()) {
+            assertThat(POLICY.nextFor(legacySellerShipped(status), ActorKind.SELLER)).as(status.name()).isEmpty();
+            assertThat(POLICY.nextFor(legacySellerShipped(status), ActorKind.DELIVERY_STAFF)).as(status.name())
+                    .isEmpty();
+        }
+        assertThatThrownBy(() -> POLICY.decide(legacySellerShipped(ShipmentStatus.READY), ShipmentStatus.PICKED_UP,
+                ActorKind.SELLER)).isInstanceOf(TransitionRefused.class);
+        assertThatThrownBy(() -> POLICY.decide(legacySellerShipped(ShipmentStatus.READY),
+                ShipmentStatus.OUT_FOR_DELIVERY, ActorKind.DELIVERY_STAFF)).isInstanceOf(TransitionRefused.class);
     }
 
     @Test
@@ -101,17 +89,16 @@ class FulfilmentModeTransitionTest {
     }
 
     @Test
-    void sellerShipsNeverTakesCourierEvents() {
-        Shipment shipped = sellerShips(ShipmentStatus.PICKED_UP);
+    void legacySellerShippedNeverTakesCourierEvents() {
+        Shipment shipped = legacySellerShipped(ShipmentStatus.PICKED_UP);
         assertThatThrownBy(() -> POLICY.decide(shipped, ShipmentStatus.OUT_FOR_DELIVERY, ActorKind.COURIER))
                 .isInstanceOf(TransitionRefused.class);
     }
 
     @Test
-    void sellerShipsSellerDoesNotNeedACarrierLabel() {
-        Shipment ready = sellerShips(ShipmentStatus.READY).withTracking("local", "");
-        assertThat(POLICY.decide(ready, ShipmentStatus.PICKED_UP, ActorKind.SELLER).kind())
-                .isEqualTo(TransitionDecision.Kind.ALLOW);
+    void legacySellerShippedCannotGainTrackingAnymore() {
+        assertThatThrownBy(() -> legacySellerShipped(ShipmentStatus.READY).withTracking("local", "T1"))
+                .isInstanceOf(OrdersRuleViolation.class);
     }
 
     @Test

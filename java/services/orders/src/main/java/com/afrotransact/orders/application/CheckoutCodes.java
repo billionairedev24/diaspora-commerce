@@ -28,6 +28,11 @@ public final class CheckoutCodes {
     public static final String DELIVERY_UNAVAILABLE = "orders.delivery-unavailable";
     /** S255: the offer's pickup location is unknown, not geocoded or no longer enabled for AfroTransact pickup. */
     public static final String DELIVERY_PICKUP_UNAVAILABLE = "orders.delivery-pickup-unavailable";
+    /**
+     * The seller offers neither Seller pickup nor Fulfilled by AfroTransact for this item, so it cannot be bought (422).
+     * Seller self-shipping is not supported; a package is never guessed into a fulfilment mode.
+     */
+    public static final String FULFILMENT_UNAVAILABLE = "orders.fulfilment-unavailable";
     /** S272: a cart line is a pre-order whose window is upcoming or closed (not open): it cannot be bought now. */
     public static final String PREORDER_NOT_OPEN = "orders.preorder-not-open";
     /** S272: a late pre-order add names a product that is not sold in that window at the customer's address. */

@@ -13,7 +13,8 @@ public interface ShipmentService {
 
     /**
      * {@code POST /v1/shipments/{id}/override}: staff holding {@code orders:override-shipment} correct the status of a
-     * shipment the seller ships (SELLER_SHIPS), forward only. The reason is required and is kept with who and when.
+     * shipment Fulfilled by AfroTransact (or an old seller-shipped one), forward only. The reason is required and is
+     * kept with who and when.
      */
     ShipmentActionResult override(String shipmentId, String to, String reason, String idempotencyKey);
 

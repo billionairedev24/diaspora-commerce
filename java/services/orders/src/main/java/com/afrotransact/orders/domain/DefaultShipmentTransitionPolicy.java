@@ -10,8 +10,9 @@ import java.util.Set;
 /**
  * Architecture §17c "Who can do what", enforced here rather than in any UI:
  * <ul>
- *   <li><b>Seller-fulfilled</b>: only the seller confirms, packs and marks ready, marks a carrier parcel shipped
- *       (handed to the carrier, once a label exists), confirms it delivered when the carrier's tracking has not, and hands a pickup order to the customer at its own shop. Carriers (webhooks) and AfroTransact Delivery couriers move the transit steps.
+ *   <li><b>Seller-fulfilled</b>: only the seller confirms, packs and marks ready, and hands a pickup order to the
+ *       customer at its own shop. Seller self-shipping is not supported: a seller never marks an order shipped or
+ *       delivered (a legacy carrier parcel already in flight is the one exception). Carriers (webhooks) and AfroTransact Delivery couriers move the transit steps.
  *       Platform admins may confirm delivery, record a failure, process returns or cancel — never "packed" (nor
  *       confirmed / ready).</li>
  *   <li><b>Fulfilled by AfroTransact / AfroTransact Retail</b>: admins and fulfilment ops own every step; carriers
@@ -47,8 +48,13 @@ public final class DefaultShipmentTransitionPolicy implements ShipmentTransition
             return override(shipment, to);
         }
         if (actor == ActorKind.DELIVERY_STAFF && !shipment.fulfilmentMode().staffDelivers()) {
-            throw TransitionRefused.forbidden("AfroTransact only delivers shipments fulfilled by AfroTransact or "
-                    + "sent to AfroTransact Delivery by their seller; the seller ships this one");
+            throw TransitionRefused.forbidden("AfroTransact only delivers shipments Fulfilled by AfroTransact; this "
+                    + "one is not (it is a pickup order or an old seller-shipped one)");
+        }
+        if (actor == ActorKind.SELLER && shipment.fulfilmentMode().legacy()
+                && shipment.deliveryMethod() != DeliveryMethod.CARRIER) {
+            throw TransitionRefused.forbidden("Sellers can no longer ship orders themselves. This order is history; "
+                    + "AfroTransact staff finish it");
         }
         Map<ShipmentStatus, Set<ShipmentStatus>> rules = rules(actor, shipment.fulfilmentType(),
                 shipment.deliveryMethod());
@@ -143,14 +149,15 @@ public final class DefaultShipmentTransitionPolicy implements ShipmentTransition
     }
 
     /**
-     * An administrator with orders:override-shipment correcting a shipment the seller ships (SELLER_SHIPS): any later
-     * step, never backwards, never a terminal shipment (a delivered one can still be marked returned). A reason is
-     * required by the use case. It never applies to AfroTransact-delivered or pickup shipments.
+     * An administrator with orders:override-shipment correcting a shipment Fulfilled by AfroTransact, or an old
+     * seller-shipped one (legacy history): any later step, never backwards, never a terminal shipment (a delivered one
+     * can still be marked returned). A reason is required by the use case. It never applies to pickup or pre-order
+     * shipments, whose steps are theirs.
      */
     private static TransitionDecision override(Shipment s, ShipmentStatus to) {
-        if (!s.sellerResponsible()) {
-            throw TransitionRefused.forbidden("Only a shipment the seller ships can be overridden; AfroTransact "
-                    + "moves the others with the delivery steps");
+        if (!s.overridable()) {
+            throw TransitionRefused.forbidden("Only a shipment Fulfilled by AfroTransact (or an old seller-shipped "
+                    + "one) can be overridden; pickup orders move with the pickup steps");
         }
         ShipmentStatus from = s.status();
         if (from == to) {
@@ -158,8 +165,7 @@ public final class DefaultShipmentTransitionPolicy implements ShipmentTransition
         }
         boolean returnAfterDelivery = from == ShipmentStatus.DELIVERED && to == ShipmentStatus.RETURNED;
         boolean forward = to != ShipmentStatus.CANCELLED && to.rank() > from.rank() && !from.terminal()
-                && from != ShipmentStatus.PENDING_PAYMENT && from != ShipmentStatus.PLACED
-                && to.rank() >= ShipmentStatus.CONFIRMED.rank();
+                && from != ShipmentStatus.PENDING_PAYMENT && to.rank() >= ShipmentStatus.CONFIRMED.rank();
         boolean cancel = to == ShipmentStatus.CANCELLED && BEFORE_PICKUP.contains(from);
         if (!(forward || returnAfterDelivery || cancel)) {
             throw TransitionRefused.invalid(from, to);
@@ -191,14 +197,8 @@ public final class DefaultShipmentTransitionPolicy implements ShipmentTransition
         if (method == DeliveryMethod.PICKUP) {
             m.put(ShipmentStatus.DELIVERED, EnumSet.of(ShipmentStatus.READY));
         }
-        if (method == DeliveryMethod.SELLER_SHIPS) {
-            // "Shipped": the seller sends it (tracking or handover details are checked by the use case); "Delivered":
-            // the seller confirms it. Nothing here ever reaches an AfroTransact driver or staff queue.
-            m.put(ShipmentStatus.PICKED_UP, EnumSet.of(ShipmentStatus.PACKED, ShipmentStatus.READY));
-            m.put(ShipmentStatus.DELIVERED, EnumSet.of(ShipmentStatus.PICKED_UP, ShipmentStatus.IN_TRANSIT,
-                    ShipmentStatus.OUT_FOR_DELIVERY));
-        }
         if (method == DeliveryMethod.CARRIER) {
+            // LEGACY parcels already in flight; no new carrier shipment is created (self-shipping is retired).
             // "Shipped": the parcel with its label is handed to the carrier; the carrier's tracking moves it on.
             m.put(ShipmentStatus.PICKED_UP, EnumSet.of(ShipmentStatus.READY));
             // "Delivered": the carrier's tracking normally reports it; when it does not (no webhook, a tracking gap)
