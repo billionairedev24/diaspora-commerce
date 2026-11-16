@@ -893,31 +893,6 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/BillingSettings'
-  /v1/billing/stripe-sync:
-    get:
-      tags:
-      - Plan catalogue
-      summary: Drift between our plan versions and Stripe (nothing changes)
-      operationId: planSyncReport
-      responses:
-        '200':
-          description: OK
-          content:
-            '*/*':
-              schema:
-                $ref: '#/components/schemas/PlanSyncReport'
-    post:
-      tags:
-      - Plan catalogue
-      summary: 'Sync with Stripe: adopt matching Prices, create missing ones, replace drifted ones'
-      operationId: syncPlans
-      responses:
-        '200':
-          description: OK
-          content:
-            '*/*':
-              schema:
-                $ref: '#/components/schemas/PlanSyncReport'
   /v1/billing/trial-campaigns:
     get:
       tags:
@@ -1708,14 +1683,14 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Invoice'
-  /v1/orgs/{orgId}/billing/invoices/{invoiceId}/pdf:
+  /v1/orgs/{orgId}/billing/invoices/{invoiceId}/document:
     get:
       tags:
       - Plans & billing
-      summary: Download an invoice PDF (owner / finance)
-      description: 302 to the invoice's Stripe PDF; 404 seller.invoice-not-found, 404 seller.invoice-pdf-missing while Stripe
-        has not finalised the invoice.
-      operationId: downloadInvoicePdf
+      summary: A printable invoice (owner / finance)
+      description: Self-contained printable HTML (the browser's Print, Save as PDF makes the PDF). 404 seller.invoice-not-found.
+        Plan invoices are issued by AfroTransact itself, so there is no Stripe-hosted PDF to redirect to.
+      operationId: invoiceDocument
       parameters:
       - name: orgId
         in: path
@@ -1730,6 +1705,10 @@ paths:
       responses:
         '200':
           description: OK
+          content:
+            text/html:
+              schema:
+                type: string
   /v1/orgs/{orgId}/billing/invoices/{invoiceId}/waive:
     post:
       tags:
@@ -5710,63 +5689,6 @@ components:
       properties:
         status:
           type: string
-    PlanSyncLine:
-      type: object
-      properties:
-        planCode:
-          type: string
-        planName:
-          type: string
-        version:
-          type: integer
-          format: int32
-        cadence:
-          type: string
-        amountCents:
-          type: integer
-          format: int64
-        lookupKey:
-          type: string
-        state:
-          type: string
-          enum:
-          - IN_SYNC
-          - FREE
-          - ADOPTABLE
-          - MISSING
-          - DRIFT
-          - SUPERSEDED
-        action:
-          type: string
-          enum:
-          - NONE
-          - ADOPTED
-          - CREATED
-          - REPLACED
-          - FAILED
-        stripePriceId:
-          type: string
-        stripeAmountCents:
-          type: integer
-          format: int64
-        error:
-          type: string
-    PlanSyncReport:
-      type: object
-      description: Drift between our plan versions and Stripe; applied = the sync ran
-      properties:
-        checkedAt:
-          type: string
-          format: date-time
-        applied:
-          type: boolean
-        drifted:
-          type: integer
-          format: int64
-        lines:
-          type: array
-          items:
-            $ref: '#/components/schemas/PlanSyncLine'
     RewardPreview:
       type: object
       description: Who qualifies now (best first, at most 500 rows)

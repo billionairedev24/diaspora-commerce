@@ -60,9 +60,11 @@ and delivery-runs enabled**; fulfilment off (no PostGIS here), ai-gateway and mc
 | Live on the core port with no prefix | same |
 | Live under `/modules/<name>/` | same (3 seller routes) |
 
-The three seller entries (`GET` and `POST /v1/billing/stripe-sync`, `GET /v1/orgs/{orgId}/billing/invoices/{invoiceId}/pdf`) are in
-`contracts/openapi/seller.yaml` and `java/services/seller/README.md` but **no controller implements them on `main` either** (the controller serves `.../document`);
-not a release-1 regression, not fixed here (a product decision: implement or drop from the contract). `contracts/openapi/orders.yaml` **did not parse as
+The three seller entries (`GET` and `POST /v1/billing/stripe-sync`, `GET /v1/orgs/{orgId}/billing/invoices/{invoiceId}/pdf`) were in
+`contracts/openapi/seller.yaml` and `java/services/seller/README.md` but no controller implemented them, on `main` either. **Resolved: dropped** (no
+caller, and the Stripe Billing objects they describe were removed by the own-billing design); the invoice route that exists, `.../document`, is now in the
+contract. See `docs/engineering/plans-and-billing.md` (section "Routes dropped"). After this change the seller contract has no unmapped route.
+`contracts/openapi/orders.yaml` **did not parse as
 YAML** (an unquoted colon in a response description; also broken on `main`): fixed, which also makes `route_diff.py` usable on it. Orders' contract
 lists `POST /v1/orders`: it exists (an alias of `POST /v1/checkout`); the first scanner version missed the array mapping, now fixed.
 
