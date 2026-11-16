@@ -27,8 +27,8 @@ The tables below list the per-service ports of the pre-monolith layout. They are
   `go/services/<name>` yourself). Under the monolith use `http://localhost:8200` (flat modules) or `http://localhost:8200/modules/<name>`
   (cart, search, carrier-gateway).
 - In Kubernetes the old Service names (`http://catalog`, `http://geo` ...) are kept and, after a module's cutover, select the deployable's
-  pods (`cutover.services`, `docs/runbooks/release-1-deploy.md`). A Go module mounted `prefixed` (cart, search, carrier-gateway) needs the
-  `/modules/<name>` path through that Service, which core's chart sets (`CART_URL`, `SEARCH_URL`, `CARRIER_GATEWAY_URL`).
+  pods (`cutover.services`, `docs/runbooks/release-1-deploy.md`). Those names are the rollback path and what the public routes use; module-to-module URLs are rendered from `upstreams` in the two deployable charts
+  (release-1-deploy.md section 5a: `http://afrotransact-core.<ns>.svc/modules/<m>`, core's loopback, `http://afrotransact-go.<ns>.svc[/modules/<m>]`).
 
 ## Per-service catalogue (standalone layout; on release-1 each row is a module of core or afrotransact-go)
 

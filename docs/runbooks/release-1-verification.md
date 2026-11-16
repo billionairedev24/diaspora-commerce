@@ -78,7 +78,7 @@ Not live-probed: **fulfilment** (needs PostGIS), **ai-gateway** and **mcp-server
 | `POST /v1/receipts` | inventory, retail (off by default) | no prefix: **inventory** | 8103 and 8120 inventory, 8107 and `/modules/retail` retail |
 | `POST /v1/reconciliation/runs` | inventory, payments | no prefix: **inventory** | 8103 and 8120 ran inventory's reconciliation, 8105 and `/modules/payments` payments' |
 
-**Hazard (decision, section 5):** gateway-bff's staff console calls `POST /v1/reconciliation/runs` on its *payments* upstream (`staff_resources_ledger.go`) and on
+**Hazard (resolved in the charts, section 5):** gateway-bff's staff console calls `POST /v1/reconciliation/runs` on its *payments* upstream (`staff_resources_ledger.go`) and on
 its *inventory* upstream. If both upstreams point at core with no prefix, the payments reconciliation button runs **inventory's** reconciliation. The
 fix is configuration, not code: the payments upstream base URL must carry `/modules/payments` (`PAYMENTS_URL=http://<core>/modules/payments`). Customer
 returns (`tax-returns` first) and retail receipts (retail is off) are not affected.
@@ -208,21 +208,23 @@ page shows who it is for, set a password, sign in. Reuse the link: it says it is
 | Playwright smoke and e2e | `pnpm install && pnpm --filter @afrotransact/e2e test` (mock BFF, also run by CI on `main`) |
 | Route probe against full core | `python3 tools/release/route_probe.py --modules fulfilment,ai-gateway,mcp-server,identity,catalog,offers,inventory,orders,payments,seller,bookings,trust-ops,tax-returns,content` after `make up` (expects the 3 seller routes only) |
 
-## 5. Deployment prerequisites found (uat/prod; none of this is a local problem)
+## 5. Deployment prerequisites found (uat/prod; none of this is a local problem): RESOLVED in the charts
 
-The local profile serves the old ports `8100-8115` from core (`at.core.module-ports`); **no other profile does**, and the release-1 charts set no upstream URL and create no alias Services.
-Statically read (`apps/core/deploy/helm`, `go/apps/afrotransact-go/deploy/helm`, `go/services/gateway-bff/config/prod.yaml`, `orders/.../application-prod.yml`):
+Found by this verification: the local profile serves the old ports `8100-8115` from core (`at.core.module-ports`); no other profile does, and the release-1 charts set no upstream URL and created no alias
+Services, so outside local (1) gateway-bff's calls to `http://payments`, `http://orders`, `http://identity` ... had no target, (2) the remaining Java -> Java HTTP edges did not either (**checkout resolved the shipping address
+through orders -> identity `IDENTITY_URL`, so `POST /v1/checkout` would have failed in uat/prod**), (3) the three duplicate routes (`POST /v1/returns`, `/v1/receipts`, `/v1/reconciliation/runs`) needed the module prefix, and
+(4) the Go callees (`CART_URL`, `GEO_URL`, `PROMISE_URL`, `CARRIER_GATEWAY_URL`) had to reach `afrotransact-go`, cart/search/carrier-gateway under `/modules/<name>`.
 
-1. **gateway-bff** calls `http://payments`, `http://orders`, `http://identity` ... (the per-service DNS names). Unless Services of those names select core's pods, every Go -> Java call fails.
-2. **Remaining Java -> Java HTTP edges** use the same names, e.g. orders -> identity `IDENTITY_URL` (default `http://identity` in uat/prod). **Checkout resolves the shipping address through it
-   (`HttpAddressBook`, `GET /v1/me/addresses` with the shopper's token, `CheckoutServiceImpl` line ~221): without a route to identity inside core, `POST /v1/checkout` fails in uat/prod.** Smallest
-   fix: `IDENTITY_URL=http://localhost:${PORT}` on the core container (the route is core's own and unique). Same for trust-ops, ai-gateway and mcp-server edges (`CATALOG_URL`, `ORDERS_URL`, ...),
-   and for orders/fulfilment -> delivery-runs only if delivery-runs is turned on.
-3. The three duplicate routes need the module prefix on the callers that mean the non-first module: `PAYMENTS_URL=http://<core>/modules/payments` for gateway-bff (section 3).
-4. Go callees stay HTTP from Java (`CART_URL`, `GEO_URL`, `PROMISE_URL`, `CARRIER_GATEWAY_URL`): they must resolve to the `afrotransact-go` Service (and `CART_URL` to its `/modules/cart` prefix: cart and
-   search are mounted prefixed there).
+**Resolution** (documented in `release-1-deploy.md` section 5a "Upstream wiring"): one `upstreams` list per deployable chart, rendered by the library chart from `cutover.services`:
 
-The CI/Helm owner decides how (alias Services, `extraEnv`, or `at.core.module-ports` set outside the local profile); I changed none of the deploy files.
+1. Go -> Java: `http://afrotransact-core.<ns>.svc/modules/<module>` (so payments reconciliation is `/modules/payments`, and the three duplicates resolve to the module the caller means) once the module runs in core; its own Service until then.
+2. Java -> Java (still HTTP until the edges agent converts them): `http://localhost:8080/modules/<module>`, core's own loopback; never the Service, never an old port. The list shrinks via `converted` in `tools/release/upstreams.yaml`.
+3. Java -> Go: `http://afrotransact-go.<ns>.svc` (flat: geo, media, notifications, promise) and `.../modules/<name>` (cart, search, carrier-gateway), once the module runs there.
+4. The old ports are required nowhere outside the local profile. The alias Services (`cutover.movedTo`) remain the rollback path and what the public routes use; the routes deny `/modules` and the private mcp-server paths.
+5. `make release-1-check` runs `tools/release/upstreams.py`, which fails on an old port, an old per-service host of a moved module, a missing `/modules/<m>`, a dangling deployable URL, a missing upstream for an enabled module, or a route to a private Service.
+
+What was **not** verified for this: no `helm template` or `kubeconform` run (helm is not installed here); the library template was executed with Go's `text/template` + sprig (the engine Helm uses) and compared with the
+Python emulation over 24 environment/state combinations, and the full core and Go chart templates executed without error, but a real `helm template` and a first sync on a cluster still decide.
 
 ## 6. Not verified
 
@@ -230,7 +232,7 @@ No Docker (Testcontainers ITs, `*IT` classes of every module), no Kafka (consume
 (only the in-JVM test environment: serialisation of `ApplicationFailure` details, the worker/Spring wiring, the task-queue pollers), no Stripe, no signed JWT (the in-process actor is the `Actor` model,
 not a token; identity issuing and other modules validating through core is unrun), fulfilment (PostGIS), ai-gateway, mcp-server (provider keys; not in the probed jar), Playwright (no `node_modules`, 1 GB free),
 the callee side of the failure mapping as a test, orders' own persistence rows during a failure (section 4 checks them), load and the checkout SLO, metrics and traces of converted edges
-(HTTP client metrics of those edges no longer exist), `at.core.module-ports` outside local, and everything in section 5.
+(HTTP client metrics of those edges no longer exist), `at.core.module-ports` outside local (no longer needed there), and a live run of section 5's resolution.
 
 ## 7. Differences from microservice behaviour (explicit list)
 
@@ -239,13 +241,13 @@ the callee side of the failure mapping as a test, orders' own persistence rows d
 | 1 | In-process calls skip the HTTP caches of the old clients (seller entitlements 60 s, selling status 10 s, ...): reads are fresher, the callee is hit on every call | Low | Accepted; cache in the adapter if a hot path shows load |
 | 2 | **No timeouts**: HTTP clients gave up after 5 s (tax 2 s); an in-process call waits for the callee. The saga's 30 s activity timeout still bounds the step (Temporal retries), but the callee's thread keeps running and a hung callee holds a request thread. ADR 0011 promised "a bounded executor wait" | Medium | **Decision needed**: bounded wait per adapter (needs the caller principal and tracing context re-bound on the waiting thread) or accept the activity timeout |
 | 3 | No `@Valid` / Bean Validation of controller DTOs and no `Idempotency-Key` header check: the caller passes the key as an argument and the service-level rules still run; input orders builds itself is trusted | Low | Accepted for service-to-service; revisit for the end-user edges when converted |
-| 4 | No loopback: converted edges never touch a socket; the others still do locally (old ports) and have no target in uat/prod (section 5) | **High for uat/prod** | **Decision needed** (section 5) |
+| 4 | No loopback: converted edges never touch a socket; the others still do (locally the old ports; in dev/uat/prod core's loopback `http://localhost:8080/modules/<module>`) | Was **High for uat/prod** | **Fixed** (section 5, `upstreams` in the charts) |
 | 5 | End-user actor needed: orders -> identity address book and every mcp-server tool relay the shopper's/staff member's token, so they cannot become service-principal calls | Medium | Stays HTTP; needs an end-user in-process entry (an `Actor` carried across, not a service principal) |
 | 6 | Controller-level security (filter chain, JWT scope on the route) is not applied to an in-process call; only the called service's own `PermissionChecker` runs, with the caller's registered scopes (12.7: tested per API method) | Low | Accepted; the per-method 403 tests are the guard |
 | 7 | A callee's unexpected exception text was copied into `UpstreamFailure.message` and from there to the checkout failure the **shopper sees** (over HTTP that is a bare 5xx) | Medium | **Fixed** in orders, fulfilment, trust-ops, tax-returns (`ModuleUpstream`): "<service> did not answer", detail in the log. Test: `aCrashInsideInventory...` |
 | 8 | A callee 404 was an error where the HTTP adapter read it as "none": payment of an order, offer inventory SKU, pickup location (orders), reservation of an order (fulfilment). Over HTTP the saga's `cancelPayment` would have fallen through; in-process it would have failed `orders.upstream-rejected` | Medium | **Fixed** in the four in-process adapters; covered by the 393-case matrix |
 | 9 | HTTP client metrics and trace spans between modules disappear for converted edges (dashboards on upstream latency lose those series) | Low-Medium | Not fixed; add a Micrometer timer in `ModuleUpstream` if wanted |
-| 10 | Route collisions: `POST /v1/returns`, `/v1/receipts`, `/v1/reconciliation/runs` go to the first mounted module without a prefix (section 3). `POST /v1/reconciliation/runs` from the staff payments screen runs inventory's | **High** (wrong action) if misconfigured | Disambiguated by port (local) or prefix; **config needed** for gateway-bff (section 5.3) |
+| 10 | Route collisions: `POST /v1/returns`, `/v1/receipts`, `/v1/reconciliation/runs` go to the first mounted module without a prefix (section 3). `POST /v1/reconciliation/runs` from the staff payments screen runs inventory's | **High** (wrong action) if misconfigured | Disambiguated by port (local) or `/modules/<module>` (charts: every Java upstream carries it); **fixed** (section 5) |
 | 11 | Checkout failure messages differ in wording for I/O failures ("... did not answer" without the exception tail) | Trivial | Accepted |
 | 12 | Contract drift independent of release 1: 3 seller routes unimplemented; `orders.yaml` was invalid YAML | Low | YAML fixed; seller routes: decide implement or drop |
 | 13 | Transactions: modules commit in separate schemas and separate transaction managers, so a caller's rollback never undoes a callee's commit, **as over HTTP**. Checkout relies on compensations, which are proven | None | By design |

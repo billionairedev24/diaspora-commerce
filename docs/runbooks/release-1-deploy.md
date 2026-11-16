@@ -126,10 +126,54 @@ Data that already lives in per-service databases (dev, uat, or the trial) is **n
 
 A deployable whose `cutover.services` has no entry for it renders **replicas 0**: the Application is Healthy and costs nothing until its first batch.
 
+## 5a. Upstream wiring (who calls whom, outside the local profile)
+
+Only the **local** profile serves the old per-service ports (`at.core.module-ports`, 8100-8115). In dev, uat and prod nothing listens on them, and a module that moved into a deployable
+has no per-service host unless an alias Service exists. So every module-to-module URL is rendered by the chart, from **one list per deployable**: values `upstreams` in
+`java/apps/core/deploy/helm/values.yaml` (what core calls) and `go/apps/afrotransact-go/deploy/helm/values.yaml` (what the Go modules call), rendered by
+`infra/helm/library/at-service/templates/_upstreams.tpl`. An entry is `ENV_NAME: <module>` (or `{module, suffix}`), and the value follows `cutover.services` of the environment:
+
+| Target module | URL rendered | Why |
+|---|---|---|
+| Java module that moved into core, called from the **Go** deployable | `http://afrotransact-core.<ns>.svc/modules/<module>` | core serves each module under `/modules/<m>`; this also picks the right module for the three duplicate routes `POST /v1/returns`, `/v1/receipts`, `/v1/reconciliation/runs` (payments reconciliation must be `/modules/payments`) |
+| Java module in core, called from **core** (the Java -> Java edges that are still HTTP) | `http://localhost:8080/modules/<module>` | loopback on core itself (`service.port`): never the Service, never an old port. **This list shrinks** as the edges become in-process: a name moves to `converted` in `tools/release/upstreams.yaml` once every consumer is in-process |
+| Go module that moved into `afrotransact-go`, called from core | `http://afrotransact-go.<ns>.svc` (flat: geo, media, notifications, promise) or `.../modules/<m>` (prefixed: cart, search, carrier-gateway) | the Go host mounts those three only under `/modules/<m>` (their paths collide with gateway-bff's facade) |
+| Go module called from another Go module | nothing rendered | in-process (`modcfg`), as long as the target runs in the same binary |
+| A module that **has not moved yet** | `http://<module>` (its own per-service Service, port 80) | a batch must not break the modules still running standalone; the URL changes when the module's `cutover.services` line is added |
+
+Nothing else changes a URL; there is no second place to edit. `AUTH_TOKEN_URL` (client-credentials token endpoint) follows identity the same way; `AUTH_ISSUER_URL` stays the
+public https issuer (JWT validation and `McpExposureGuard` need https; the library derives it from `global.authHost`). `MCP_PUBLIC_URL` is core's own Service,
+`http://afrotransact-core.<ns>.svc.cluster.local/modules/mcp-server` (an in-cluster URL the guard accepts, so it does not depend on an alias Service).
+`extraEnv` can still override a name by hand; `make release-1-check` fails when a values file does.
+
+**Alias Services (old names) are the rollback path only.** `cutover.movedTo` keeps `http://catalog` alive after the move by selecting the deployable's pods on port 80 (verified:
+selector `app.kubernetes.io/name: <deployable>`, `targetPort: http` = the container's port 8080, management port 9090 named, the old chart's ServiceMonitor is no longer rendered so
+nothing is scraped twice). They are **not** a valid upstream: a **flat** call through one works (geo, media, notifications, identity, payments for everything but the three duplicate routes), a call
+through the alias of a **prefixed** Go module (`http://cart`, `http://search`) reaches gateway-bff's facade, not the module, and `http://payments` + `POST /v1/reconciliation/runs` reaches
+the first module that maps it (inventory). The only things that still use alias names are the public HTTPRoutes (`api` -> `gateway-bff`, `/identity`, `/bookings`, `/fulfilment`, `/media`, `/notifications`,
+`/payments/v1/webhooks`, `/seller/v1/webhooks/*`; `auth` -> `identity`), which keep working before and after a cutover for exactly that reason, so **a per-service Application must exist for every
+Service the routes name until the cutover phase**. Rolling a batch back is therefore always: remove the `cutover.services` line (URLs go back to the standalone Services by themselves).
+
+**Exposure.** A moved Service selects a deployable's pods, which serve **every** module of the deployable, not only the one the route was written for. The route files
+(`infra/k8s/platform/edge/overlays/<env>/routes.yaml`) therefore deny `<prefix>/modules` on every prefix, `<prefix>/mcp`, `/v1/tools` and `/.well-known/oauth-protected-resource` on the prefixes that land on core,
+and `/modules`, `/mcp`, `/v1/tools`, `/.well-known/oauth-protected-resource` on the auth host. `mcp-server`, core and the Go deployable have no route at all (private ClusterIP, OAuth bearer tokens). **Residual risk
+(owner decision):** the other modules' routes (for example `GET /v1/orders` under `/bookings/...`) are still reachable on those prefixes with a valid token and the module's own permission checks; an allow-list per prefix
+(from `contracts/openapi/<module>.yaml`) or a second listener for the public modules would close it.
+
+**Checks.** `make release-1-check` runs `tools/release/upstreams.py` (unit tests: `test_upstreams.py`): it scans every `application*.yml` and Go config for URL settings whose default is a platform service
+(`--scan` lists them with their consumers), renders both charts for uat and prod in three cutover states (committed, complete launch set, batch 1) and fails when a `*_URL` points at an old port
+(81xx/82xx), at `:8080` of a Service, at a per-service host of a module that moved, at a deployable for a module that did not move there, without `/modules/<m>` where it is required, or is missing for an enabled module's
+edge; it also checks the routes above (private Services, rule limit) and `MCP_PUBLIC_URL`. With `helm` on the PATH it renders with `helm template` (CI: the `helm` job of `core.yml` runs it through
+`tools/release/test_cutover_render.sh`); without, it uses an emulation of the template.
+`python3 tools/release/upstreams.py --render core prod` prints what the complete launch set renders.
+
+**Set by the owner in the cluster:** nothing new for the URLs. Before the first cutover of a module that the Go deployable calls (everything but `geo`, `media`, `notifications`), check `kubectl -n afrotransact-<env> get svc afrotransact-core afrotransact-go`
+(created by the deployable charts at replicas 0 already).
+
 ## 6. Cutover, one batch at a time
 
 A batch is a few modules that move from their own Deployments into a deployable (batches: `release-1.yaml`, `batches`). **Nothing is deleted**: the old Deployment is scaled to 0 and its Service keeps its name and
-now selects the deployable's pods, so no caller's URL (`http://catalog`, `http://geo`) changes and gateway-bff does not notice.
+now selects the deployable's pods (the rollback path and what the public HTTPRoutes use); callers do not rely on it: their URLs are rendered from `cutover.services` (section 5a).
 
 **Before the batch (once per batch)**
 
@@ -227,6 +271,7 @@ re-run the bootstrap.
 
 ## 11. Known gaps (honest list)
 
+- Upstream wiring (section 5a): the library template and both deployable charts were executed with Go's `text/template` + sprig (Helm's engine) and cross-checked against `tools/release/upstreams.py`'s emulation, never with a real `helm template`, `kubeconform` or a cluster. `AUTH_TOKEN_URL` now points at identity's Service/loopback instead of the public issuer hairpin (first deploy: confirm client-credentials tokens are issued).
 - Nothing ran on a cluster. `helm template`, `kubeconform`, `kustomize`, `actionlint` and `tofu validate` were **not run** (not installed in the authoring environment); the SQL, the shell scripts (shellcheck), the route-diff tests,
   the Argo CD emulation and the secrets rendering (with a stub `kubectl`) were.
 - `core.yml` needs the Java side's final environment names; it uses `CORE_DB_URL`, `CATALOG_DB_USER`, `TAX_RETURNS_DB_USER` as `application.yml` has them today and the per-module test databases `catalog` and `taxreturns` that `CoreRun` still uses.
