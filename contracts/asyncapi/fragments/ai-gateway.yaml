@@ -8,7 +8,20 @@ channels:
       redacted (emails, phones, cards, SSNs and addresses replaced by placeholders such as [EMAIL_1]).
     messages:
       aiHandoffRequested: {$ref: '#/components/messages/aiHandoffRequested'}
+  aiSpendCapEvents:
+    address: at.ai-spend-cap.events
+    description: >-
+      Changes of the gateway-wide daily AI spend cap made in Settings > AI and MCP spend cap (key = the version the change
+      created). Headers event-id, event-type, occurred-at. trust-ops copies every change into the hash-chained audit log
+      with who, when, the value before and after, and the reason.
+    messages:
+      aiSpendCapChanged: {$ref: '#/components/messages/aiSpendCapChanged'}
 operations:
+  publishAiSpendCapEvents:
+    action: send
+    channel: {$ref: '#/channels/aiSpendCapEvents'}
+    summary: >-
+      ai-gateway-service publishes each cap change via its transactional outbox; trust-ops audits it.
   publishAiHandoffEvents:
     action: send
     channel: {$ref: '#/channels/aiHandoffEvents'}
@@ -22,7 +35,23 @@ components:
       title: Lola handed a conversation to human support
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/AiHandoffRequested'}
+    aiSpendCapChanged:
+      name: ai.spend-cap.changed
+      title: Staff changed the daily AI spend cap
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/AiSpendCapChanged'}
   schemas:
+    AiSpendCapChanged:
+      type: object
+      required: [version, previousSource, previousMicros, newMicros, changedBy, reason, at]
+      properties:
+        version: {type: integer, format: int64, description: Version the change created (the ETag)}
+        previousSource: {type: string, enum: [DEFAULT, SAVED], description: Whether the value before was the deployment default or a saved cap}
+        previousMicros: {type: integer, format: int64, description: 'Cap before, micro-dollars (the deployment default when previousSource is DEFAULT)'}
+        newMicros: {type: integer, format: int64, description: 'Cap after, micro-dollars (0 = AI off)'}
+        changedBy: {type: string, description: Staff user id who saved it}
+        reason: {type: string, description: Why, 3 to 300 characters}
+        at: {type: string, format: date-time}
     AiHandoffRequested:
       type: object
       required: [handoffId, sessionId, subject, reason, summary, requestedAt]

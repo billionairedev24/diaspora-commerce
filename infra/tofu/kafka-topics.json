@@ -17,6 +17,12 @@
         "trust-ops"
       ]
     },
+    "at.ai-spend-cap.events": {
+      "producers": [
+        "ai-gateway"
+      ],
+      "consumers": []
+    },
     "at.authz-sync.dlq.events": {
       "producers": [
         "authz-sync"

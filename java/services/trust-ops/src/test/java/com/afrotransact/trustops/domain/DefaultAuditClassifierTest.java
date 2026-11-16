@@ -121,6 +121,19 @@ class DefaultAuditClassifierTest {
     }
 
     @Test
+    void aSpendCapChangeNamesWhoBeforeAfterAndWhy() {
+        AuditFacts f = classifier.classify("ai.spend-cap.changed", Map.of("changedBy", "staff-7", "previousSource",
+                "DEFAULT", "previousMicros", 2_000_000, "newMicros", 5_500_000, "reason", "Launch week"), "1")
+                .orElseThrow();
+        assertThat(f.actorId()).isEqualTo("staff-7");
+        assertThat(f.entityType()).isEqualTo("AI_SPEND_CAP");
+        assertThat(f.summary()).isEqualTo("AI daily spend cap changed from USD 2.00 (default) to USD 5.50 — Launch week");
+        assertThat(classifier.classify("ai.spend-cap.changed", Map.of("changedBy", "staff-7", "previousSource", "SAVED",
+                "previousMicros", 5_500_000, "newMicros", 0, "reason", "Pause"), "2").orElseThrow().summary())
+                .isEqualTo("AI daily spend cap changed from USD 5.50 to USD 0.00, AI off — Pause");
+    }
+
+    @Test
     void deliveryLocationSwitchesNameTheStaffMemberAndTheReason() {
         AuditFacts off = classifier.classify("delivery-runs.location.changed", Map.of("locationId", "loc-1", "name",
                 "Bastrop", "action", "DEACTIVATED", "actorId", "staff-3", "reason", "Seasonal pause"), "loc-1")

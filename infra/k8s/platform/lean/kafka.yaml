@@ -143,7 +143,8 @@ spec:
           env:
             - name: TOPICS
               value: >-
-                at.ads.events.dlq at.ai-handoff.events.dlq at.bookings.events.dlq at.carrier-shipment.events.dlq
+                at.ads.events.dlq at.ai-handoff.events.dlq at.ai-spend-cap.events.dlq at.bookings.events.dlq
+                at.carrier-shipment.events.dlq
                 at.category-request.events.dlq at.change-request.events.dlq at.content.events.dlq at.delivery-runs.events.dlq
                 at.fulfilment.events.dlq at.identity.events.dlq at.inventory-inbound.events.dlq
                 at.inventory-reconciliation.events.dlq at.inventory-reservation.events.dlq at.inventory.events.dlq
