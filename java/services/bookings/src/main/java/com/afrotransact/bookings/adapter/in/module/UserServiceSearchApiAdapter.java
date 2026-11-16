@@ -19,19 +19,19 @@ import org.springframework.stereotype.Component;
  * signed-in person ({@code ModuleEntry.runAsUser}). The search is public over HTTP and applies no permission here either.
  */
 @Component
-class UserUserServiceSearchApiAdapter implements UserServiceSearchApi {
+class UserServiceSearchApiAdapter implements UserServiceSearchApi {
 
     private final BookingsEndpointViews views;
     private final ModuleEntry entry;
 
-    UserUserServiceSearchApiAdapter(BookingsEndpointViews views, ActorResolver actors) {
+    UserServiceSearchApiAdapter(BookingsEndpointViews views, ActorResolver actors) {
         this.views = views;
         this.entry = new ModuleEntry(actors);
     }
 
     @Override
     public Object findServices(EndUserActor user, String query, String zip) {
-        return entry.runAsUser(user, READ_SCOPE, () -> views.findServices(query, zip), UserUserServiceSearchApiAdapter::map);
+        return entry.runAsUser(user, READ_SCOPE, () -> views.findServices(query, zip), UserServiceSearchApiAdapter::map);
     }
 
     /** The mapping {@code BookingsErrorAdvice} applies to the errors a search raises. */

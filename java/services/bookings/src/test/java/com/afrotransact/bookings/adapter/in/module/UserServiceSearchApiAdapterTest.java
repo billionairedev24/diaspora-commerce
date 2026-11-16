@@ -28,10 +28,10 @@ import org.junit.jupiter.api.Test;
  * UserServiceSearchApi runs the endpoint behind the MCP tools AS THE SIGNED-IN PERSON: the module that calls needs the delegation scope, the actor in
  * force in the callee is the person (never the calling module, never a service), and failures leave with the HTTP status.
  */
-class UserUserServiceSearchApiAdapterTest {
+class UserServiceSearchApiAdapterTest {
 
     private final BookingsEndpointViews views = mock(BookingsEndpointViews.class);
-    private final UserServiceSearchApi api = new UserUserServiceSearchApiAdapter(views, InProcessKit.ACTORS);
+    private final UserServiceSearchApi api = new UserServiceSearchApiAdapter(views, InProcessKit.ACTORS);
     private final EndUserActor person = InProcessKit.user("u-1", "pt", "CUSTOMER", "perms", List.of("mcp:shopper"));
 
     private <T> T as(String scope, Supplier<T> call) {
