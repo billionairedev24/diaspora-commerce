@@ -5,12 +5,19 @@ import java.util.Locale;
 import java.util.Map;
 
 import com.afrotransact.module.CallerPrincipals;
+import com.afrotransact.module.InProcessCalls;
 import com.afrotransact.platform.security.ActingAsActorResolver;
 import com.afrotransact.platform.security.ActorResolver;
 import com.afrotransact.platform.security.JwtActorResolver;
 import com.afrotransact.platform.security.LocalActorResolver;
 import com.afrotransact.platform.security.PlatformSecurityProperties;
+import io.micrometer.context.ThreadLocalAccessor;
+import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.config.MeterFilter;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.micrometer.observation.ObservationRegistry;
+import io.micrometer.observation.contextpropagation.ObservationThreadLocalAccessor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
@@ -41,6 +48,21 @@ public class ModuleCoreConfiguration {
     ActorResolver actorResolver(PlatformSecurityProperties props) {
         return new CallerAwareActorResolver(new ActingAsActorResolver(
                 props.enabled() ? new JwtActorResolver() : new LocalActorResolver()));
+    }
+
+    /**
+     * The gate every in-process call goes through: the callee runs on its own module's lane with a bounded wait and a bulkhead
+     * ({@link BoundedModuleCalls}). Installed into {@link InProcessCalls} here and removed when the context closes.
+     */
+    @Bean(destroyMethod = "close")
+    BoundedModuleCalls moduleCallGate(ModuleRegistry modules, Environment environment, ObjectProvider<MeterRegistry> meters,
+                                      ObjectProvider<ObservationRegistry> observations,
+                                      ObjectProvider<ThreadLocalAccessor<?>> accessors) {
+        observations.ifAvailable(registry -> ObservationThreadLocalAccessor.getInstance().setObservationRegistry(registry));
+        BoundedModuleCalls gate = new BoundedModuleCalls(new ModuleCallSettings(environment, modules),
+                meters.getIfAvailable(SimpleMeterRegistry::new), BoundedModuleCalls.snapshots(accessors.orderedStream().toList()));
+        InProcessCalls.install(gate);
+        return gate;
     }
 
     @Bean
