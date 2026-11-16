@@ -20,6 +20,8 @@ Owner feedback: the checkout was "still not a standard match for Amazon", the ta
 
 One entry point: `LolaFab` in `ShopChrome`, a round launcher fixed to the bottom end corner (logical properties: bottom-left in right-to-left languages), above the cookie banner (`--at-cookie-banner-h`/`-gap`) and any bottom bar (`--at-bottom-bar-h`). The first-visit label is dismissible and remembered in `localStorage` (`at_lola_label_seen`, try/catch). It opens `ChatPanel` (`@afrotransact/ui`, a dialog with focus trap, Esc and return focus; a card from 641px, a full-height sheet on phones). Removed: header button, department-bar item, All menu row, account menu item, account hub tile, product page button, orders link. Hidden on `/checkout`, absent on `/b/*` store pages (they have no marketplace chrome). A capped or down gateway reads "Lola is unavailable right now"; there is never a made-up answer.
 
+Opening chips and the placeholder are capability hints, and the composer has a dictation mic: see `lola-voice.md`.
+
 ## Tests
 
 Vitest: `test/lola-fab.test.tsx`, `checkout-*.test.tsx`, `shopper.test.tsx`, `stripe-elements.test.tsx`. Playwright: `e2e/checkout-amazon.spec.ts`, `e2e/lola.spec.ts`, `e2e/checkout-stripe.spec.ts`. Screenshots: `CHECKOUT_SHOTS_DIR=docs/engineering/img pnpm e2e`.
