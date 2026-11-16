@@ -153,6 +153,13 @@ class ParityTest(unittest.TestCase):
         self.assertTrue(any("newthing.yml" in s and "not classified" in s for s in d), d)
         self.assertTrue(any("core.yml" in s and "classified 'release-1' but" in s for s in d), d)
 
+    def test_invalid_yaml_is_a_gap_not_a_crash(self):
+        build(self.root, {".github/workflows/core.yml": "name: core\non:\n  push: {}\njobs:\n  a:\n    steps:\n      - name: x (gate: y)\n",
+                          "java/apps/core/deploy/helm/Chart.yaml": "name: c\ndescription: AfroTransact core (R1): every module\n"})
+        d = self.subjects("delivery")
+        self.assertTrue(any("core.yml" in s and "not valid YAML" in s for s in d), d)
+        self.assertTrue(any("Chart.yaml" in s and "not valid YAML" in s for s in d), d)
+
     def test_pull_request_without_branches_counts_as_release_1(self):
         self.assertEqual(parity.trigger_line({"pull_request": {"paths": ["a"]}, "push": {"branches": ["main"]}}), "release-1")
         self.assertEqual(parity.trigger_line({"push": {"branches": ["main", "develop"]}, "workflow_dispatch": None}), "per-service-only")

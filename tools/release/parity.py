@@ -409,7 +409,11 @@ def check_observability(ctx):
 
 # ------------------------------------------------------------------------------------------------------------------- delivery
 def workflow_triggers(ctx, name):
-    doc = yaml.safe_load(ctx.text(f".github/workflows/{name}")) or {}
+    try:
+        doc = yaml.safe_load(ctx.text(f".github/workflows/{name}")) or {}
+    except yaml.YAMLError:
+        return None
+    doc = doc if isinstance(doc, dict) else {}
     on = doc.get(True, doc.get("on")) or {}
     if isinstance(on, str):
         on = {on: None}
@@ -473,14 +477,32 @@ def check_delivery(ctx):
     for f in sorted(wf_dir.glob("*.yml")) if wf_dir.is_dir() else []:
         entry = classes.get(f.name)
         src = ctx.touched(f".github/workflows/{f.name}") if ctx.changed is not None else None
+        if workflow_triggers(ctx, f.name) is None:
+            gaps.append(Gap("delivery", f".github/workflows/{f.name}", "not valid YAML: GitHub rejects the whole workflow",
+                            "quote the offending scalar (a plain value with ': ' in it); `actionlint` shows the line", src))
+            continue
         if not entry or not entry.get("reason"):
             gaps.append(Gap("delivery", f".github/workflows/{f.name}", "workflow is not classified in parity.yaml (does it run on release-1?)",
                             "add it under `workflows:` as release-1 (and make it trigger on release-1), per-service-only, manual or reusable, with a reason", src))
             continue
-        actual = trigger_line(workflow_triggers(ctx, f.name))
+        triggers = workflow_triggers(ctx, f.name)
+        if triggers is None:
+            continue    # reported by the YAML check below
+        actual = trigger_line(triggers)
         if actual != entry.get("line"):
             gaps.append(Gap("delivery", f".github/workflows/{f.name}", f"classified '{entry.get('line')}' but its triggers make it '{actual}'",
                             "add release-1 to its push/pull_request branches, or fix the class in parity.yaml", src))
+    # files that Helm and Argo CD parse must parse (an invalid Chart.yaml makes every helm job red)
+    for pattern in ("java/apps/*/deploy/helm/Chart.yaml", "go/apps/*/deploy/helm/Chart.yaml", "java/services/*/deploy/helm/Chart.yaml",
+                    "go/services/*/deploy/helm/Chart.yaml", "java/apps/*/deploy/helm/values*.yaml", "go/apps/*/deploy/helm/values*.yaml",
+                    "infra/argocd/launch-set/*.yaml", "infra/argocd/envs/*/*.yaml"):
+        for f in sorted(ctx.root.glob(pattern)):
+            try:
+                list(yaml.safe_load_all(f.read_text()))
+            except yaml.YAMLError:
+                rel = f.relative_to(ctx.root).as_posix()
+                gaps.append(Gap("delivery", rel, "not valid YAML", "quote the offending scalar (a plain value containing ': ' or ' #')",
+                                ctx.touched(rel) if ctx.changed is not None else None))
     for name in sorted(set(classes) - {p.name for p in wf_dir.glob("*.yml")}):
         gaps.append(Gap("delivery", f"parity.yaml workflows: {name}", "classified workflow file no longer exists", "remove the entry"))
     return gaps
@@ -560,9 +582,13 @@ def render(gaps, notes, fmt, ctx):
 
 
 def last_sync_base(root, main):
-    """The last commit main and release-1 had in common: everything on main after it is what the next sync brings."""
-    r = subprocess.run(["git", "-C", str(root), "merge-base", "HEAD", main], capture_output=True, text=True)
-    return r.stdout.strip() if r.returncode == 0 else None
+    """The last commit main and release-1 had in common: everything on main after it is what the next sync brings. Computed from
+    origin/release-1 (not HEAD): on a sync pull request HEAD already contains main, origin/release-1 does not."""
+    for line in ("origin/release-1", "HEAD"):
+        r = subprocess.run(["git", "-C", str(root), "merge-base", line, main], capture_output=True, text=True)
+        if r.returncode == 0:
+            return r.stdout.strip()
+    return None
 
 
 def main(argv=None):

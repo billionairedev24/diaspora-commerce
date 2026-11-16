@@ -36,7 +36,7 @@ new_world() { # new_world NAME: bare origin + a clone `$W/NAME` on release-1 tra
   ( cd "$W/$n"
     git checkout -q -b main
     mkdir -p tools/release tools/ci docs/backlog .github/workflows src
-    cp "$REAL/tools/release/sync-main.sh" "$REAL/tools/release/merge_backlog.py" "$REAL/tools/release/port-back.sh" tools/release/
+    cp "$REAL/tools/release/sync-main.sh" "$REAL/tools/release/merge_backlog.py" "$REAL/tools/release/port-back.sh" "$REAL/tools/release/sync-open-pr.sh" tools/release/
     printf '# fixture: the generated workflow\nname: gen\n' > .github/workflows/java-x.yml
     cat > tools/ci/gen_workflows.py <<'PY'
 #!/usr/bin/env python3
@@ -186,5 +186,74 @@ out=$(cd "$W/w7" && tools/release/port-back.sh "$a" 2>&1); rc=$?
 [ "$(cd "$W/w7" && git rev-parse --abbrev-ref HEAD)" = "port/main-$a" ] && ok "branch port/main-$a" || ko "branch $(cd "$W/w7" && git rev-parse --abbrev-ref HEAD)"
 ( cd "$W/w7" && git log -1 --format=%B | grep -q "cherry picked from commit" ) && ok "-x records the release-1 sha" || ko "no -x trailer"
 [ "$(cd "$W/w7" && git rev-parse origin/main)" = "$(cd "$W/w7" && git rev-parse HEAD~1)" ] && ok "branch is on origin/main, nothing pushed" || ko "base"
+
+# --- 7. sync-open-pr.sh with a stub gh ----------------------------------------------------------------------------------------------
+echo "== sync-open-pr.sh (stub gh)"
+mkdir -p "$W/bin"
+cat > "$W/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${GH_LOG:?}"
+case "$1 $2" in
+  "pr list") printf '%s' "${GH_OPEN_SYNC:-}" ;;
+  "issue list") printf '%s' "${GH_OPEN_ISSUE:-}" ;;
+esac
+exit 0
+STUB
+chmod +x "$W/bin/gh"
+export GH="$W/bin/gh" GH_LOG="$W/gh.log"
+remote_heads() { git --git-dir="$W/$1.git" for-each-ref --format='%(refname:short)' refs/heads | tr '\n' ' '; }
+
+new_world w8
+work w8 main "main adds a file" <<'SH'
+echo hi > src/new.txt
+SH
+r1=$(git --git-dir="$W/w8.git" rev-parse release-1); mn=$(git --git-dir="$W/w8.git" rev-parse main)
+: > "$GH_LOG"
+out=$(cd "$W/w8" && SYNC_DISPATCH_CI=1 tools/release/sync-open-pr.sh origin/main 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "clean sync: rc 0" || ko "rc $rc" "$out"
+heads=$(remote_heads w8)
+case "$heads" in *"sync/main-"*) ok "the sync/ branch was pushed" ;; *) ko "no sync branch on origin: $heads" ;; esac
+[ "$(git --git-dir="$W/w8.git" rev-parse release-1)" = "$r1" ] && [ "$(git --git-dir="$W/w8.git" rev-parse main)" = "$mn" ] && ok "release-1 and main on origin untouched" || ko "origin branches moved"
+grep -q '^pr create --base release-1 --head sync/main-' "$GH_LOG" && ok "PR opened into release-1" || ko "no pr create" "$(cat "$GH_LOG")"
+grep -q 'title Sync main into release-1: 1 commit(s) (main adds a file)' <<<"$(tr '\n' ' ' < "$GH_LOG" | sed 's/--/\n--/g')" && ok "title carries the commit subjects" || ko "title" "$(cat "$GH_LOG")"
+grep -q -- '--draft' "$GH_LOG" && ko "a clean sync must not be a draft" || ok "not a draft (no parity gaps)"
+grep -q '^workflow run core.yml --ref sync/main-' "$GH_LOG" && grep -q '^workflow run release-1-parity.yml --ref sync/main-' "$GH_LOG" && ok "CI dispatched on the branch (SYNC_DISPATCH_CI=1)" || ko "no dispatch" "$(cat "$GH_LOG")"
+grep -q -- '--force\|+refs' "$GH_LOG" && ko "force used" || ok "never forced"
+
+echo "-- an open sync PR stops a second proposal"
+new_world w9
+work w9 main "main adds" <<'SH'
+echo hi > src/new.txt
+SH
+: > "$GH_LOG"
+out=$(cd "$W/w9" && GH_OPEN_SYNC="sync/main-abc" tools/release/sync-open-pr.sh origin/main 2>&1); rc=$?
+[ "$rc" = 0 ] && printf '%s' "$out" | grep -q "already open" && ! grep -q 'pr create' "$GH_LOG" && ok "skipped, no second PR" || ko "rc $rc" "$out"
+
+echo "-- conflicts open ONE issue and push nothing"
+new_world w10
+work w10 main "main edits a" <<'SH'
+echo main > src/a.txt
+SH
+work w10 release-1 "release edits a" <<'SH'
+echo release > src/a.txt
+SH
+: > "$GH_LOG"
+out=$(cd "$W/w10" && tools/release/sync-open-pr.sh origin/main 2>&1); rc=$?
+[ "$rc" = 0 ] && grep -q '^issue create --title release-1 sync blocked: main conflicts with release-1' "$GH_LOG" && ok "issue created" || ko "rc $rc" "$out$(cat "$GH_LOG")"
+case "$(remote_heads w10)" in *sync/*) ko "a conflicting sync pushed a branch" ;; *) ok "nothing pushed" ;; esac
+: > "$GH_LOG"
+out=$(cd "$W/w10" && git checkout -q release-1 && GH_OPEN_ISSUE=7 tools/release/sync-open-pr.sh origin/main 2>&1); 
+grep -q '^issue edit 7 --body-file' "$GH_LOG" && ok "an existing issue is updated, not duplicated" || ko "no issue edit" "$(cat "$GH_LOG")"
+
+echo "-- dry run and refusals"
+new_world w11
+work w11 main "main adds" <<'SH'
+echo hi > src/new.txt
+SH
+: > "$GH_LOG"
+out=$(cd "$W/w11" && tools/release/sync-open-pr.sh origin/main --dry-run 2>&1); rc=$?
+[ "$rc" = 0 ] && printf '%s' "$out" | grep -q "dry run" && ! grep -q 'pr create\|issue create' "$GH_LOG" && [ -z "$(remote_heads w11 | grep sync/)" ] && ok "dry run pushes and creates nothing" || ko "rc $rc" "$out"
+out=$(cd "$W/w11" && tools/release/sync-open-pr.sh origin/release-1 2>&1); rc=$?
+[ "$rc" = 64 ] && ok "only main and develop can be synced" || ko "rc $rc" "$out"
 printf '\npassed: %d, failed: %d\n' "$PASS" "$FAILN"
 [ "$FAILN" = 0 ]

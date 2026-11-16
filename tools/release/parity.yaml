@@ -125,3 +125,21 @@ kafka:
 observability:
   extra_service_values:
     - alloy
+
+# ---------------------------------------------------------------------------------------------------------------------------------
+# Capacity of the ONE b3-16 node (docs/engineering/cloud-cost.md, "Release 1"): tools/release/check_capacity.py. Figures are the repo's own,
+# UNVERIFIED on the node until `kubectl top` runs in the trial.
+capacity:
+  allocatable_mib: 13312           # ~13 GiB of the 16 GB node
+  fixed_mib:                       # what runs next to the deployables (cloud-cost.md table), requests
+    platform: 2264                 # Kafka 640, Temporal 512, Valkey 128, Meilisearch 384, OTLP 128, Alloy 96, kube-state 32, kafka-exporter 24, cloudflared 64, Envoy 128 + 128
+    kubernetes_system: 1229
+    argocd: 1024
+    clamav: 1280                   # media's malware scan (UNMEASURED); counted, the conservative case
+  core_request_mib_by_batch:       # docs/runbooks/release-1-deploy.md section 6: core's request grows with the batches
+    0: 0
+    1: 768
+    2: 1024
+    3: 1280
+    4: 1536
+    5: 1536

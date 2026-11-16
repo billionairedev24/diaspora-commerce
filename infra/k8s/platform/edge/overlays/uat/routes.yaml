@@ -45,12 +45,6 @@ spec:
         - type: URLRewrite
           urlRewrite: {path: {type: ReplacePrefixMatch, replacePrefixMatch: /}}
       backendRefs: [{name: notifications, port: 80}]
-    # carrier webhooks (UPS, FedEx, DHL), PUBLIC_BASE_URL
-    - matches: [{path: {type: PathPrefix, value: /carrier-gateway}}]
-      filters:
-        - type: URLRewrite
-          urlRewrite: {path: {type: ReplacePrefixMatch, replacePrefixMatch: /}}
-      backendRefs: [{name: carrier-gateway, port: 80}]
     # Stripe webhooks only (rewritten to /v1/webhooks)
     - matches: [{path: {type: PathPrefix, value: /payments/v1/webhooks}}]
       filters:
@@ -166,22 +160,6 @@ spec:
       filters:
         - type: ExtensionRef
           extensionRef: {group: gateway.envoyproxy.io, kind: HTTPRouteFilter, name: deny-operational-paths}
-    - matches:
-      - {path: {type: PathPrefix, value: /carrier-gateway/actuator}}
-      - {path: {type: PathPrefix, value: /carrier-gateway/metrics}}
-      - {path: {type: PathPrefix, value: /carrier-gateway/internal}}
-      - {path: {type: PathPrefix, value: /carrier-gateway/admin}}
-      - {path: {type: PathPrefix, value: /carrier-gateway/v1/admin}}
-      - {path: {type: PathPrefix, value: /carrier-gateway/readyz}}
-      - {path: {type: PathPrefix, value: /carrier-gateway/openapi.yaml}}
-      - {path: {type: PathPrefix, value: /carrier-gateway/v3/api-docs}}
-      - {path: {type: PathPrefix, value: /carrier-gateway/docs}}
-      - {path: {type: PathPrefix, value: /carrier-gateway/redoc}}
-      - {path: {type: PathPrefix, value: /carrier-gateway/swagger-ui.html}}
-      - {path: {type: PathPrefix, value: /carrier-gateway/healthz}}
-      filters:
-        - type: ExtensionRef
-          extensionRef: {group: gateway.envoyproxy.io, kind: HTTPRouteFilter, name: deny-operational-paths}
 
 ---
 apiVersion: gateway.envoyproxy.io/v1alpha1
@@ -242,3 +220,5 @@ spec:
   data:
     - secretKey: token
       remoteRef: {key: afrotransact/uat/cloudflared, property: token}
+# carrier-gateway is not deployed in uat (not in the launch set), so it has neither a webhook route nor a deny rule here, as in prod. The
+# route also held 17 rules; the Gateway API allows 16 per HTTPRoute, so the uat edge Application could not have synced.
