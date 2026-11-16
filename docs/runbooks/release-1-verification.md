@@ -261,7 +261,7 @@ is never run automatically. It is read-only except an add-to-cart and one checko
 
 | Check | How |
 |---|---|
-| core readiness, every module UP | `:8120/actuator/health/readiness`, `/actuator/health` (no DOWN component); STACK=services: `:8100-8115` |
+| core readiness, every module UP | `:8120/actuator/health/readiness`, `/actuator/health` (no DOWN component); STACK=services: `:8100-8115` (monolith: every module through `:8120/modules/<module>`, never a legacy port) |
 | afrotransact-go ready | `:8200/readyz` |
 | products >= 40 (`SMOKE_MIN_PRODUCTS`), photo on every hit, files served, home rails have photos | `GET /v1/search`, `GET /v1/home` through the BFF, then a HEAD on three photo URLs |
 | search `iru`, `rice` | `GET /v1/search?q=` |
@@ -271,10 +271,10 @@ is never run automatically. It is read-only except an add-to-cart and one checko
 | checkout reaches the payment-intent step | signs the test customer in like the BFF, `GET /v1/checkout/summary`, `POST /v1/checkout/orders`, expects a `paymentClientSecret` (local Stripe stand-in) |
 | staff console and Seller Center login pages, Mailpit | 200 after redirects, `:8025/api/v1/info` |
 | search index document count > 0 | Meilisearch `/stats` (or Elasticsearch `_cat/count`); on 0 it says to run `make reindex-search` |
-| seeded orders in the staff order list | `GET /v1/admin/orders` on core (`ORDERS_URL`; `:8104` in STACK=services) |
-| Prometheus targets for core and afrotransact-go UP | `:9090/api/v1/targets`: `:8101` (served by core; core's own `:8120` is not a scrape target) and `:8200` |
+| seeded orders in the staff order list, by state | `GET /v1/admin/orders` on `:8120/modules/orders` (`ORDERS_URL`; `:8104` in STACK=services); prints the count per state |
+| Prometheus targets for core and afrotransact-go UP | `:9090/api/v1/targets`: `:8120` (legacy `:8101` also accepted) and `:8200` |
 
-Addresses: `BFF_URL`, `CORE_URL`, `IDENTITY_URL`, `ORDERS_URL`, `STOREFRONT_URL`, `SELLER_CENTER_URL`, `STAFF_CONSOLE_URL`, `MAILPIT_URL`,
+Addresses: `BFF_URL`, `CORE_URL`, `IDENTITY_URL`, `ORDERS_URL`, `CATALOG_URL`, `STOREFRONT_URL`, `SELLER_CENTER_URL`, `STAFF_CONSOLE_URL`, `MAILPIT_URL`,
 `MEILISEARCH_URL`, `PROMETHEUS_URL` override the defaults; the web ports follow `.local/web-ports`; `STACK=services` switches to the old
 ports. `make smoke-test` runs the script against a fake stack (no stack needed). **Not run against a real stack when written**: the response
 shapes come from `contracts/openapi/gateway-bff.yaml`; the first real run may show a check whose field name differs.

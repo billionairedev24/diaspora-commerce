@@ -2,6 +2,7 @@
 all green exits 0 with a PASS line per check; a thin catalogue and a missing photo exit 1 with the failing URL and status."""
 import json
 import os
+import re
 import subprocess
 import threading
 import unittest
@@ -43,7 +44,7 @@ class Fake(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         q = parse_qs(u.query)
         host = self.headers["Host"]
-        p = u.path
+        p = re.sub(r"^/modules/[a-z-]+", "", u.path)  # core's single entry: /modules/<module>/...
         if p == "/actuator/health/readiness":
             return self.send(200, {"status": "UP"})
         if p == "/actuator/health":
@@ -81,9 +82,9 @@ class Fake(BaseHTTPRequestHandler):
         if p == "/stats":
             return self.send(200, {"indexes": {"products": {"numberOfDocuments": 106}}})
         if p == "/v1/admin/orders":
-            return self.send(200, {"total": 14, "items": []})
+            return self.send(200, {"total": 14, "items": [{"status": "placed", "attribution": {"src": "demo-seed"}}, {"status": "placed"}, {"status": "delivered"}]})
         if p == "/api/v1/targets":
-            return self.send(200, {"data": {"activeTargets": [{"scrapeUrl": "http://h:8101/actuator/prometheus", "health": "up"},
+            return self.send(200, {"data": {"activeTargets": [{"scrapeUrl": "http://h:8120/actuator/prometheus", "health": "up"},
                                                                {"scrapeUrl": "http://h:8200/metrics", "health": "up"}]}})
         self.send(404, {"code": "not-found"})
 
@@ -134,7 +135,7 @@ class SmokeTest(unittest.TestCase):
                       "at least one product in each of 2 departments", "product page data", "seller store page /b/mama-put-pantry",
                       "cart add", "cart read", "estimated tax for ZIP 77042", "checkout reaches the payment-intent step",
                       "staff console login page", "Seller Center login page", "Mailpit reachable", "search index has documents",
-                      "seeded orders exist", "Prometheus target for core", "Prometheus target for afrotransact-go"):
+                      "seeded orders exist in the staff order list (14 orders, 1 seeded; by state: delivered 1, placed 2)", "Prometheus target for core", "Prometheus target for afrotransact-go"):
             self.assertIn("PASS  " + label, res.stdout, label)
         self.assertRegex(res.stdout, r"smoke: \d+ passed, 0 failed")
 

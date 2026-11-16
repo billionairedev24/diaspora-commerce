@@ -6,7 +6,7 @@
 #
 # Where things are (override any of them; the defaults are what `make up` starts):
 #   STACK=monolith (default) core :8120 + afrotransact-go :8200      STACK=services the old per-service processes
-#   BFF_URL (gateway-bff / afrotransact-go)  CORE_URL  IDENTITY_URL  ORDERS_URL  STOREFRONT_URL  SELLER_CENTER_URL
+#   BFF_URL (gateway-bff / afrotransact-go)  CORE_URL  IDENTITY_URL  ORDERS_URL  CATALOG_URL  STOREFRONT_URL  SELLER_CENTER_URL
 #   STAFF_CONSOLE_URL  MAILPIT_URL  MEILISEARCH_URL  PROMETHEUS_URL        (web ports follow .local/web-ports when set there)
 #   SMOKE_CHECKOUT=0 skips the checkout check · SMOKE_MIN_PRODUCTS (40) · SMOKE_DEPT_SKIP ("Services": departments whose
 #   items are not products in search) · SMOKE_CUSTOMER / SMOKE_PASSWORD (customer.houston@afrotransact.test, the seeded one)
@@ -25,8 +25,16 @@ web_port() { # VAR default
 BFF_URL="${BFF_URL:-http://localhost:${AFROTRANSACT_GO_PORT:-8200}}"
 BFF_URL="${BFF_URL%/}"
 CORE_URL="${CORE_URL:-http://localhost:8120}"
-IDENTITY_URL="${IDENTITY_URL:-http://localhost:8100}"
-if [[ "$STACK" == services ]]; then ORDERS_URL="${ORDERS_URL:-http://localhost:8104}"; else ORDERS_URL="${ORDERS_URL:-$CORE_URL}"; fi
+CORE_URL="${CORE_URL%/}"
+# STACK=monolith: every Java module through core's single entry, <CORE_URL>/modules/<module> (the legacy ports 8100-8115 are
+# compatibility only and may be off); STACK=services: each service's own port. Any of them can be set.
+if [[ "$STACK" == services ]]; then
+  IDENTITY_URL="${IDENTITY_URL:-http://localhost:8100}"; ORDERS_URL="${ORDERS_URL:-http://localhost:8104}"
+  CATALOG_URL="${CATALOG_URL:-http://localhost:8101}"
+else
+  IDENTITY_URL="${IDENTITY_URL:-$CORE_URL/modules/identity}"; ORDERS_URL="${ORDERS_URL:-$CORE_URL/modules/orders}"
+  CATALOG_URL="${CATALOG_URL:-$CORE_URL/modules/catalog}"
+fi
 STOREFRONT_URL="${STOREFRONT_URL:-http://localhost:$(web_port STOREFRONT_PORT 3000)}"
 SELLER_CENTER_URL="${SELLER_CENTER_URL:-http://localhost:$(web_port SELLER_CENTER_PORT 3010)}"
 STAFF_CONSOLE_URL="${STAFF_CONSOLE_URL:-http://localhost:$(web_port STAFF_CONSOLE_PORT 3002)}"
@@ -114,8 +122,7 @@ for q in iru rice; do
   else fail "search '$q' returns results" "$BFF_URL/v1/search?q=$q status $CODE, total $(num .total)"; fi
 done
 
-req GET "$CORE_URL/v1/categories"
-if [[ "$STACK" == services ]]; then req GET "http://localhost:8101/v1/categories"; fi
+req GET "$CATALOG_URL/v1/categories"
 depts=$(jq -r '.[]? | select(.level == "DEPARTMENT") | .name' "$BODY" 2>/dev/null)
 if [[ -z "$depts" ]]; then
   fail "one product per top-level department" "category tree not readable (status $CODE)"
@@ -242,16 +249,21 @@ fi
 if ok2xx && [[ "${docs:-0}" =~ ^[0-9]+$ && "${docs:-0}" -gt 0 ]]; then pass "search index has documents ($docs)"
 else fail "search index document count > 0" "$where status $CODE, ${docs:-0} documents: run make reindex-search, then make seed"; fi
 
-req GET "$ORDERS_URL/v1/admin/orders?limit=1"
-if ok2xx && [[ "$(num '.total')" -gt 0 ]]; then pass "seeded orders exist in the staff order list ($(num .total))"
-else fail "seeded orders exist in the staff order list" "$ORDERS_URL/v1/admin/orders status $CODE, total $(num .total) (make seed runs the ops step; see its log for the sign-in cause)"; fi
+req GET "$ORDERS_URL/v1/admin/orders?limit=100"
+orders_total=$(num '.total')
+by_state=$(jq -r '[.items // [] | .[] | (.status // .state // "unknown")] | group_by(.) | map("\(.[0]) \(length)") | join(", ")' "$BODY" 2>/dev/null)
+seeded=$(jq -r '[.items // [] | .[] | select((.attribution.src // "") == "demo-seed")] | length' "$BODY" 2>/dev/null || echo 0)
+if ok2xx && [[ "$orders_total" -gt 0 ]]; then
+  pass "seeded orders exist in the staff order list ($orders_total orders, $seeded seeded; by state: ${by_state:-n/a})"
+else fail "seeded orders exist in the staff order list" "$ORDERS_URL/v1/admin/orders status $CODE, total $orders_total (make seed runs the ops step; its summary names each cause once)"; fi
 
 req GET "$PROMETHEUS_URL/api/v1/targets?state=active"
 if ok2xx; then
-  # core serves :8100-:8115 (catalog :8101 stands for it); afrotransact-go serves :8200 (gateway-bff's port).
-  core_health=$(jq -r '[.data.activeTargets[] | select(.scrapeUrl | test(":8101/")) | .health] | first // "missing"' "$BODY")
+  # core is scraped at :8120 (job afrotransact-core), and through a legacy port (:8101) while those are on;
+  # afrotransact-go serves :8200 (gateway-bff's port).
+  core_health=$(jq -r '[.data.activeTargets[] | select(.scrapeUrl | test(":(8120|8101)/")) | .health] | if any(. == "up") then "up" else (first // "missing") end' "$BODY")
   go_health=$(jq -r '[.data.activeTargets[] | select(.scrapeUrl | test(":8200/")) | .health] | first // "missing"' "$BODY")
-  if [[ "$core_health" == up ]]; then pass "Prometheus target for core (:8101, served by core) is UP"; else fail "Prometheus target for core is UP" "$PROMETHEUS_URL/api/v1/targets: :8101 is $core_health"; fi
+  if [[ "$core_health" == up ]]; then pass "Prometheus target for core (:8120) is UP"; else fail "Prometheus target for core is UP" "$PROMETHEUS_URL/api/v1/targets: core (:8120, or legacy :8101) is $core_health (restart Prometheus: make down && make up)"; fi
   if [[ "$go_health" == up ]]; then pass "Prometheus target for afrotransact-go (:8200) is UP"; else fail "Prometheus target for afrotransact-go is UP" "$PROMETHEUS_URL/api/v1/targets: :8200 is $go_health"; fi
 else
   fail "Prometheus targets for core and afrotransact-go are UP" "$PROMETHEUS_URL/api/v1/targets status $CODE (OBS=0 turns Prometheus off)"

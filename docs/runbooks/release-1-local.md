@@ -111,6 +111,28 @@ skipped with a reason in the summary.
 file is checked before any upload, and a photo media refuses is replaced by another candidate. If MinIO was recreated the upload cache
 is dropped with one line and the photos are uploaded again.
 
+**Addresses.** In STACK=monolith (the default) the seeder and `make smoke` use core's single entry, `http://localhost:8120/modules/<module>`
+(identity, catalog, offers, inventory, seller, bookings, content, delivery-runs, orders, payments, retail, fulfilment, trust-ops,
+tax-returns), and afrotransact-go on :8200 (media, geo and the BFF flat; cart, search and carrier-gateway under `/modules/<name>`). The
+legacy ports 8100-8115 are only used with `STACK=services`. Every address stays overridable (`CATALOG_URL`, `CORE_URL`, `BFF_URL`,
+`AFROTRANSACT_GO_PORT` ...); each step prints the base URLs it uses once, `make up` / `make seed` export them (`mono_peer_env`).
+
+**What a re-run does.** `make up` on a catalogue that already has products re-seeds only what is missing: demo products an earlier run lost
+(for example after a publish-gate refusal) are created again, then ads and the order data. That is why products that failed once come
+back by themselves.
+
+**The order step names each cause once.** Before an order is placed the seeder checks that every product it buys is in the catalog, LIVE,
+tax-READY and has an ACTIVE offer; it asks the BFF what delivery options checkout offers for the cart and sends one of those (parcel
+scenarios use AfroTransact delivery because seller carrier shipping is off at launch; `carrier` only where offered). A cause that hits
+several orders is one line with the orders and the fix, for example `2 order(s) not placed (delivered-return-requested, ...): Halal Goat
+Meat is not in the catalog ... Fix: make seed ARGS="--only products"`. Orders that could not be placed are left out of fulfilment,
+returns and dispatch instead of failing again there.
+
+**Stripe test keys.** With `STRIPE_SECRET_KEY=sk_test_...` in `.local/secrets.env` payments uses real Stripe test mode, where an order waits
+for its card. `make seed` loads that file and confirms each demo PaymentIntent with Stripe's test card `pm_card_visa` through api.stripe.com
+(only `sk_test_` keys are ever used, the key is never printed), then asks orders to continue; no `stripe listen` is needed. Without a key
+the local stand-in authorises every card.
+
 **Order data needs identity's first-party sign-in.** The `ops` and `users` steps sign the test customers in as gateway-bff does (client
 credentials `gateway-bff`, scope `auth:first-party`, then `POST /v1/auth/password`; the local secret is identity's default or
 `GATEWAY_BFF_CLIENT_SECRET`). In core with `at.security.enabled=false` identity used to answer every such call with 403
