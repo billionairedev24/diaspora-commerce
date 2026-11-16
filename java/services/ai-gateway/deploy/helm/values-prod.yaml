@@ -17,11 +17,14 @@ extraEnv:
   JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:TieredStopAtLevel=1 -XX:MaxRAMPercentage=70 -Xss512k -XX:-UsePerfData -XX:ReservedCodeCacheSize=64m -XX:+ExitOnOutOfMemoryError"
   SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "4"
   SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "0"
-  # SPEND CEILING (owner decision, docs/runbooks/ai-spend-and-mcp-access.md): USD 2.00 per UTC day for the whole gateway and USD 0.50
-  # for one caller; above it every call answers 429 ai.budget-exceeded. Pinned here so the production number is visible in the
-  # chart and a code default change cannot raise it silently. Raise it for a day by editing these and syncing ai-gateway.
+  # SPEND CAP (owner decision, docs/runbooks/ai-spend-and-mcp-access.md): USD 2.00 per UTC day for the whole gateway and USD 0.50
+  # for one caller; above it every call answers 429 ai.budget-exceeded. The daily total is now a runtime setting that staff with
+  # ai:cap.manage change in the staff console (Settings > AI and MCP spend cap, stored in the ai-gateway database);
+  # AI_GLOBAL_DAILY_COST_USD is only its INITIAL default (used until a value is saved) and AI_GLOBAL_DAILY_COST_MAX_USD is the
+  # hard ceiling no saved value can exceed (changing either takes a chart change and a sync). 0 = AI off.
   # The second, independent cap is a credit limit on the OPENROUTER_API_KEY itself (OpenRouter dashboard).
   AI_GLOBAL_DAILY_COST_USD: "2.00"
+  AI_GLOBAL_DAILY_COST_MAX_USD: "20.00"
   AI_CALLER_DAILY_COST_USD: "0.50"
   SEARCH_URL: http://search:8080
   CATALOG_URL: http://catalog:8080

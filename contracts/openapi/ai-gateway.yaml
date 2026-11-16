@@ -27,6 +27,8 @@ tags:
   description: Embeddings for search, image moderation for media and drafting aids for sellers and staff
 - name: AI usage
   description: AI credits per organisation for metered billing (S206)
+- name: AI spend cap
+  description: The gateway-wide daily AI spend cap, editable at runtime by staff with ai:cap.manage
 paths:
   /v1/ai/listing-writer:
     post:
@@ -212,7 +214,7 @@ paths:
       summary: Today's AI spend against the daily cap, by feature
       description: Staff with ai:manage. Read from the usage ledger (cost is estimated from provider usage after each call, so
         the day can overshoot the cap by the calls in flight). A day with no model call is zero with hasData false. UTC day;
-        resets at 00:00 UTC. The cap itself is deployment configuration (AI_GLOBAL_DAILY_COST_USD) and is not changed here.
+        resets at 00:00 UTC. capMicros is the cap in force (see /v1/ai/spend-cap, where it is changed).
       operationId: today
       responses:
         '200':
@@ -221,6 +223,65 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/AiSpendToday'
+  /v1/ai/spend-cap:
+    get:
+      tags:
+      - AI spend cap
+      summary: The daily AI spend cap, its source and ceiling, today's spend and the change history
+      description: Staff with ai:manage or ai:cap.manage. The ETag is the version to send as If-Match when changing the cap
+        (0 while the deployment default is in force). UTC day; resets at 00:00 UTC. Never cached.
+      operationId: getSpendCap
+      responses:
+        '200':
+          description: OK
+          headers:
+            ETag: {description: 'The cap''s version, e.g. "2"', schema: {type: string}}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiSpendCap'
+        '403':
+          $ref: '#/components/responses/Problem'
+    put:
+      tags:
+      - AI spend cap
+      summary: Change the daily AI spend cap (ai:cap.manage)
+      description: Staff with ai:cap.manage only (a shopper, seller, service client or staff without it gets 403). capMicros is a
+        whole number of cents from 0 (AI off) up to the hard ceiling (AI_GLOBAL_DAILY_COST_MAX_USD), reason 3 to 300 characters,
+        If-Match the version from GET (428 when missing, 412 when someone else saved first). Takes effect within seconds on
+        every replica and at once on the one that saved; lowering below today's spend blocks further AI calls immediately
+        (429 ai.budget-exceeded), raising applies to the same UTC day. Every change is audited (ai.spend-cap.changed) with
+        who, when, before, after and the reason. Not available as an MCP tool.
+      operationId: putSpendCap
+      parameters:
+      - name: If-Match
+        in: header
+        required: true
+        description: The version loaded with GET, as the ETag (e.g. "2")
+        schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiSpendCapUpdate'
+      responses:
+        '200':
+          description: Saved; the body is the new state
+          headers:
+            ETag: {description: 'The new version', schema: {type: string}}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiSpendCap'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '412':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        '428':
+          $ref: '#/components/responses/Problem'
   /v1/embeddings:
     post:
       tags:
@@ -850,7 +911,7 @@ components:
       description: Today's AI spend (UTC day) against the daily cap, by feature
       properties:
         day: {type: string, format: date, description: UTC day}
-        capMicros: {type: integer, format: int64, description: 'Gateway-wide daily cap in micro-dollars; 0 = unlimited. Set by AI_GLOBAL_DAILY_COST_USD on the ai-gateway deployment'}
+        capMicros: {type: integer, format: int64, description: 'Gateway-wide daily cap in force, micro-dollars; 0 = AI off. The saved cap, else the AI_GLOBAL_DAILY_COST_USD default'}
         callerCapMicros: {type: integer, format: int64, description: 'One caller''s daily share in micro-dollars; 0 = unlimited (AI_CALLER_DAILY_COST_USD)'}
         spentMicros: {type: integer, format: int64, description: 'Estimated model cost so far today, micro-dollars (1,000,000 = USD 1)'}
         calls: {type: integer, format: int64}
@@ -861,6 +922,46 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AiFeatureSpend'
+    AiSpendCapChange:
+      type: object
+      description: One saved change of the cap (audit trail, newest first)
+      required: [version, previousWasDefault, newMicros, changedBy, changedAt, reason]
+      properties:
+        version: {type: integer, format: int64, description: Version this change created}
+        previousMicros: {type: [integer, 'null'], format: int64, description: 'Cap before, micro-dollars; null when the value before was the deployment default'}
+        previousWasDefault: {type: boolean}
+        newMicros: {type: integer, format: int64, description: 'Cap after, micro-dollars (0 = AI off)'}
+        changedBy: {type: string, description: Staff subject (identity user id) who saved it}
+        changedAt: {type: string, format: date-time}
+        reason: {type: string, minLength: 3, maxLength: 300}
+    AiSpendCap:
+      type: object
+      description: The daily cap in force, where it comes from, the ceiling, today's spend and the history
+      required: [capMicros, source, defaultMicros, ceilingMicros, version, day, spentMicros, remainingMicros, resetsAt, canChange, history]
+      properties:
+        capMicros: {type: integer, format: int64, description: 'Cap in force, micro-dollars per UTC day (1,000,000 = USD 1); 0 = AI off'}
+        source: {type: string, enum: [default, saved]}
+        defaultMicros: {type: integer, format: int64, description: 'Deployment default (AI_GLOBAL_DAILY_COST_USD), used until a value is saved'}
+        ceilingMicros: {type: integer, format: int64, description: 'Hard ceiling (AI_GLOBAL_DAILY_COST_MAX_USD); a saved value above it is refused'}
+        version: {type: integer, format: int64, description: 'ETag of the saved value; 0 while the default is in force. Send it as If-Match'}
+        changedBy: {type: [string, 'null'], description: Staff subject who saved the value in force; null for the default}
+        changedAt: {type: [string, 'null'], format: date-time}
+        reason: {type: [string, 'null']}
+        day: {type: string, format: date, description: UTC day the spend is for}
+        spentMicros: {type: integer, format: int64, description: 'Spent so far today, micro-dollars: the figure the cap is checked against'}
+        remainingMicros: {type: integer, format: int64, description: 'cap minus spent, never below 0'}
+        resetsAt: {type: string, format: date-time, description: 'Next UTC midnight, when the day''s total starts again'}
+        canChange: {type: boolean, description: The caller holds ai:cap.manage}
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/AiSpendCapChange'
+    AiSpendCapUpdate:
+      type: object
+      required: [capMicros, reason]
+      properties:
+        capMicros: {type: integer, format: int64, minimum: 0, multipleOf: 10000, description: 'New cap, micro-dollars per UTC day: whole cents, 0 (AI off) up to the ceiling', example: 2000000}
+        reason: {type: string, minLength: 3, maxLength: 300, description: 'Why; logged with who and when', example: Launch week}
     AiOrgUsageReport:
       type: object
       properties:
@@ -877,6 +978,19 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AiOrgDayUsage'
+  responses:
+    Problem:
+      description: RFC 9457 problem; code is one of auth.missing-permission, ai.spend-cap.version-mismatch, ai.spend-cap.precondition-required, ai.spend-cap.reason-invalid, ai.spend-cap.invalid, ai.spend-cap.above-ceiling, ai.spend-cap.invalid-if-match
+      content:
+        application/problem+json:
+          schema:
+            type: object
+            properties:
+              type: {type: string}
+              title: {type: string}
+              status: {type: integer}
+              detail: {type: string}
+              code: {type: string}
   securitySchemes:
     bearer:
       type: http

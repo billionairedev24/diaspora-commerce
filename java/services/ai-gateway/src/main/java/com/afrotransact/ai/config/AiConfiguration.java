@@ -1,6 +1,7 @@
 package com.afrotransact.ai.config;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
@@ -19,6 +20,7 @@ import com.afrotransact.ai.domain.DefaultModelRoutingPolicy;
 import com.afrotransact.ai.domain.ModelRoute;
 import com.afrotransact.ai.domain.ModelRoutingPolicy;
 import com.afrotransact.ai.domain.PriceTable;
+import com.afrotransact.ai.domain.SpendCapSettings;
 import com.afrotransact.ai.domain.SpendLimits;
 import com.afrotransact.ai.domain.TaskType;
 import com.afrotransact.ai.domain.guardrail.DefaultGroundingVerifier;
@@ -73,8 +75,14 @@ class AiConfiguration {
     @Bean
     SpendLimits spendLimits(AiProperties props) {
         AiProperties.Spend s = props.spend();
-        return new SpendLimits(micros(s.globalDailyCostUsd()), micros(s.callerDailyCostUsd()), s.userCallsPerMinute(),
-                s.serviceCallsPerMinute());
+        return new SpendLimits(micros(s.callerDailyCostUsd()), s.userCallsPerMinute(), s.serviceCallsPerMinute());
+    }
+
+    @Bean
+    SpendCapSettings spendCapSettings(AiProperties props) {
+        AiProperties.Spend s = props.spend();
+        return new SpendCapSettings(micros(s.globalDailyCostUsd()), micros(s.globalDailyCostMaxUsd()),
+                Duration.ofSeconds(s.capCacheSeconds()));
     }
 
     @Bean

@@ -8,6 +8,7 @@ import java.time.ZonedDateTime;
 import com.afrotransact.ai.domain.AiRuleViolation;
 import com.afrotransact.ai.domain.BudgetExceededException;
 import com.afrotransact.ai.domain.RateLimitedException;
+import com.afrotransact.ai.domain.SpendCapPreconditionException;
 import com.afrotransact.ai.port.ModelUnavailableException;
 import com.afrotransact.platform.web.error.ProblemTypes;
 import org.springframework.core.Ordered;
@@ -48,6 +49,13 @@ class AiErrorAdvice {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
                 .header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.retryAfterSeconds()))
                 .contentType(MediaType.APPLICATION_PROBLEM_JSON).body(pd);
+    }
+
+    @ExceptionHandler(SpendCapPreconditionException.class)
+    ResponseEntity<ProblemDetail> capPrecondition(SpendCapPreconditionException ex) {
+        HttpStatus status = HttpStatus.valueOf(ex.status());
+        return ResponseEntity.status(status).contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .body(problem(status, ex.code(), "Spend cap version", ex.getMessage()));
     }
 
     @ExceptionHandler(ModelUnavailableException.class)
