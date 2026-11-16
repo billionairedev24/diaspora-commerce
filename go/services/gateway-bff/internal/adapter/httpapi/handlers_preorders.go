@@ -410,6 +410,8 @@ func setVersionETag(w http.ResponseWriter, v any) {
 		return
 	}
 	switch n := m["version"].(type) {
+	case int64:
+		w.Header().Set("ETag", `"`+strconv.FormatInt(n, 10)+`"`)
 	case float64:
 		w.Header().Set("ETag", `"`+strconv.FormatInt(int64(n), 10)+`"`)
 	case string:

@@ -100,3 +100,22 @@ func (h *handlersImpl) staffAISpendToday(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Cache-Control", "no-store")
 	h.reply(w, r, http.StatusOK, v, err)
 }
+
+func (h *handlersImpl) staffAISpendCap(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.AISpend.Cap(r.Context(), callerFrom(r.Context()))
+	w.Header().Set("Cache-Control", "no-store")
+	setVersionETag(w, v)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffSetAISpendCap(w http.ResponseWriter, r *http.Request) {
+	b, err := staffBody(r)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.AISpend.SetCap(r.Context(), callerFrom(r.Context()), r.Header.Get("If-Match"), b)
+	w.Header().Set("Cache-Control", "no-store")
+	setVersionETag(w, v)
+	h.reply(w, r, http.StatusOK, v, err)
+}

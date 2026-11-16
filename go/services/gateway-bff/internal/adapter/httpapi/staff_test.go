@@ -54,7 +54,7 @@ func TestEmbeddedStaffContractIsIdentical(t *testing.T) {
 var supportPerms = []string{"bookings:read", "catalog:moderate", "delivery:dispatch", "disputes:manage", "inventory:read", "notifications:read", "orders:read",
 	"orders:update-status", "orgs:read", "payments:read", "delivery-quotes:view", "delivery-quotes:agree", "delivery-quotes:assign", "refunds:issue", "reports:read", "returns:manage", "support:respond", "users:read"}
 
-var adminPerms = []string{"access:admin", "access:read", "ai:manage", "applications:approve", "applications:review", "audit:read", "catalog:moderate", "identity:admin", "content:legal.edit",
+var adminPerms = []string{"access:admin", "access:read", "ai:cap.manage", "ai:manage", "applications:approve", "applications:review", "audit:read", "catalog:moderate", "identity:admin", "content:legal.edit",
 	"content:markets.edit", "content:placements.approve", "content:placements.edit", "content:site.edit", "content:careers.edit", "delivery:dispatch", "disputes:manage",
 	"inventory:adjust", "inventory:read", "notifications:manage", "notifications:read", "notifications:templates:write", "orders:manage", "orders:read", "orders:shipping.edit", "orders:shipping.view", "ledger:adjust", "ledger:approve", "payments:configure", "payments:read", "payouts:approve", "payouts:read", "delivery-quotes:view", "delivery-quotes:agree", "delivery-quotes:assign",
 	"refunds:issue", "reports:read", "retail:po:approve", "retail:po:write", "returns:manage", "support:respond", "tax:configure", "users:read"}
