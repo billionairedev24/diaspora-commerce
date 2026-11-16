@@ -65,7 +65,10 @@ describe('Delivery module', () => {
     expect(within(sheet).getByText(/117 Main St/)).toBeInTheDocument();
     expect(within(sheet).queryByRole('button', { name: /Mark delivered/ })).not.toBeInTheDocument();
     await user.click(within(sheet).getByRole('button', { name: 'Take this delivery' }));
-    await user.click(await within(sheet).findByRole('button', { name: 'Mark picked up' }));
+    await user.click(await within(sheet).findByRole('button', { name: 'Picked up from the seller…' }));
+    const pickup = await screen.findByRole('dialog', { name: 'Picked up from the seller' });
+    await user.type(within(pickup).getByLabelText('Pickup note (optional)'), '2 boxes, handed over by Mama Tee');
+    await user.click(within(pickup).getByRole('button', { name: 'Mark picked up' }));
     await user.click(await within(sheet).findByRole('button', { name: 'Mark out for delivery' }));
     await user.click(await within(sheet).findByRole('button', { name: /Mark delivered/ }));
 
@@ -88,7 +91,7 @@ describe('Delivery module', () => {
     expect(within(proof).getByText('Ada Obi')).toBeInTheDocument();
     expect(within(proof).getByText('Left with the neighbour')).toBeInTheDocument();
     const audit = within(screen.getByTestId('delivery-audit')).getAllByRole('listitem');
-    expect(audit.map((a) => a.querySelector('strong')?.textContent)).toEqual(['Delivered with proof', 'Out for delivery', 'Picked up', 'Took the delivery']);
+    expect(audit.map((a) => a.querySelector('strong')?.textContent)).toEqual(['Delivered with proof', 'Out for delivery', 'Picked up from the seller', 'Took the delivery']);
     // Names, never ids, say who did it.
     expect(within(screen.getByTestId('delivery-audit')).getAllByText(/Ifeoma Okafor|Amara|Felix|Okafor/).length).toBeGreaterThan(0);
   }, 60_000);

@@ -71,3 +71,31 @@ describe('proof of delivery on the seller’s order (read-only)', () => {
     expect(within(box).queryByRole('button')).not.toBeInTheDocument();
   });
 });
+
+describe('a seller whose shipment is fulfilled by AfroTransact', () => {
+  const afro: Progress = { status: 'READY', nextActions: [], trackingNumber: null, canBuyLabel: false, fulfilment: 'AFROTRANSACT_DELIVERY', fulfilmentMode: 'afrotransact_delivery', needsShipDetails: false };
+
+  it('sees it read-only: AfroTransact picks it up, with where to find the pickup hours, and no button', () => {
+    renderWithProviders(<ShipmentProgress shipment={afro} editable loading={false} onMove={vi.fn()} />);
+    const note = screen.getByTestId('afrotransact-note');
+    expect(note).toHaveTextContent('AfroTransact picks this up.');
+    expect(note).toHaveTextContent('pickup hours');
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(document.body.textContent).not.toMatch(/driver/i);
+  });
+
+  it('is told AfroTransact has it, and can do nothing, while it is picked up, on the way or failed', () => {
+    for (const [status, text] of [['PICKED_UP', 'AfroTransact has this order.'], ['IN_TRANSIT', 'AfroTransact has this order.'], ['OUT_FOR_DELIVERY', 'AfroTransact has this order.'], ['DELIVERY_FAILED', 'AfroTransact could not deliver this yet.']] as const) {
+      const { unmount } = renderWithProviders(<ShipmentProgress shipment={{ ...afro, status }} editable loading={false} onMove={vi.fn()} />);
+      expect(screen.getByTestId('afrotransact-note')).toHaveTextContent(text);
+      expect(screen.queryByRole('button')).toBeNull();
+      unmount();
+    }
+  });
+
+  it('says nothing about AfroTransact for a seller-shipped or pickup order', () => {
+    renderWithProviders(<ShipmentProgress shipment={{ ...afro, fulfilmentMode: 'seller_ships', status: 'PICKED_UP', nextActions: ['DELIVERED'] }} editable loading={false} onMove={vi.fn()} />);
+    expect(screen.queryByTestId('afrotransact-note')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Mark delivered' })).toBeEnabled();
+  });
+});

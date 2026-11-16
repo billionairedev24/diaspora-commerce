@@ -17,6 +17,7 @@ import {
   type StaffForm
 } from '../../schemas/staff';
 import { APPLICATION_QUEUES, ASSIGNMENT_ACTIONS, inQueue, reviewSettingsDef, stageLine } from './application-flow';
+import { changeRequestsDef, duplicatePagesDef, gtinExemptionsDef, heldImagesDef, wrongMatchesDef } from './catalog-review';
 import { MOCK_STOREFRONT_URL } from './content-pages';
 import { type MockRecord, type Scalar } from './db';
 import { inQuoteQueue, QUOTE_ACTIONS, QUOTE_QUEUES, quoteSettingsDef, quoteSheetSections, quoteStageLine } from './delivery-quotes';
@@ -24,12 +25,11 @@ import { exchangeRatesDef } from './exchange-rates';
 import { IDENTITY_RESOURCES } from './identity';
 import { MOCK_DRIVERS } from './lookups';
 import { tierBenefitDetails } from './membership-tiers';
-import { applyShipmentOverride, applyShipmentStep, noStepReason, orderSections, overrideOptions, type ShipmentCaps, shipmentsOf, stepOptions } from './order-shipments';
-import { shippingSettingsDef } from './shipping-settings';
+import { applyShipmentOverride, applyShipmentStep, noStepReason, orderSections, overrideOptions, type ShipmentCaps, shipmentsOf, staffDelivers, stepOptions } from './order-shipments';
 import { sellerApprovalsDef, sellingApprovalsDef, sellingRulesDef } from './selling';
 import { serviceAreaRulesDef, serviceZonesDef } from './service-areas';
+import { shippingSettingsDef } from './shipping-settings';
 import { categoryRequestsDef } from './taxonomy';
-import { changeRequestsDef, duplicatePagesDef, gtinExemptionsDef, heldImagesDef, wrongMatchesDef } from './catalog-review';
 
 export interface ActionCtx {
   actor: string;
@@ -327,7 +327,7 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     linesTitle: 'Shipments',
     links: (r) => [
       { label: 'Open in customer support', href: `/support?customer=${encodeURIComponent(str(r.fields.customerId))}` },
-      ...((r.lines ?? []).some((l) => str(l.deliveryMethod) === 'AFROTRANSACT_DELIVERY' && ['READY', 'PACKED'].includes(str(l.status))) ? [{ label: 'Assign a driver', href: '/dispatch?tab=pickups' }] : [])
+      ...((r.lines ?? []).some((l) => staffDelivers(l) && ['READY', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERY_FAILED'].includes(str(l.status))) ? [{ label: 'Open in Delivery', href: `/delivery?q=${encodeURIComponent(r.id)}` }] : [])
     ],
     actions: [
       {

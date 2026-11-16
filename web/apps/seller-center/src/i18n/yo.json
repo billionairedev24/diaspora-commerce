@@ -2210,5 +2210,15 @@
   "sc.settings.store-page.description": "Ìrísí ojú ìwé ṣọ́ọ̀bù rẹ: àwòrán, àwọn ọjà àyànfẹ́ àti ohun tí àwọn oníbàárà ń kà níbẹ̀.",
   "sc.settings.status.storePublished": "A ti tẹ̀ jáde",
   "sc.settings.status.storeDraft": "A kò tíì tẹ̀ jáde",
-  "sc.settings.status.storeChanges": "Àwọn àtúnṣe tí a kò tíì tẹ̀ jáde"
+  "sc.settings.status.storeChanges": "Àwọn àtúnṣe tí a kò tíì tẹ̀ jáde",
+  "sc.ship.afro.picksUp": "AfroTransact yóò gbà èyí.",
+  "sc.ship.afro.picksUpHelp": "Jẹ́ kí ó wà ní àpò, ó sì ṣetán ní àwọn wákàtí gbígbà rẹ (Ètò, Ìfiránṣẹ́). Kò sí nǹkan míì tí o nílò láti ṣe.",
+  "sc.ship.afro.hasIt": "AfroTransact ní ìbéèrè yìí.",
+  "sc.ship.afro.hasItHelp": "AfroTransact ti gbà á, ó sì ń fi jiṣẹ́. Kò sí nǹkan tí o nílò láti ṣe.",
+  "sc.ship.afro.failed": "AfroTransact kò tíì lè fi jiṣẹ́.",
+  "sc.ship.afro.failedHelp": "À ń yanjú rẹ̀ pẹ̀lú olùrà. Tí ó bá padà sọ́dọ̀ rẹ, wàá rí i níbí.",
+  "sc.pickup.modeOn": "AfroTransact ló ń mú ṣẹ: AfroTransact yóò gba àwọn ìbéèrè rẹ tí a ti kó sínú àpò láti ibí ní àwọn wákàtí wọ̀nyí, yóò sì fi jiṣẹ́. Owó ìfijiṣẹ́ jẹ́ ti AfroTransact, kì í ṣe tìrẹ.",
+  "sc.pickup.modeOff": "Ìwọ ni o ń fi àwọn ìbéèrè láti ibí yìí ránṣẹ́: o ń kó wọn, o ń fi wọ́n ránṣẹ́, o sì ń jẹ́ kí ipò àti ìtọpinpin wọn jẹ́ òde-òní nínú Àwọn ìbéèrè. Ìwọ ni o ni ẹrù bí wọ́n bá dé.",
+  "sc.pickup.ack": "Mo ye mi pé èmi ni mo ni ẹrù fífi àwọn ìbéèrè wọ̀nyí ránṣẹ́ fúnra mi.",
+  "sc.pickup.ackNeeded": "Ṣàmì sí àpótí náà láti jẹ́rìí sí pé wàá fi àwọn ìbéèrè wọ̀nyí ránṣẹ́ fúnra rẹ."
 }

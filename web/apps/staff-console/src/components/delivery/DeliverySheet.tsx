@@ -8,7 +8,7 @@ import { useRef, useState } from 'react';
 import { Notice } from '@/components/ui/Notice';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { StatusPill } from '@/components/ui/StatusPill';
-import { useT } from '@/i18n/t';
+import { type MessageKey, useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
 import { dateTime, idempotencyKey, shortDate } from '@/lib/format';
 
@@ -36,12 +36,14 @@ export function DeliverySheet({ id, onClose }: { id: string | null; onClose: () 
   const toast = useToast();
   const q = useQuery({ ...staffQueries.delivery(api, id ?? ''), enabled: id !== null });
   const d = q.data;
-  const [dialog, setDialog] = useState<null | 'assign' | 'failed' | 'deliver' | 'correct'>(null);
+  const [dialog, setDialog] = useState<null | 'assign' | 'failed' | 'deliver' | 'correct' | 'pickup' | 'returned'>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = (next: DeliveryDetail) => {
     qc.setQueryData(staffKeys.delivery(next.row.shipmentId), next);
     void qc.invalidateQueries({ queryKey: staffKeys.deliveries(), refetchType: 'active' });
+    // The order sheet shows the same shipment: it must not show an older status.
+    void qc.invalidateQueries({ queryKey: staffKeys.record('orders', next.row.orderNumber) });
   };
   const act = useMutation({
     mutationFn: (run: () => Promise<DeliveryDetail>) => run(),
@@ -59,6 +61,7 @@ export function DeliverySheet({ id, onClose }: { id: string | null; onClose: () 
     return key.current.value;
   };
   const version = d?.job.version;
+  const expectedStatus = d?.row.status;
 
   const step = (name: string, run: (shipmentId: string, key: string) => Promise<DeliveryDetail>, done: string) => {
     if (!id) return;
@@ -89,13 +92,14 @@ export function DeliverySheet({ id, onClose }: { id: string | null; onClose: () 
                   {t('st.dlv.take')}
                 </Button>
               ) : null}
-              {next.has('picked_up') ? (
-                <Button loading={act.isPending} onClick={() => step('picked_up', (s, k) => api.markDeliveryPickedUp(s, { version }, k), t('st.dlv.toast.pickedUp'))}>
-                  {t('st.dlv.pickedUp')}
+              {next.has('picked_up') ? <Button onClick={() => setDialog('pickup')}>{t('st.dlv.pickedUp')}</Button> : null}
+              {next.has('in_transit') ? (
+                <Button variant="neutral" loading={act.isPending} onClick={() => step('transit', (s, k) => api.markDeliveryInTransit(s, { version, expectedStatus }, k), t('st.dlv.toast.transit'))}>
+                  {t('st.dlv.inTransit')}
                 </Button>
               ) : null}
               {next.has('out_for_delivery') ? (
-                <Button loading={act.isPending} onClick={() => step('out', (s, k) => api.markDeliveryOutForDelivery(s, { version }, k), t('st.dlv.toast.out'))}>
+                <Button loading={act.isPending} onClick={() => step('out', (s, k) => api.markDeliveryOutForDelivery(s, { version, expectedStatus }, k), t('st.dlv.toast.out'))}>
                   {status === 'delivery_failed' ? t('st.dlv.reattempt') : t('st.dlv.outForDelivery')}
                 </Button>
               ) : null}
@@ -103,6 +107,11 @@ export function DeliverySheet({ id, onClose }: { id: string | null; onClose: () 
               {next.has('delivery_failed') ? (
                 <Button variant="neutral" onClick={() => setDialog('failed')}>
                   {t('st.dlv.failed')}
+                </Button>
+              ) : null}
+              {next.has('returned') ? (
+                <Button variant="neutral" onClick={() => setDialog('returned')}>
+                  {t('st.dlv.returnToSeller')}
                 </Button>
               ) : null}
               {['ready', 'picked_up', 'in_transit', 'out_for_delivery', 'delivery_failed'].includes(status) ? (
@@ -228,7 +237,20 @@ export function DeliverySheet({ id, onClose }: { id: string | null; onClose: () 
       {d ? (
         <>
           <AssignDialog open={dialog === 'assign'} onOpenChange={(o) => setDialog(o ? 'assign' : null)} onAssign={(who, k) => act.mutateAsync(() => api.assignDelivery(d.row.shipmentId, who, { version }, k)).then(() => toast.show(t('st.dlv.toast.assigned')))} />
-          <FailedDialog open={dialog === 'failed'} onOpenChange={(o) => setDialog(o ? 'failed' : null)} onFail={(reason, k) => act.mutateAsync(() => api.markDeliveryFailed(d.row.shipmentId, reason, version, k)).then(() => toast.show(t('st.dlv.toast.failed')))} />
+          <FailedDialog open={dialog === 'failed'} onOpenChange={(o) => setDialog(o ? 'failed' : null)} onFail={(reason, k) => act.mutateAsync(() => api.markDeliveryFailed(d.row.shipmentId, reason, version, k, expectedStatus)).then(() => toast.show(t('st.dlv.toast.failed')))} />
+          <NoteDialog
+            open={dialog === 'pickup'}
+            onOpenChange={(o) => setDialog(o ? 'pickup' : null)}
+            copy={{ title: 'st.dlv.pickupDialog.title', help: 'st.dlv.pickupDialog.help', label: 'st.dlv.pickupDialog.note', submit: 'st.dlv.pickupDialog.submit' }}
+            onSave={(note, k) => act.mutateAsync(() => api.markDeliveryPickedUp(d.row.shipmentId, { version, expectedStatus, ...(note ? { note } : {}) }, k)).then(() => toast.show(t('st.dlv.toast.pickedUp')))}
+          />
+          <NoteDialog
+            open={dialog === 'returned'}
+            onOpenChange={(o) => setDialog(o ? 'returned' : null)}
+            required
+            copy={{ title: 'st.dlv.returnDialog.title', help: 'st.dlv.returnDialog.help', label: 'st.dlv.returnDialog.reason', submit: 'st.dlv.returnDialog.submit' }}
+            onSave={(reason, k) => act.mutateAsync(() => api.markDeliveryReturned(d.row.shipmentId, reason, expectedStatus, k)).then(() => toast.show(t('st.dlv.toast.returned')))}
+          />
           <ProofDialog
             open={dialog === 'deliver'}
             onOpenChange={(o) => setDialog(o ? 'deliver' : null)}
@@ -236,7 +258,7 @@ export function DeliverySheet({ id, onClose }: { id: string | null; onClose: () 
             orderNumber={orderNo}
             onSubmit={(v: ProofSubmit) =>
               act
-                .mutateAsync(() => api.markDeliveryDelivered(d.row.shipmentId, { photoAssetIds: v.photoAssetIds, recipientName: v.recipientName || undefined, note: v.note || undefined, latitude: v.latitude, longitude: v.longitude, version }, v.key))
+                .mutateAsync(() => api.markDeliveryDelivered(d.row.shipmentId, { photoAssetIds: v.photoAssetIds, recipientName: v.recipientName || undefined, note: v.note || undefined, latitude: v.latitude, longitude: v.longitude, version, expectedStatus }, v.key))
                 .then(() => toast.show(t('st.dlv.toast.delivered')))
             }
           />
@@ -365,6 +387,69 @@ function FailedDialog({ open, onOpenChange, onFail }: { open: boolean; onOpenCha
           </Button>
           <Button type="submit" loading={save.isPending}>
             {t('st.dlv.failedDialog.submit')}
+          </Button>
+        </DialogActions>
+      </form>
+    </Dialog>
+  );
+}
+
+/** A step with a note: optional for a pickup from the seller (where and from whom), required to return a parcel to the seller. */
+function NoteDialog({
+  open,
+  onOpenChange,
+  onSave,
+  required = false,
+  copy
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  onSave: (note: string, key: string) => Promise<unknown>;
+  required?: boolean;
+  copy: { title: MessageKey; help: MessageKey; label: MessageKey; submit: MessageKey };
+}) {
+  const t = useT();
+  const [note, setNote] = useState('');
+  const [err, setErr] = useState<string | null>(null);
+  const key = useRef('');
+  const save = useMutation({
+    mutationFn: () => onSave(note.trim(), key.current),
+    onSuccess: () => onOpenChange(false),
+    onError: (e) => setErr(isApiError(e) && Object.keys(e.fieldErrors).length ? Object.values(e.fieldErrors).join(' ') : problemMessage(e))
+  });
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (o) {
+          key.current = idempotencyKey();
+          setNote('');
+          setErr(null);
+        }
+        onOpenChange(o);
+      }}
+      title={t(copy.title)}
+      description={t(copy.help)}
+      closeLabel={t('st.dlv.close')}
+    >
+      <form
+        noValidate
+        className="flex flex-col gap-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (required && note.trim().length < 3) setErr(t('st.dlv.failedDialog.required'));
+          else save.mutate();
+        }}
+      >
+        <Field id="note-dialog" label={t(copy.label)} error={err}>
+          {(a11y) => <textarea {...a11y} className={fieldStyles.control} rows={3} maxLength={500} value={note} onChange={(e) => setNote(e.currentTarget.value)} />}
+        </Field>
+        <DialogActions>
+          <Button type="button" variant="neutral" onClick={() => onOpenChange(false)}>
+            {t('st.dlv.cancel')}
+          </Button>
+          <Button type="submit" loading={save.isPending}>
+            {t(copy.submit)}
           </Button>
         </DialogActions>
       </form>

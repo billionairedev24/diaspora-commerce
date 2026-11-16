@@ -46,12 +46,15 @@ export function DriverPickupForm({ a, editable }: { a: ShipFromAddress; editable
   const [enabled, setEnabled] = useState(saved.enabled);
   const [week, setWeek] = useState<DayRow[]>(() => weekOf(saved.hours));
   const [problem, setProblem] = useState<string | null>(null);
+  // Turning Fulfilled by AfroTransact off means the seller ships these orders: they confirm they are responsible for it.
+  const [ack, setAck] = useState(false);
   const save = useMutation({
     // Off sends the saved hours back untouched; on sends one window per open day.
     mutationFn: () => sellerApi().setAfrotransactPickup(a.id, { enabled, hours: enabled ? windowsOf(week) : saved.hours, version: a.version }),
     onSuccess: (next) => {
       setProblem(null);
       setEnabled(next.afrotransactPickup.enabled);
+      setAck(false);
       setWeek(weekOf(next.afrotransactPickup.hours));
       toast.show(t('sc.pickup.saved'));
       void qc.invalidateQueries({ queryKey: sellerKeys.shipFrom(orgId) });
@@ -60,7 +63,8 @@ export function DriverPickupForm({ a, editable }: { a: ShipFromAddress; editable
   });
   const check = checkWeek(week, { none: t('sc.weekly.errNone'), missing: t('sc.weekly.errMissing'), order: t('sc.weekly.errOrder') });
   const dirty = enabled !== saved.enabled || (enabled && !sameWeek(week, weekOf(saved.hours)));
-  const canSave = dirty && (!enabled || check.ok);
+  const leavingAfroTransact = !enabled && saved.enabled;
+  const canSave = dirty && (!enabled || check.ok) && (!leavingAfroTransact || ack);
   return (
     <form
       noValidate
@@ -77,7 +81,16 @@ export function DriverPickupForm({ a, editable }: { a: ShipFromAddress; editable
           {saved.zoneName ? t('sc.pickup.zone', { zone: saved.zoneName }) : t('sc.pickup.toggleHelp')}
           {saved.enabledAt ? ` · ${t('sc.pickup.since', { date: shortDate(saved.enabledAt) })}` : ''}
         </p>
+        <p className="m-0 mt-1 text-sm" data-testid="fulfilment-mode">
+          {enabled ? t('sc.pickup.modeOn') : t('sc.pickup.modeOff')}
+        </p>
       </div>
+      {leavingAfroTransact ? (
+        <label className="flex items-start gap-2 text-sm" data-testid="self-ship-ack">
+          <input type="checkbox" checked={ack} disabled={!editable || save.isPending} onChange={(e) => setAck(e.currentTarget.checked)} className="mt-1" />
+          <span>{t('sc.pickup.ack')}</span>
+        </label>
+      ) : null}
       {enabled ? <WeeklyHours week={week} onChange={setWeek} disabled={!editable || save.isPending} invalidDays={check.days} legend={t('sc.pickup.hours')} /> : null}
       {problem ? (
         <Notice tone="danger" title={t('sc.pickup.err.title')} role="alert">
@@ -89,6 +102,7 @@ export function DriverPickupForm({ a, editable }: { a: ShipFromAddress; editable
           <Button type="submit" size="sm" loading={save.isPending} disabled={!canSave}>
             {t('sc.pickup.save')}
           </Button>
+          {leavingAfroTransact && !ack ? <p className="m-0 text-sm text-muted">{t('sc.pickup.ackNeeded')}</p> : null}
           {enabled && !check.ok ? (
             <p className="m-0 text-sm text-muted" data-testid="driver-validation">
               {check.message}
