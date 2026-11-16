@@ -1,10 +1,9 @@
 'use client';
 
-import { type CartPreorder, type CheckoutPackage, type CheckoutSummary, legalHref, type TotalChange } from '@afrotransact/api-client';
+import { type CartPreorder, type CheckoutSummary, legalHref, type TotalChange } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { Button, CheckCircle, Circle, CircleNotch, ImagePlaceholder, LockSimple, PoweredByStripe, Tag } from '@afrotransact/ui';
+import { Button, CheckCircle, Circle, CircleNotch } from '@afrotransact/ui';
 import Link from 'next/link';
-import { type FormEvent } from 'react';
 
 import memberStyles from '@/components/membership/Membership.module.css';
 import { MembershipUpsell } from '@/components/membership/MembershipUpsell';
@@ -21,17 +20,17 @@ const STEPS = ['co.placing.payment', 'co.placing.confirm', 'co.placing.stock', '
 
 type Props = {
   s: CheckoutSummary;
-  packages: CheckoutPackage[];
   pickups: number;
   /** Shipping before coupon (matches selected delivery options; may lead the BFF summary while refetching). */
   shippingMinor: number;
   total: number;
   itemCount: number;
+  /** Address and payment are both valid: Place your order is on (the other reasons are `blocked` and the notes below it). */
   paymentChosen: boolean;
+  /** Plain words for what is missing before the order can be placed (address or payment); null when nothing is. */
+  needReason?: string | null;
   /** AfroTransact credit applied to the total and what the card pays then (S320); 0 without credit. */
   creditMinor?: number;
-  /** The chosen method ("Visa ending in 4242"), shown under Place order. */
-  pmLabel?: string | null;
   addressOk: boolean;
   blocked: boolean;
   preLocked: boolean;
@@ -52,10 +51,6 @@ type Props = {
   /** The error is "your cart changed": offer the way back to the cart. */
   errorCartLink?: boolean;
   onPlace: () => void;
-  couponDraft: string;
-  setCouponDraft: (v: string) => void;
-  onApplyCoupon: () => void;
-  onRemoveCoupon: () => void;
   /** The summary is being worked out again (a delivery option, address or coupon changed): the shown total is not final yet. */
   taxPending?: boolean;
   /** Tax-returns could not answer: "We couldn't work out your tax right now. Try again." with Retry. */
@@ -75,14 +70,13 @@ export function CheckoutOrderPanel(props: Props) {
   const t = useT();
   const {
     s,
-    packages,
     pickups,
     shippingMinor,
     total,
     itemCount,
     paymentChosen,
+    needReason = null,
     creditMinor = 0,
-    pmLabel,
     addressOk,
     blocked,
     preLocked,
@@ -98,10 +92,6 @@ export function CheckoutOrderPanel(props: Props) {
     error,
     errorCartLink,
     onPlace,
-    couponDraft,
-    setCouponDraft,
-    onApplyCoupon,
-    onRemoveCoupon,
     taxPending = false,
     onRetryTax,
     retryingTax = false,
@@ -111,98 +101,103 @@ export function CheckoutOrderPanel(props: Props) {
     onDismissTotal
   } = props;
 
-  const coupon = s.coupon;
-  const couponOk = coupon?.applicable;
   const waivedMinor = s.membershipWaivedMinor ?? 0;
   const netShipping = Math.max(0, shippingMinor - s.shippingDiscountMinor - waivedMinor);
-  // The estimate per line (mixed baskets): exempt lines are named, blocked ones are listed with Remove above.
-  const statusOf = new Map((s.taxLines ?? []).map((l) => [l.lineId, l.status] as const));
   const estimated = s.taxEstimateStatus === 'ESTIMATED';
   const reason = s.taxUnavailableReason;
-  const applyCoupon = (e: FormEvent) => {
-    e.preventDefault();
-    onApplyCoupon();
-  };
+  const beforeTax = s.subtotalMinor - s.discountMinor + netShipping;
+  const placeDisabled = !paymentChosen || !addressOk || addressList || blocked || taxPending || !!totalChange;
+
+  const placeLabel = busy ? t('co.placing') : preLocked ? t('preorder.locked.button') : t('co.place');
+  const notes = (
+    <>
+      {totalChange && (
+        <div className={styles.totalChanged} role="alert" data-testid="checkout-total-changed">
+          <strong>{t('co.totalChanged.title')}</strong>
+          <p>{t('co.totalChanged.body', { old: fmt.money(totalChange.previousTotalMinor), new: fmt.money(totalChange.totalMinor) })}</p>
+          <div className={styles.totalChangedActions}>
+            <Button size="sm" onClick={onConfirmTotal} loading={busy}>
+              {t('co.totalChanged.confirm', { total: fmt.money(totalChange.totalMinor) })}
+            </Button>
+            <Button size="sm" variant="secondary" onClick={onDismissTotal} disabled={busy}>
+              {t('co.totalChanged.review')}
+            </Button>
+          </div>
+        </div>
+      )}
+      {error && !totalChange && (
+        <p className={styles.error} role="alert" data-testid="checkout-error-note">
+          {error}
+          {errorCartLink && (
+            <>
+              {' '}
+              <Link href="/cart" data-testid="checkout-review-cart">
+                {t('co.cartChanged.link')}
+              </Link>
+            </>
+          )}
+        </p>
+      )}
+      {preRun && <RunNote block={preRun} />}
+      {preLocked && preLockedText && (
+        <p className={styles.fine} role="note" data-testid="preorder-checkout-locked">
+          {preLockedText}
+        </p>
+      )}
+    </>
+  );
+  const why = (
+    <>
+      {needReason && (
+        <p className={styles.fine} role="status" data-testid="place-reason">
+          {needReason}
+        </p>
+      )}
+      {deliveryReason && (
+        <p className={styles.fine} role="status" data-testid="delivery-blocked-note">
+          {deliveryReason}
+        </p>
+      )}
+      {paymentReason && (
+        <p className={styles.fine} role="status" data-testid="payment-blocked-note">
+          {paymentReason}
+        </p>
+      )}
+      {taxBlocked && (s.blockedLines ?? []).length > 0 && (
+        <p className={styles.fine} data-testid="tax-blocked-note">
+          {t('co.blocked.placeHint')}
+        </p>
+      )}
+      {taxBlocked && (s.blockedLines ?? []).length === 0 && !estimated && reason !== 'NEEDS_ZIP' && reason !== 'ADDRESS_INCOMPLETE' && (
+        <p className={styles.fine} data-testid="tax-retry-hint">
+          {t('co.taxRetry.hint')}
+        </p>
+      )}
+      {undeliverable && !preLocked && (
+        <p className={styles.fine} data-testid="local-delivery-blocked">
+          {t('ld.blocked')}
+        </p>
+      )}
+    </>
+  );
 
   return (
-    <aside className={styles.rail} aria-label={t('co.orderSummary')}>
-      <div className={styles.panel}>
-        <div className={styles.panelHero}>
-          <p className={styles.panelKicker}>
-            <LockSimple weight="fill" aria-hidden /> {t('co.secureCheckout')}
-          </p>
-          <div className={styles.panelTotalRow}>
-            <span className={styles.panelTotalLabel}>{estimated ? t('co.total') : t('co.totalBeforeTax')}</span>
-            <span className={styles.panelTotalAmount} data-testid="checkout-total-hero">
-              {fmt.money(total)}
-            </span>
-          </div>
-          <p className={styles.panelMeta}>{t('co.items', { n: itemCount })} · {t('co.sellers', { n: s.sellerCount })}</p>
-        </div>
-
-        <div className={styles.placeBlock}>
-          <Button size="lg" block onClick={onPlace} loading={busy} disabled={!paymentChosen || !addressOk || addressList || blocked || taxPending || !!totalChange} data-place-order="1">
-            {busy ? t('co.placing') : preLocked ? t('preorder.locked.button') : t('co.place')}
+    <>
+      <aside className={styles.rail} aria-label={t('co.orderSummary')}>
+        <div className={styles.railBox}>
+          <Button size="lg" block onClick={onPlace} loading={busy} disabled={placeDisabled} data-place-order="1">
+            {placeLabel}
           </Button>
-          {totalChange && (
-            <div className={styles.totalChanged} role="alert" data-testid="checkout-total-changed">
-              <strong>{t('co.totalChanged.title')}</strong>
-              <p>{t('co.totalChanged.body', { old: fmt.money(totalChange.previousTotalMinor), new: fmt.money(totalChange.totalMinor) })}</p>
-              <div className={styles.totalChangedActions}>
-                <Button size="sm" onClick={onConfirmTotal} loading={busy}>
-                  {t('co.totalChanged.confirm', { total: fmt.money(totalChange.totalMinor) })}
-                </Button>
-                <Button size="sm" variant="secondary" onClick={onDismissTotal} disabled={busy}>
-                  {t('co.totalChanged.review')}
-                </Button>
-              </div>
-            </div>
-          )}
-          {error && !totalChange && (
-            <p className={styles.error} role="alert">
-              {error}
-              {errorCartLink && (
-                <>
-                  {' '}
-                  <Link href="/cart" data-testid="checkout-review-cart">
-                    {t('co.cartChanged.link')}
-                  </Link>
-                </>
-              )}
+          <p className={styles.terms} data-testid="checkout-terms">
+            {t('co.agreePrefix')} <Link href={legalHref('conditions-of-use')}>{t('co.conditions')}</Link> {t('co.and')} <Link href={legalHref('privacy')}>{t('co.privacy')}</Link>.
+          </p>
+          {preRun && (
+            <p className={styles.fine} data-testid="preorder-terms-note">
+              {t('co.preorderPrefix')} <Link href={legalHref('preorder-delivery-terms')}>{t('legal.doc.preorder-delivery-terms')}</Link>.
             </p>
           )}
-          {preRun && <RunNote block={preRun} />}
-          {preLocked && preLockedText && (
-            <p className={styles.fine} role="note" data-testid="preorder-checkout-locked">
-              {preLockedText}
-            </p>
-          )}
-          {deliveryReason && (
-            <p className={styles.fine} role="status" data-testid="delivery-blocked-note">
-              {deliveryReason}
-            </p>
-          )}
-          {paymentReason && (
-            <p className={styles.fine} role="status" data-testid="payment-blocked-note">
-              {paymentReason}
-            </p>
-          )}
-          {taxBlocked && (s.blockedLines ?? []).length > 0 && (
-            <p className={styles.fine} data-testid="tax-blocked-note">
-              {t('co.blocked.placeHint')}
-            </p>
-          )}
-          {taxBlocked && (s.blockedLines ?? []).length === 0 && !estimated && reason !== 'NEEDS_ZIP' && reason !== 'ADDRESS_INCOMPLETE' && (
-            <p className={styles.fine} data-testid="tax-retry-hint">
-              {t('co.taxRetry.hint')}
-            </p>
-          )}
-          {undeliverable && !preLocked && (
-            <p className={styles.fine} data-testid="local-delivery-blocked">
-              {t('ld.blocked')}
-            </p>
-          )}
-          {addressList && addressOk && <p className={styles.fine}>{t('co.confirmAddress')}</p>}
+          {notes}
+          {why}
           {busy && (
             <ol className={styles.steps} aria-live="polite">
               {STEPS.map((k, i) => (
@@ -212,176 +207,101 @@ export function CheckoutOrderPanel(props: Props) {
               ))}
             </ol>
           )}
-          {creditMinor > 0 && total - creditMinor === 0 ? <p className={styles.payingWith}>{t('co.credit.payingAll')}</p> : null}
-          {pmLabel && !(creditMinor > 0 && total - creditMinor === 0) ? <p className={styles.payingWith}>{t('co.payingWith', { method: pmLabel })}</p> : null}
-        </div>
 
-        <details className={styles.itemsDetails}>
-          <summary className={styles.itemsSummary}>{t('co.reviewItems', { n: itemCount })}</summary>
-          <ul className={styles.compactItems} aria-label={t('co.items', { n: itemCount })}>
-            {packages.flatMap((p) =>
-              p.lines.map((l) => (
-                <li key={l.lineId} className={styles.compactItem} data-testid="checkout-item-compact">
-                  <ImagePlaceholder src={l.imageUrl} alt="" className={styles.compactThumb} />
-                  <span className={styles.compactText}>
-                    <span className={styles.compactTitle}>
-                      {l.title}
-                      {statusOf.get(l.lineId) === 'BLOCKED' && <span className={styles.itemTag} data-testid="checkout-item-blocked-tag">{t('co.blocked.tag')}</span>}
-                    </span>
-                    <span className={styles.muted}>
-                      {p.seller.name} · {t('co.qty', { qty: l.quantity })}
-                    </span>
-                  </span>
-                  <span className={styles.compactPrice}>{fmt.money(l.lineTotalMinor)}</span>
-                </li>
-              ))
-            )}
-          </ul>
-        </details>
-
-        <form className={styles.couponBlock} onSubmit={applyCoupon} data-testid="checkout-coupon">
-          <label className={styles.couponLabel} htmlFor="co-coupon">
-            <Tag aria-hidden /> {t('co.coupon')}
-          </label>
-          <div className={styles.couponRow}>
-            <input
-              id="co-coupon"
-              className={styles.couponInput}
-              value={couponDraft}
-              maxLength={20}
-              autoComplete="off"
-              spellCheck={false}
-              placeholder={t('co.couponPlaceholder')}
-              onChange={(e) => setCouponDraft(e.target.value.replace(/\s/g, '').toUpperCase())}
-              disabled={busy}
-            />
-            <Button type="submit" size="sm" variant="secondary" disabled={busy || !couponDraft.trim()}>
-              {t('co.couponApply')}
-            </Button>
-          </div>
-          {coupon && !couponOk && coupon.message && (
-            <p className={styles.couponError} role="alert">
-              {coupon.message}
-            </p>
-          )}
-          {couponOk && coupon && (
-            <div className={styles.couponApplied}>
-              <span>
-                {t('co.couponApplied', { code: coupon.code })}
-                <button type="button" className={styles.couponRemove} onClick={onRemoveCoupon} disabled={busy}>
-                  {t('co.couponRemove')}
-                </button>
-              </span>
-              <p className={styles.rowNote}>
-                {coupon.funding === 'seller'
-                  ? t('co.couponFundedSeller', { seller: coupon.sellerShares?.[0]?.sellerName ?? coupon.fundedByOrg ?? '' })
-                  : t('co.couponFundedPlatform')}
-              </p>
-              {(coupon.sellerShares?.length ?? 0) > 1 && (
-                <ul className={styles.couponShares}>
-                  {coupon.sellerShares?.map((sh) => (
-                    <li key={sh.sellerOrgId}>
-                      {sh.sellerName ?? sh.sellerOrgId}: −{fmt.money(sh.discountMinor)} ({sh.funding === 'platform' ? t('co.couponFundedPlatformShort') : t('co.couponFundedSellerShort')})
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-        </form>
-
-        <dl className={styles.totals} data-testid="order-summary">
-          <div className={styles.row}>
-            <dt>{t('co.itemsTotal', { n: itemCount })}</dt>
-            <dd>{fmt.money(s.subtotalMinor)}</dd>
-          </div>
-          {s.discountMinor > 0 && (
+          <h2 className={styles.summaryTitle}>{t('co.orderSummary')}</h2>
+          <dl className={styles.totals} data-testid="order-summary">
             <div className={styles.row}>
-              <dt>{t('co.discount')}</dt>
-              <dd className={styles.discount}>−{fmt.money(s.discountMinor)}</dd>
+              <dt>{t('co.itemsTotal', { n: itemCount })}</dt>
+              <dd>{fmt.money(s.subtotalMinor)}</dd>
             </div>
-          )}
-          <div className={styles.row}>
-            <dt>{t('co.shippingShort')}</dt>
-            <dd>
-              {netShipping === 0 ? t('co.free') : fmt.money(netShipping)}
-              {s.shippingDiscountMinor > 0 && shippingMinor > netShipping && (
-                <span className={styles.muted}> ({t('co.shippingWas', { amount: fmt.money(shippingMinor) })})</span>
-              )}
-            </dd>
-            {pickups > 0 && <dd className={styles.rowNote}>{t('co.pickupNote', { n: pickups })}</dd>}
-          </div>
-          {waivedMinor > 0 && (
-            <div className={styles.row} data-testid="checkout-membership-waived">
-              <dt>{t('co.mem.waivedRow')}</dt>
-              <dd className={memberStyles.waived}>−{fmt.money(waivedMinor)}</dd>
-              {s.membership?.waivers.map((w) => (
-                <dd key={w.packageId} className={`${styles.rowNote} ${memberStyles.waivedNote}`}>
-                  {t('co.mem.waivedNote', { tier: s.membership?.tierName ?? '', benefit: benefitName(t, fmt, w.benefit), amount: fmt.money(w.waivedMinor) })} · {w.seller}
-                </dd>
-              ))}
-            </div>
-          )}
-          <div className={styles.row}>
-            <dt>{t('co.tax')}</dt>
-            <dd data-testid="checkout-tax-amount">{estimated ? fmt.money(s.taxMinor) : '—'}</dd>
-            {!estimated && (
-              <dd className={styles.taxState} data-testid="checkout-tax-state" data-reason={reason ?? 'UNAVAILABLE'}>
-                {reason === 'BLOCKED_ITEMS' ? (
-                  <TaxProblem problem={{ kind: 'blocked', lines: s.blockedLines ?? [] }} />
-                ) : reason === 'ADDRESS_INCOMPLETE' ? (
-                  <TaxProblem problem={{ kind: 'incomplete' }} onEditAddress={onEditAddress} />
-                ) : (s.taxEstimateStatus === 'NEEDS_ADDRESS' || reason === 'NEEDS_ZIP') && !addressOk ? (
-                  // No delivery address yet: the one place checkout asks for a ZIP code. With an address chosen the estimate is for it.
-                  <TaxZipEstimate useSavedAddress />
-                ) : (
-                  <TaxProblem problem={{ kind: 'retry' }} onRetry={onRetryTax} busy={retryingTax} />
-                )}
+            <div className={styles.row}>
+              <dt>{t('co.deliveryShort')}</dt>
+              <dd>
+                {netShipping === 0 ? t('co.free') : fmt.money(netShipping)}
+                {s.shippingDiscountMinor > 0 && shippingMinor > netShipping && <span className={styles.muted}> ({t('co.shippingWas', { amount: fmt.money(shippingMinor) })})</span>}
               </dd>
-            )}
-          </div>
-          {creditMinor > 0 && (
-            <div className={styles.row} data-testid="checkout-credit-row">
-              <dt>{t('co.credit.row')}</dt>
-              <dd className={styles.creditRow}>−{fmt.money(creditMinor)}</dd>
+              {pickups > 0 && <dd className={styles.rowNote}>{t('co.pickupNote', { n: pickups })}</dd>}
             </div>
-          )}
-        </dl>
-        {(s.membership?.cashbackMinor ?? 0) > 0 && (
-          <p className={styles.fine} data-testid="checkout-membership-earn">
-            {t('co.mem.earn', { amount: fmt.money(s.membership?.cashbackMinor ?? 0) })}
-          </p>
-        )}
-
-        {s.membership?.upsell && (
-          <div className={styles.promoWrap}>
-            <MembershipUpsell upsell={s.membership.upsell} />
-          </div>
-        )}
-
-        <div className={styles.legalBlock}>
-          <p className={styles.fine}>
-            {t('co.agreePrefix')} <Link href={legalHref('conditions-of-use')}>{t('co.conditions')}</Link> {t('co.and')} <Link href={legalHref('privacy')}>{t('co.privacy')}</Link>.{' '}
-            {t('co.returnsPrefix')} <Link href={legalHref('returns')}>{t('legal.doc.returns')}</Link>.
-          </p>
-          {preRun && (
-            <p className={styles.fine} data-testid="preorder-terms-note">
-              {t('co.preorderPrefix')} <Link href={legalHref('preorder-delivery-terms')}>{t('legal.doc.preorder-delivery-terms')}</Link>.
+            {s.discountMinor > 0 && (
+              <div className={styles.row}>
+                <dt>{t('co.discount')}</dt>
+                <dd className={styles.discount}>−{fmt.money(s.discountMinor)}</dd>
+              </div>
+            )}
+            {waivedMinor > 0 && (
+              <div className={styles.row} data-testid="checkout-membership-waived">
+                <dt>{t('co.mem.waivedRow')}</dt>
+                <dd className={memberStyles.waived}>−{fmt.money(waivedMinor)}</dd>
+                {s.membership?.waivers.map((w) => (
+                  <dd key={w.packageId} className={`${styles.rowNote} ${memberStyles.waivedNote}`}>
+                    {t('co.mem.waivedNote', { tier: s.membership?.tierName ?? '', benefit: benefitName(t, fmt, w.benefit), amount: fmt.money(w.waivedMinor) })} · {w.seller}
+                  </dd>
+                ))}
+              </div>
+            )}
+            <div className={styles.row} data-testid="checkout-before-tax">
+              <dt>{t('co.totalBeforeTax')}</dt>
+              <dd>{fmt.money(beforeTax)}</dd>
+            </div>
+            <div className={styles.row}>
+              <dt>{t('co.tax')}</dt>
+              <dd data-testid="checkout-tax-amount">{estimated ? fmt.money(s.taxMinor) : '—'}</dd>
+              {!estimated && (
+                <dd className={styles.taxState} data-testid="checkout-tax-state" data-reason={reason ?? 'UNAVAILABLE'}>
+                  {reason === 'BLOCKED_ITEMS' ? (
+                    <TaxProblem problem={{ kind: 'blocked', lines: s.blockedLines ?? [] }} />
+                  ) : reason === 'ADDRESS_INCOMPLETE' ? (
+                    <TaxProblem problem={{ kind: 'incomplete' }} onEditAddress={onEditAddress} />
+                  ) : (s.taxEstimateStatus === 'NEEDS_ADDRESS' || reason === 'NEEDS_ZIP') && !addressOk ? (
+                    // No delivery address yet: the one place checkout asks for a ZIP code. With an address chosen the estimate is for it.
+                    <TaxZipEstimate useSavedAddress />
+                  ) : (
+                    <TaxProblem problem={{ kind: 'retry' }} onRetry={onRetryTax} busy={retryingTax} />
+                  )}
+                </dd>
+              )}
+            </div>
+            {estimated && (
+              <div className={`${styles.row} ${styles.rowTotal}`}>
+                <dt>{t('co.total')}</dt>
+                <dd data-testid="checkout-total">{fmt.money(total)}</dd>
+              </div>
+            )}
+            {creditMinor > 0 && (
+              <div className={styles.row} data-testid="checkout-credit-row">
+                <dt>{t('co.credit.row')}</dt>
+                <dd className={styles.creditRow}>−{fmt.money(creditMinor)}</dd>
+              </div>
+            )}
+          </dl>
+          {(s.membership?.cashbackMinor ?? 0) > 0 && (
+            <p className={styles.fine} data-testid="checkout-membership-earn">
+              {t('co.mem.earn', { amount: fmt.money(s.membership?.cashbackMinor ?? 0) })}
             </p>
           )}
-          <div className={styles.stripeLine}>
-            <PoweredByStripe height={22} />
-            <span>{t('co.chargeNote')}</span>
-          </div>
+          {s.membership?.upsell && (
+            <div className={styles.promoWrap}>
+              <MembershipUpsell upsell={s.membership.upsell} />
+            </div>
+          )}
+          {s.crossSell && (
+            <div className={styles.promoWrap}>
+              <CheckoutCrossSell rail={s.crossSell} />
+            </div>
+          )}
         </div>
+      </aside>
 
-
-        {s.crossSell && (
-          <div className={styles.promoWrap}>
-            <CheckoutCrossSell rail={s.crossSell} />
-          </div>
-        )}
+      {/* Phones: the button stays within reach while the sections scroll. */}
+      <div className={styles.bar} data-testid="checkout-bar" data-noprint>
+        <div className={styles.barTotal}>
+          <span className={styles.barLabel}>{estimated ? t('co.totalShort') : t('co.totalBeforeTax')}</span>
+          <strong data-testid="checkout-bar-total">{fmt.money(estimated ? total : beforeTax)}</strong>
+        </div>
+        <Button size="lg" onClick={onPlace} loading={busy} disabled={placeDisabled} className={styles.barButton}>
+          {busy ? t('co.placing') : preLocked ? t('preorder.locked.button') : t('co.placeShort')}
+        </Button>
       </div>
-    </aside>
+    </>
   );
 }

@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { AddressBook } from '@/components/account/AddressBook';
 import { PaymentsView } from '@/components/account/PaymentsView';
+import { CheckoutFooter } from '@/components/checkout/CheckoutChrome';
 import { CheckoutView } from '@/components/checkout/CheckoutView';
 import { ServiceDetailView } from '@/components/services/ServiceDetailView';
 import { LolaSheet } from '@/components/shell/LolaSheet';
@@ -106,10 +107,12 @@ describe('checkout (mock BFF + mock Stripe)', () => {
     expect(await screen.findByTestId('checkout-address')).toHaveTextContent(/Adaeze Nwosu/);
     const pkg = await screen.findByTestId('checkout-package');
     expect(within(pkg).getAllByTestId('checkout-item')).toHaveLength(1);
-    expect(within(pkg).getByTestId('checkout-item')).toHaveTextContent(/Qty 2/);
+    expect(within(within(pkg).getByTestId('checkout-item')).getByRole('group', { name: /^Quantity of/ })).toHaveTextContent('2');
+    // With a saved method chosen the payment section is a one-line summary; Change opens it.
+    expect(screen.getByTestId('checkout-summary-2')).toHaveTextContent(/ending|Visa|Mastercard|\d{4}/);
     expect(screen.getAllByTestId('checkout-payment')).toHaveLength(3);
-    // With methods on file the form stays closed until the shopper asks for a different one.
     expect(screen.getByTestId('checkout-new-method')).not.toBeVisible();
+    await user.click(screen.getByTestId('checkout-change-2'));
     await user.click(screen.getByRole('radio', { name: /Use a different payment method/ }));
     expect(screen.getByTestId('checkout-new-method')).toBeVisible();
     await user.click(within(screen.getAllByTestId('checkout-payment')[0] as HTMLElement).getByRole('radio'));
@@ -117,14 +120,17 @@ describe('checkout (mock BFF + mock Stripe)', () => {
     expect(screen.queryByRole('group', { name: 'Express checkout' })).not.toBeInTheDocument();
     expect(screen.queryByRole('radio', { name: /Use a new payment method/ })).not.toBeInTheDocument();
     expect(screen.getAllByRole('img', { name: 'Powered by Stripe' }).length).toBeGreaterThan(0);
+    // Done with payment: the section collapses again and the items section is the open one.
+    await user.click(screen.getByRole('button', { name: 'Use this payment method' }));
+    const pkg2 = await screen.findByTestId('checkout-package');
 
-    await user.click(within(pkg).getByRole('radio', { name: /^Delivery / }));
-    expect(within(pkg).getByText(/Delivery preferences/)).toBeInTheDocument();
-    await user.click(within(pkg).getByTestId('fulfil-pickup'));
-    expect(within(pkg).getByText('Houston FC — Will Call')).toBeInTheDocument();
-    expect(within(pkg).getAllByText(/Mon–Sat/).length).toBeGreaterThan(0);
-    await user.click(within(pkg).getByTestId('delivery-option-afrotransact_delivery'));
-    await user.click(within(pkg).getByRole('radio', { name: /^Delivery / }));
+    await user.click(within(pkg2).getByRole('radio', { name: /^Delivery / }));
+    expect(within(pkg2).getByText(/Delivery preferences/)).toBeInTheDocument();
+    await user.click(within(pkg2).getByTestId('fulfil-pickup'));
+    expect(within(pkg2).getByText('Houston FC — Will Call')).toBeInTheDocument();
+    expect(within(pkg2).getAllByText(/Mon–Sat/).length).toBeGreaterThan(0);
+    await user.click(within(pkg2).getByTestId('delivery-option-afrotransact_delivery'));
+    await user.click(within(pkg2).getByRole('radio', { name: /^Delivery / }));
     await user.click(screen.getByRole('button', { name: 'Place your order' }));
     const push = useRouter().push;
     await waitFor(() => expect(push).toHaveBeenCalledWith(expect.stringMatching(/^\/orders\?placed=AT-2026-/)), { timeout: 5000 });
@@ -132,15 +138,22 @@ describe('checkout (mock BFF + mock Stripe)', () => {
     expect(orders.items[0]?.shipments[0]?.deliveryCode).toMatch(/^\d{4}$/);
   });
 
-  it('links the Conditions of Use, Privacy Notice and Returns & Refunds next to the order button', async () => {
+  it('links the Conditions of Use and Privacy Notice next to the order button, and Returns & Refunds in the slim footer', async () => {
     const api = await signInDemo();
     const jollof = await api.getProduct('AT000000P2');
     await api.addToCart({ offerId: jollof.buyBox?.offerId ?? '', quantity: 1 });
-    renderWithProviders(<CheckoutView />);
+    renderWithProviders(
+      <>
+        <CheckoutView />
+        <CheckoutFooter />
+      </>
+    );
     await screen.findByTestId('checkout-package');
-    expect(screen.getByRole('link', { name: 'Conditions of Use' })).toHaveAttribute('href', '/legal/conditions-of-use');
-    expect(screen.getByRole('link', { name: 'Privacy Notice' })).toHaveAttribute('href', '/legal/privacy');
-    expect(screen.getByRole('link', { name: 'Returns & Refunds' })).toHaveAttribute('href', '/legal/returns');
+    const terms = screen.getByTestId('checkout-terms');
+    expect(within(terms).getByRole('link', { name: 'Conditions of Use' })).toHaveAttribute('href', '/legal/conditions-of-use');
+    expect(within(terms).getByRole('link', { name: 'Privacy Notice' })).toHaveAttribute('href', '/legal/privacy');
+    expect(terms).not.toHaveTextContent('Returns');
+    expect(await within(screen.getByTestId('checkout-footer')).findByRole('link', { name: 'Returns & Refunds' })).toHaveAttribute('href', '/legal/returns');
     expect(screen.queryByTestId('preorder-terms-note')).not.toBeInTheDocument();
   });
 
@@ -157,7 +170,7 @@ describe('checkout (mock BFF + mock Stripe)', () => {
     expect(points[0]).toHaveTextContent(/mi away/);
     await user.click(within(points[points.length - 1] as HTMLElement).getByRole('radio'));
     const summary = screen.getByTestId('order-summary');
-    expect(summary).toHaveTextContent(/ShippingFREE/);
+    expect(summary).toHaveTextContent(/DeliveryFREE/);
     expect(summary).toHaveTextContent(/1 pickup: no shipping charge/);
     await user.click(screen.getByRole('button', { name: 'Place your order' }));
     const push = useRouter().push;

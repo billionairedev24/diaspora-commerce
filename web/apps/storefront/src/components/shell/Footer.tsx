@@ -78,7 +78,7 @@ export const FOOTER_LEGAL: ReadonlyArray<[LegalDocumentKey, MessageKey]> = [
   ['accessibility', 'legal.doc.accessibility']
 ];
 
-function footerLegal(config: SiteConfig | undefined): Array<[LegalDocumentKey, MessageKey]> {
+export function footerLegal(config: SiteConfig | undefined): Array<[LegalDocumentKey, MessageKey]> {
   const published = new Set((config?.legal ?? []).map((l) => legalDocumentKeyOf(l.key)).filter((k) => k !== null));
   return FOOTER_LEGAL.filter(([k]) => published.has(k));
 }
