@@ -2,9 +2,10 @@
 
 import { type HeroSlide } from '@afrotransact/api-client';
 import { CaretLeft, CaretRight, Pause, Play } from '@afrotransact/ui';
-import Link from 'next/link';
 import { type TouchEvent, useEffect, useRef, useState } from 'react';
 
+// Content-driven addresses may be /sell or /provide (a cross-origin redirect): HandoffLink renders those as plain links.
+import { HandoffLink as Link } from '@/components/shell/HandoffLink';
 import { useT } from '@/i18n/t';
 
 import styles from './Home.module.css';

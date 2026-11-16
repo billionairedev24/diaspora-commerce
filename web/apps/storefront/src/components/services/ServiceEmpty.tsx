@@ -4,7 +4,6 @@ import { isApiError, isPlainEmail, type ServiceRadius, type ServiceSearch } from
 import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, buttonClassName, TextField } from '@afrotransact/ui';
 import { useMutation } from '@tanstack/react-query';
-import Link from 'next/link';
 import { type FormEvent, useState } from 'react';
 
 import { useT } from '@/i18n/t';
@@ -89,9 +88,9 @@ export function ServiceEmpty({ search, city, category, text, accountEmail, onCat
         <div className={styles.offer}>
           <h3 className={styles.h3}>{t('svc.offer.title')}</h3>
           <p className={styles.muted}>{t('svc.offer.body')}</p>
-          <Link href="/provide" className={buttonClassName({ variant: 'neutral', size: 'sm' })}>
+          <a href="/provide" className={buttonClassName({ variant: 'neutral', size: 'sm' })}>
             {t('svc.offer.cta')}
-          </Link>
+          </a>
         </div>
       </div>
     </section>

@@ -2,10 +2,11 @@
 
 import { type HomeBlock, type ProductSummary } from '@afrotransact/api-client';
 import { buttonClassName } from '@afrotransact/ui';
-import Link from 'next/link';
 import { type MouseEvent, type ReactNode } from 'react';
 
 import { CartAwareProductCard } from '@/components/common/CartAwareProductCard';
+// Content-driven addresses may be /sell or /provide (a cross-origin redirect): HandoffLink renders those as plain links.
+import { HandoffLink as Link } from '@/components/shell/HandoffLink';
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { useAdTracking } from '@/lib/home/adTracking';

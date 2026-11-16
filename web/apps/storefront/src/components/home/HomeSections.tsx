@@ -1,8 +1,9 @@
 import { type Rail, type Tile } from '@afrotransact/api-client';
-import Link from 'next/link';
 import { type ReactNode } from 'react';
 
 import { CartAwareProductCard } from '@/components/common/CartAwareProductCard';
+// Content-driven addresses may be /sell or /provide (a cross-origin redirect): HandoffLink renders those as plain links.
+import { HandoffLink as Link } from '@/components/shell/HandoffLink';
 import { getT } from '@/i18n/server';
 
 import styles from './Home.module.css';
