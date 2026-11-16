@@ -83,7 +83,7 @@
 
 .items { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--at-space-4); }
 .item { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; column-gap: var(--at-space-3); align-items: start; }
-.itemThumb { width: 72px; border-radius: var(--at-radius-sm); overflow: hidden; border: 1px solid var(--at-color-border); }
+.itemThumb { width: 100%; border-radius: var(--at-radius-sm); overflow: hidden; border: 1px solid var(--at-color-border); }
 .itemInfo { display: flex; flex-direction: column; gap: var(--at-space-1); min-width: 0; }
 .itemTitle { font-size: var(--at-text-sm); font-weight: var(--at-weight-semibold); line-height: 1.35; overflow-wrap: anywhere; }
 .itemMeta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--at-space-2); font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
@@ -118,7 +118,7 @@
 .localActions { display: flex; flex-wrap: wrap; gap: var(--at-space-2); }
 .codeNote { margin: 0; display: flex; gap: var(--at-space-2); align-items: flex-start; font-size: var(--at-text-sm); color: var(--at-color-text-muted); }
 
-.prefsBox { margin: 0; padding: var(--at-space-3) 0 0; border: 0; border-block-start: 1px solid var(--at-color-border); display: flex; flex-direction: column; gap: var(--at-space-3); }
+.prefsBox { margin: 0; padding: var(--at-space-2) 0 0; border: 0; display: flex; flex-direction: column; gap: var(--at-space-3); }
 .prefsLegend { display: flex; flex-direction: column; gap: 2px; padding: 0; }
 .prefsTitle { font-size: var(--at-text-sm); font-weight: var(--at-weight-bold); }
 .prefsSubtitle { font-size: var(--at-text-xs); color: var(--at-color-text-muted); }

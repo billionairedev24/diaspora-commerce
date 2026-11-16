@@ -254,7 +254,7 @@ export function PackageCard({
         {!pickup && <LocalDeliveryQuote pkg={pkg} onRemove={onRemove} onChangeAddress={onChangeAddress} removing={removing} />}
 
         <fieldset className={styles.optionList} disabled={undeliverable && !canPickup} aria-label={t('co.fulfilAria', { seller: pkg.seller.name })}>
-          <legend className={styles.optionsLegend}>{t('co.deliveryOption')}</legend>
+          <legend className={choose ? styles.optionsLegend : 'at-visually-hidden'}>{t('co.deliveryOption')}</legend>
           {deliveryOptions.map((o) => {
             if (o.key === 'quote_required') {
               // Outside every delivery zone: not payable. The shopper asks for a quote, picks up, or changes the address.

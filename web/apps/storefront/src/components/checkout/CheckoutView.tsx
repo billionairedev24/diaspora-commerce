@@ -578,7 +578,7 @@ export function CheckoutView() {
           />
         </CheckoutStep>
 
-        <CheckoutStep n={3} id="co-delivery" title={t('co.step.delivery')} state={stateOf(3)} onChange={open(3)} alwaysSummary summary={<p className={styles.plain}>{itemsSummary}</p>}>
+        <CheckoutStep n={3} id="co-delivery" title={t('co.review')} state={stateOf(3)} onChange={open(3)} alwaysSummary summary={<p className={styles.plain}>{itemsSummary}</p>}>
           <div className={styles.packages}>
             {s.packages.map((p, i) => (
               <PackageCard
