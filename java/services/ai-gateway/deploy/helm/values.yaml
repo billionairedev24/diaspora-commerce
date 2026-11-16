@@ -43,6 +43,10 @@ workloadIdentity:
   gcp: {serviceAccount: ""}
   azure: {clientId: ""}
 extraEnv:
+  # Daily AI spend cap: a runtime setting staff change in the console (ai:cap.manage). The first is only its INITIAL default (used
+  # until a value is saved, 0 = AI off), the second the hard ceiling no saved value can pass (docs/runbooks/ai-spend-and-mcp-access.md).
+  AI_GLOBAL_DAILY_COST_USD: "2.00"
+  AI_GLOBAL_DAILY_COST_MAX_USD: "20.00"
   # Platform APIs Lola calls (in-cluster service names; every service listens on 8080 in Kubernetes).
   SEARCH_URL: http://search:8080
   CATALOG_URL: http://catalog:8080

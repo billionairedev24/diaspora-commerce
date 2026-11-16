@@ -191,7 +191,7 @@ and fewer pushes). Backups: 4 dumps a night instead of 19 (the bucket size is th
 ## Cost guards that are real
 
 - **ai-gateway spend ceiling** (owner decision, enforced in code by `SpendGuard`, `docs/runbooks/ai-spend-and-mcp-access.md`): USD 2.00 per UTC day for the whole
-  gateway and USD 0.50 per caller, pinned in `values-prod.yaml` (`AI_GLOBAL_DAILY_COST_USD`, `AI_CALLER_DAILY_COST_USD`); above it every call answers 429.
+  gateway and USD 0.50 per caller, pinned in `values-prod.yaml` (`AI_GLOBAL_DAILY_COST_USD` is the initial default of the daily total, which staff with `ai:cap.manage` can change in the console up to `AI_GLOBAL_DAILY_COST_MAX_USD`, USD 20; `AI_CALLER_DAILY_COST_USD`); above it every call answers 429.
   Set a **credit limit on the OpenRouter key** as the second, independent cap.
 - **Connection counts** are capped (above). **Kafka** keeps 72 hours, dead letters 14 days, on a 10 GiB disk.
 - **Backups** keep `RETENTION_DAYS` (default 14, the owner may set 7) at Backblaze B2; alerts at 600 MB per night and 8 GB in the bucket (`infra/observability/rules/backup.yaml`).
