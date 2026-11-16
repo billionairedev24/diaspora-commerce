@@ -14,6 +14,7 @@ import com.afrotransact.platform.security.PrincipalType;
 import com.afrotransact.seller.domain.AfrotransactPickup;
 import com.afrotransact.seller.domain.GeoPosition;
 import com.afrotransact.seller.domain.OrgStatus;
+import com.afrotransact.seller.domain.PickupWindow;
 import com.afrotransact.seller.domain.Organisation;
 import com.afrotransact.seller.domain.SellerRuleViolation;
 import com.afrotransact.seller.domain.SellerStateConflict;
@@ -98,7 +99,34 @@ class ShipFromAddressServiceImpl implements ShipFromAddressService {
         if (existing.isEmpty() || in.makeDefault()) {
             addresses.makeDefault(orgId, a.id());
         }
+        if (!in.pickupHours().isEmpty()) {
+            enableByDefault(orgId, a.id(), in.pickupHours(), now);
+        }
         return load(orgId, a.id());
+    }
+
+    /**
+     * New locations are Fulfilled by AfroTransact by default where that is possible: the seller gave pickup hours, the
+     * organisation is approved, the address is located at street level and inside the delivery area. When any of that is
+     * missing the location is saved with nothing enabled (never an error, never invented hours) and Seller Center
+     * tells the seller what to enable.
+     */
+    private void enableByDefault(String orgId, UUID id, List<PickupWindow> hours, Instant now) {
+        try {
+            Optional<Organisation> org = orgs.findById(orgId);
+            ShipFromAddress current = load(orgId, id);
+            if (org.isEmpty() || org.get().status() != OrgStatus.APPROVED) {
+                return;
+            }
+            ShipFromAddress located = current.withPosition(geocodeForPickup(current));
+            AfrotransactPickup requested = new AfrotransactPickup(true, hours, null, now);
+            ShipFromAddress next = located.withPickup(checkedPickup(located, requested, now), now);
+            if (addresses.update(next)) {
+                publish(load(orgId, id), false, now);
+            }
+        } catch (SellerRuleViolation | SellerStateConflict | GeoUnavailableException e) {
+            LOG.info("Location {} saved without Fulfilled by AfroTransact by default: {}", id, e.getMessage());
+        }
     }
 
     @Override
