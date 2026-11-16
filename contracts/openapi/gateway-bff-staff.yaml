@@ -9228,13 +9228,14 @@ components:
         label: {type: string}
     StaffNavModule:
       type: object
-      required: [key, label, description, level, badge]
+      required: [key, label, description, level, badge, dormant]
       properties:
         key: {$ref: '#/components/schemas/StaffModuleKey'}
         label: {type: string}
         description: {type: string}
         level: {$ref: '#/components/schemas/AccessLevel'}
         badge: {type: [integer, 'null']}
+        dormant: {type: boolean, description: 'True for a module AfroTransact does not use for now (Delivery dispatch and Delivery quotes while the driver app is off, DRIVER_APP_ENABLED=false): the console shows it muted with a "Not in use" label. The code and the data stay; staff act as the delivery agents from Delivery.'}
     StaffNavGroup:
       type: object
       required: [key, label, modules]

@@ -214,6 +214,8 @@ type StaffNavModule struct {
 	Description string `json:"description"`
 	Level       string `json:"level"`
 	Badge       *int   `json:"badge"`
+	// Dormant: AfroTransact does not use this for now (the driver app is off). The console shows it muted and labelled.
+	Dormant bool `json:"dormant"`
 }
 
 // StaffNavGroup is one sidebar group with the modules the role may open.
@@ -256,6 +258,25 @@ func StaffNavigation(a StaffAccess, badges map[string]int) []StaffNavGroup {
 		}
 	}
 	return out
+}
+
+// dormantWithoutDrivers are the modules that belong to drivers and runs: with no driver app (DRIVER_APP_ENABLED off) staff
+// deliver from the Delivery module, so these stay reachable (pickup points, quotes already asked for) but are labelled.
+var dormantWithoutDrivers = map[string]string{
+	"dispatch":           "Driver routes are not used for now: AfroTransact staff deliver from Delivery. Pickup points are still managed here.",
+	DeliveryQuotesModule: "Not used for now. Quotes already asked for can still be answered here.",
+}
+
+// MarkDormant labels the driver and run modules when no driver app is in use.
+func MarkDormant(groups []StaffNavGroup) {
+	for gi := range groups {
+		for mi := range groups[gi].Modules {
+			if note, ok := dormantWithoutDrivers[groups[gi].Modules[mi].Key]; ok {
+				groups[gi].Modules[mi].Dormant = true
+				groups[gi].Modules[mi].Description = note
+			}
+		}
+	}
 }
 
 var platformRoleLabels = map[string]string{

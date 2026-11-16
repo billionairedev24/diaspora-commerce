@@ -40,6 +40,9 @@ type StaffDeps struct {
 	StorefrontURL string
 	// RetailOrgID is AfroTransact Retail (merchant of record): never charged commission or fees, never overridden.
 	RetailOrgID string
+	// DriverAppEnabled mirrors fulfilment's DRIVER_APP_ENABLED (default false): with it off the driver and run modules
+	// (Delivery dispatch, Delivery quotes) are labelled as not in use and staff deliver from the Delivery module.
+	DriverAppEnabled bool
 }
 
 func (d *StaffDeps) defaults() {
@@ -249,6 +252,9 @@ func (s *staffShellImpl) Session(ctx context.Context, c *domain.Caller) (domain.
 		return domain.StaffSession{}, err
 	}
 	nav := domain.StaffNavigation(sc.access, s.badges(ctx, sc))
+	if !s.r.d.DriverAppEnabled {
+		domain.MarkDormant(nav)
+	}
 	if len(nav) == 0 {
 		return domain.StaffSession{}, domain.NewProblem(http.StatusForbidden, domain.CodeForbidden, "No access",
 			"Your roles don't open any part of the staff console.")

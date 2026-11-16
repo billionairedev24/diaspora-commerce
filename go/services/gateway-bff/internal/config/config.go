@@ -171,12 +171,15 @@ type Config struct {
 		DetectOverrideZIP string `yaml:"detectOverrideZip" env:"LOCATION_DETECT_ZIP"`
 		// TrustEdgeGeo (env TRUST_EDGE_GEO) reads Cloudflare's visitor-location headers (CF-IPPostalCode, CF-IPCity,
 		// CF-Region, CF-IPCountry, CF-IPLatitude/Longitude) for first-visit detection.
-		TrustEdgeGeo               bool              `yaml:"trustEdgeGeo" env:"TRUST_EDGE_GEO"`
-		TimeZone                   string            `yaml:"timeZone"`
-		SellerShippingMinor        int64             `yaml:"sellerShippingMinor"`
-		FreeShippingThresholdMinor int64             `yaml:"freeShippingThresholdMinor"`
-		RetailOrgID                string            `yaml:"retailOrgId" env:"RETAIL_ORG_ID"`
-		SellerNames                map[string]string `yaml:"sellerNames"`
+		TrustEdgeGeo               bool   `yaml:"trustEdgeGeo" env:"TRUST_EDGE_GEO"`
+		TimeZone                   string `yaml:"timeZone"`
+		SellerShippingMinor        int64  `yaml:"sellerShippingMinor"`
+		FreeShippingThresholdMinor int64  `yaml:"freeShippingThresholdMinor"`
+		RetailOrgID                string `yaml:"retailOrgId" env:"RETAIL_ORG_ID"`
+		// DriverAppEnabled (env DRIVER_APP_ENABLED, default false) mirrors fulfilment: while off, the staff console labels the
+		// driver and run modules (Delivery dispatch, Delivery quotes) as not in use.
+		DriverAppEnabled bool              `yaml:"driverAppEnabled" env:"DRIVER_APP_ENABLED"`
+		SellerNames      map[string]string `yaml:"sellerNames"`
 	} `yaml:"commerce"`
 
 	// Checkout holds the checkout summary's tax estimate settings.
