@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { ApiError } from '@afrotransact/api-client';
 import { describe, expect, it } from 'vitest';
 
-import { blockedItemText, blockedLines, buildPlaceOrderRequest, canPlaceOrder, CART_CHANGED_MESSAGE, checkoutFailure, type CheckoutSummary, defaultChoices, deliveryBlock, idempotencyKey, ITEM_BLOCKED_MESSAGE, keyAfterFailure, paymentSheetIntent, QUOTE_REQUIRED_MESSAGE, requiresDeviceAuth, taxLabel, taxNote, taxValue, totalFor, validateChoices } from '../src/domain/checkout';
+import { blockedItemText, blockedLines, buildPlaceOrderRequest, canPlaceOrder, CART_CHANGED_MESSAGE, checkoutFailure, type CheckoutSummary, defaultChoices, deliveryBlock, idempotencyKey, ITEM_BLOCKED_MESSAGE, keyAfterFailure, paymentSheetIntent, QUOTE_REQUIRED_MESSAGE, requiresDeviceAuth, taxLabel, taxValue, totalFor, validateChoices } from '../src/domain/checkout';
 import { onRequestQuote } from '../src/domain/quote';
 import { allocateShipping, type AllocationMethod } from '../src/domain/shippingAllocation';
 import { deliveryFee } from '../src/domain/shippingFee';
@@ -166,14 +166,9 @@ describe('items that can’t be sold yet and the tax lines', () => {
     expect(checkoutFailure(e)).toEqual({ message: ITEM_BLOCKED_MESSAGE, cartChanged: false });
   });
 
-  it('words the tax row with where it was worked out and says when items carry no tax', () => {
+  it('words the tax row plainly: Estimated tax, no place and no explanation', () => {
     expect(taxLabel(summary)).toBe('Estimated tax');
-    expect(taxLabel(held)).toBe('Estimated tax · Houston, TX');
-    expect(taxNote(summary)).toBeNull();
-    const lines = (...status: string[]) => ({ ...summary, taxLines: status.map((s, i) => ({ lineId: `l${i}`, status: s, taxMinor: 0, shippingMinor: 0 })) }) as unknown as CheckoutSummary;
-    expect(taxNote(lines('EXEMPT', 'TAXABLE'))).toBe('No tax on some of your items, or on their delivery.');
-    expect(taxNote(lines('EXEMPT', 'EXEMPT'))).toBe('No tax on these items, or on their delivery.');
-    expect(taxNote(lines('TAXABLE'))).toBeNull();
+    expect(taxLabel(held)).toBe('Estimated tax');
   });
 });
 

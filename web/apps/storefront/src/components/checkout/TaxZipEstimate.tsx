@@ -145,7 +145,7 @@ export function TaxZipEstimate({ refreshKey, useSavedAddress = false, onRemoveLi
     return (
       <div className={styles.taxState} data-testid="tax-zip-result">
         <span>
-          <strong data-testid="tax-zip-amount">{fmt.money(est.taxMinor)}</strong> · {t('co.taxFor', { place: est.taxJurisdictionLabel || est.taxZip || '' })}
+          <strong data-testid="tax-zip-amount">{fmt.money(est.taxMinor)}</strong>
           {basis && <span className={styles.muted} data-testid="tax-zip-basis">{` · ${basis}`}</span>}
         </span>
         <button

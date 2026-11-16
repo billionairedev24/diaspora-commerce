@@ -49,7 +49,7 @@ describe('checkout tax', () => {
     delete window.Stripe;
   });
 
-  it('a basket of exempt items shows Estimated tax with the place, no tax on the items or their delivery', async () => {
+  it('a basket of exempt items shows a plain Estimated tax line with its value and no explanation', async () => {
     const api = await signInDemo();
     const jollof = await api.getProduct('AT000000P2');
     await api.addToCart({ offerId: jollof.buyBox?.offerId ?? '', quantity: 2 });
@@ -57,13 +57,11 @@ describe('checkout tax', () => {
     await screen.findByTestId('checkout-package');
     const summary = await screen.findByTestId('order-summary');
     expect(within(summary).getByText('Estimated tax')).toBeInTheDocument();
-    await waitFor(() => expect(within(summary).getByTestId('checkout-tax-place')).toHaveTextContent('Estimated for Houston, TX'));
-    expect(within(summary).getByTestId('checkout-tax-amount')).toHaveTextContent('$0.00');
-    expect(within(summary).getByTestId('checkout-tax-exempt-note')).toHaveTextContent('No tax on these items, or on their delivery.');
-    expect(screen.getAllByTestId('checkout-item-no-tax')).toHaveLength(1);
+    await waitFor(() => expect(within(summary).getByTestId('checkout-tax-amount')).toHaveTextContent('$0.00'));
     expect(screen.queryByTestId('checkout-blocked')).not.toBeInTheDocument();
-    // An untaxed item says why, in the words of tax-returns' decision (never hard-coded per category here).
-    expect(within(summary).getByTestId('checkout-tax-exempt-reason')).toHaveTextContent(/no sales tax applies/);
+    // Owner rule: the value is the whole story. No place line, no per-category reason, no "no tax" sentence or tag.
+    expect(document.body.textContent).not.toMatch(/Estimated for|no sales tax applies|No tax on/i);
+    expect(screen.queryByTestId('checkout-item-no-tax')).not.toBeInTheDocument();
   });
 
   it('one item from one seller reads "1 item" and "From 1 seller", never "1 items" or "seller(s)"', async () => {
@@ -130,7 +128,7 @@ describe('checkout tax', () => {
       const user = userEvent.setup();
       await user.type(summary.getByLabelText('Enter your ZIP code to see tax'), '77002');
       await user.click(summary.getByRole('button', { name: 'See tax' }));
-      expect(await summary.findByTestId('tax-zip-result')).toHaveTextContent('Estimated for Houston, TX');
+      expect(await summary.findByTestId('tax-zip-result')).toHaveTextContent(/^\$\d+\.\d{2}/);
       expect(summary.getByTestId('tax-zip-amount').textContent).toMatch(/^\$\d+\.\d{2}$/);
       expect(sent.some((r) => r.method === 'GET' && r.url.includes('/v1/checkout/tax-estimate') && r.url.includes('zip=77002'))).toBe(true);
     });
@@ -162,11 +160,11 @@ describe('checkout tax', () => {
       expect(screen.getByRole('button', { name: 'Place your order' })).toBeDisabled();
     });
 
-    it('a known estimate says it is the tax you will pay, with the total labelled so it can be trusted', async () => {
+    it('a known estimate shows its value with no explanatory copy', async () => {
       const summary = await overridden(() => ({}));
-      await waitFor(() => expect(summary.getByTestId('checkout-tax-place')).toHaveTextContent('Estimated for Houston, TX'));
+      await waitFor(() => expect(summary.getByTestId('checkout-tax-amount').textContent).toMatch(/^\$\d+\.\d{2}$/));
       expect(summary.queryByTestId('checkout-tax-state')).not.toBeInTheDocument();
-      expect(screen.getByTestId('checkout-total-trust')).toHaveTextContent('You are never charged more without your OK.');
+      expect(document.body.textContent).not.toMatch(/Estimated for|You are never charged more|Includes tax|Worked out from your/i);
       expect(document.body.textContent).not.toMatch(/when you place your order|at checkout|calculated later/i);
     });
 
@@ -182,12 +180,11 @@ describe('checkout tax', () => {
         };
       });
       expect(summary.getByTestId('checkout-tax-amount').textContent).not.toMatch(NEVER);
-      expect(summary.queryByTestId('checkout-tax-exempt-reason')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('checkout-item-no-tax')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('checkout-item-no-tax')).not.toBeInTheDocument();
     });
   });
 
-  it('a mixed basket taxes only the taxable item and says some items carry no tax', async () => {
+  it('a mixed basket taxes only the taxable item and says nothing about the untaxed one', async () => {
     const api = await signInDemo();
     const jollof = await api.getProduct('AT000000P2');
     const pillow = await api.getProduct(atinOf('p20'));
@@ -195,11 +192,11 @@ describe('checkout tax', () => {
     await api.addToCart({ offerId: pillow.buyBox?.offerId ?? '', quantity: 1 });
     renderWithProviders(<CheckoutView />);
     const summary = await screen.findByTestId('order-summary');
-    await waitFor(() => expect(within(summary).getByTestId('checkout-tax-exempt-note')).toHaveTextContent('No tax on some of your items, or on their delivery.'));
+    await waitFor(() => expect(within(summary).getByTestId('checkout-tax-amount').textContent).not.toBe('$0.00'));
+    expect(document.body.textContent).not.toMatch(/No tax on/i);
     const taxed = within(summary).getByTestId('checkout-tax-amount').textContent ?? '';
     expect(taxed).not.toBe('$0.00');
     expect(taxed).toMatch(/^\$\d+\.\d{2}$/);
-    expect(screen.getAllByTestId('checkout-item-no-tax')).toHaveLength(1);
   });
 
   describe('an item that can’t be sold yet', () => {
@@ -300,14 +297,13 @@ describe('checkout tax', () => {
       await user.click(screen.getByRole('button', { name: /Place your order/ }));
 
       const box = await screen.findByTestId('checkout-total-changed');
-      expect(box).toHaveTextContent('Your total changed');
-      expect(box).toHaveTextContent('Nothing has been charged.');
+      expect(box).toHaveTextContent('The total changed.');
       expect(box.textContent).toContain(`$${((real.totalMinor + 150) / 100).toFixed(2)}`);
       expect(screen.getByRole('button', { name: 'Place your order' })).toBeDisabled();
       // the first attempt carried the summary's lock
       expect(bodies[0]?.lock).toBe(real.taxQuoteId);
 
-      await user.click(within(box).getByRole('button', { name: /Place order for \$/ }));
+      await user.click(within(box).getByRole('button', { name: 'Accept' }));
       await waitFor(() => expect(bodies).toHaveLength(2));
       expect(bodies[1]?.key).not.toBe(bodies[0]?.key);
       expect(bodies[1]?.lock).toBeTruthy();
