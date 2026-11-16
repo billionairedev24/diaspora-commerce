@@ -73,8 +73,8 @@ the same kind), and preview the page as of any date, ZIP, language, signed-in st
 
 ### Seasons
 
-The seasonal calendar is a set of scheduled placements in the content service (for example a Diwali hero from 20 October to 3
-November). Inside its window it is live and raises that content; outside it nothing changes; "preview as of next month" shows
+The seasonal calendar is a set of scheduled placements in the content service (for example a Christmas hero from 1 to 25
+December). Inside its window it is live and raises that content; outside it nothing changes; "preview as of next month" shows
 what goes live then. Season copy is the placement's own text (English required, other languages optional, falling back to
 English) and a season never promises stock: the module it boosts is still shown only when it has eligible products.
 

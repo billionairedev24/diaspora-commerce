@@ -117,7 +117,7 @@ PURCHASE_ORDERS: list[PurchaseOrder] = [
     PurchaseOrder("draft", "SUP-LAG", (PoLine("at-dried-pepper", 240), PoLine("at-pepper-sauce", 120)), "DRAFT",
                   note="Q1 pepper restock: waiting for the buyer to finish quantities"),
     PurchaseOrder("pending-approval", "SUP-KGN", (PoLine("at-basmati", 1800),), "PENDING_APPROVAL", order_in_days=-1,
-                  note="Diwali and Christmas basmati: above the $10,000 Finance threshold"),
+                  note="Christmas and Thanksgiving basmati: above the $10,000 Finance threshold"),
     PurchaseOrder("approved", "SUP-ADD", (PoLine("kenyan-coffee", 144),), "APPROVED", order_in_days=-2,
                   note="Approved: Kenyan AA for the holiday gift guide"),
     PurchaseOrder("sent", "SUP-LAG", (PoLine("at-jollof-seasoning", 288),), "SENT", order_in_days=-12,

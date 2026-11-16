@@ -13,7 +13,7 @@ class TopicPolicyTest {
     private final DefaultTopicPolicy policy = new DefaultTopicPolicy();
 
     @ParameterizedTest
-    @ValueSource(strings = {"Jollof for 20", "Diwali dinner for 8", "Where is my order AT-1045?",
+    @ValueSource(strings = {"Jollof for 20", "Christmas dinner for 8", "Where is my order AT-1045?",
         "Find a braider near 77002", "Gift ideas for my mum", "Is shea butter good for dry skin?",
         "I want to return the damaged yam flour"})
     void shoppingIsAllowed(String message) {

@@ -6,8 +6,8 @@ import java.util.Set;
 /** Suggestion chips shown above the chat input, chosen from what Lola just did. */
 final class LolaSuggestions {
 
-    static final List<String> OPENING = List.of("Jollof for 20", "Diwali dinner for 8", "Track my order",
-            "Find a braider near me", "Gift ideas under $50");
+    static final List<String> OPENING = List.of("Track my order", "Jollof for 20", "Delivery to my ZIP code",
+            "Find a product", "Book knotless braids", "Compare prices");
 
     private LolaSuggestions() {
     }

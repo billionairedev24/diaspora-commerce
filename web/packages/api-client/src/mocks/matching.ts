@@ -8,7 +8,7 @@ export const SYNONYMS: Record<string, string[]> = {
   gari: ['garri', 'cassava'], garri: ['gari'], egusi: ['melon'], chile: ['chiles', 'chili', 'pepper'], chili: ['chile', 'chiles', 'pepper'],
   pepper: ['chiles', 'shito', 'scotch'], hibiscus: ['bissap', 'zobo', 'sorrel'], zobo: ['hibiscus', 'bissap'], sorrel: ['hibiscus', 'bissap'],
   rice: ['basmati', 'ofada'], soap: ['black'], coffee: ['bean'], spice: ['seasoning', 'blend', 'mix'], seasoning: ['spice', 'blend'],
-  fabric: ['ankara', 'wax'], lamps: ['diya', 'diyas'], cream: ['butter']
+  fabric: ['ankara', 'wax'], lamps: ['tealight', 'tealights'], cream: ['butter']
 };
 
 export function words(text: string): string[] {

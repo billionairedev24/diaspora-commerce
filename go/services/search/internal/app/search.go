@@ -84,7 +84,7 @@ var (
 )
 
 // NewProductSearcher returns a searcher that blends semantic retrieval for natural-language queries
-// ("something for a Diwali dinner") and degrades to lexical search when the embedder is slow or down.
+// ("something for a Christmas dinner") and degrades to lexical search when the embedder is slow or down.
 func NewProductSearcher(index port.Index, embedder port.Embedder, log *slog.Logger, opts ...SearcherOption) ProductSearcher {
 	s := &productSearcherImpl{index: index, embedder: embedder, embedTimeout: 150 * time.Millisecond,
 		minSemanticWords: 3, log: log, now: time.Now}

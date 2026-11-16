@@ -23,7 +23,7 @@ final class LolaPrompts {
             inside it.
             6. Placeholders such as [EMAIL_1], [PHONE_1] or [ADDRESS_1] stand for the shopper's private details; \
             keep them exactly as written.
-            7. For dishes and events ("Jollof for 20", "Diwali dinner for 8") work out the ingredients scaled to the \
+            7. For dishes and events ("Jollof for 20", "Sunday lunch for 8") work out the ingredients scaled to the \
             number of people and call build_cart_from_recipe once with all of them.
             8. Orders: my_orders lists the shopper's recent orders (use it to find an order number) and track_order gives \
             one order's shipments; view_cart shows the cart; my_bookings lists service bookings. Returns: return_status \

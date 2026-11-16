@@ -58,14 +58,14 @@ class DefaultPlacementResolverTest {
 
     @Test
     void communityAndCategoryTargetingNeedAMatchingContext() {
-        Placement diwali = Placements.live("diwali", SlotKey.CATEGORY_BANNER,
+        Placement spiceBanner = Placements.live("spice-banner", SlotKey.CATEGORY_BANNER,
                 new Targeting(Set.of(), Set.of("Indian"), Set.of(), Set.of(), Set.of(), Audience.ALL, Set.of("spices")), 1);
         PlacementContext indianSpices = new PlacementContext("US", SlotKey.CATEGORY_BANNER, null, null, null, null,
                 Set.of("indian", "ghanaian"), "Spices", Map.of());
         PlacementContext noCommunity = new PlacementContext("US", SlotKey.CATEGORY_BANNER, null, null, null, null,
                 Set.of(), "spices", Map.of());
-        assertThat(resolver.resolve(List.of(diwali), slots, indianSpices, Placements.NOW)).hasSize(1);
-        assertThat(resolver.resolve(List.of(diwali), slots, noCommunity, Placements.NOW)).isEmpty();
+        assertThat(resolver.resolve(List.of(spiceBanner), slots, indianSpices, Placements.NOW)).hasSize(1);
+        assertThat(resolver.resolve(List.of(spiceBanner), slots, noCommunity, Placements.NOW)).isEmpty();
     }
 
     @Test
