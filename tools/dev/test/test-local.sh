@@ -25,7 +25,7 @@ contains() { # contains <name> <needle> <haystack>
 cat >"$T/bin/psql" <<'STUB'
 #!/usr/bin/env bash
 echo "psql $*" >>"$T/psql.log"
-if [[ ! -t 0 ]]; then cat >>"$T/psql.stdin"; fi
+case "$*" in *" -c "*) ;; *) cat >>"$T/psql.stdin" ;; esac   # SQL piped in (no -c): record it, never wait on a terminal's stdin
 case "$*" in
   *rolsuper*) [[ "${STUB_SUPER:-t}" == t ]] && echo t ;;
   *pg_available_extensions*) echo "${STUB_POSTGIS:-1}" ;;
@@ -40,7 +40,7 @@ echo "docker $*" >>"$T/docker.log"
 case "$*" in
   "info"*) exit 0 ;;
   *"ps -q --status running postgres"*) [[ "${STUB_PG_CONTAINER:-1}" == 1 ]] && echo abc123; exit 0 ;;
-  *"exec -T postgres psql"*) if [[ ! -t 0 ]]; then cat >>"$T/psql.stdin"; fi
+  *"exec -T postgres psql"*) case "$*" in *" -c "*) ;; *) cat >>"$T/psql.stdin" ;; esac
     case "$*" in *"datname = 'core'"*) echo "${STUB_CORE_EXISTS:-1}" ;; esac
     exit "${STUB_PSQL_EXIT:-0}" ;;
 esac
@@ -51,7 +51,7 @@ export T
 
 # run <script...>: a fresh bash that sources local.sh as a library (nothing runs), stubs first on PATH, state under $T.
 run() {
-  PATH="$T/bin:$PATH" AT_STATE_DIR="$T/state" LOCAL_SH_LIB=1 bash -c '. "$1"; set +e; shift; eval "$*"' _ "$LOCAL_SH" "$@" 2>&1
+  PATH="$T/bin:$PATH" AT_STATE_DIR="$T/state" LOCAL_SH_LIB=1 bash -c '. "$1"; set +e; shift; eval "$*"' _ "$LOCAL_SH" "$@" 2>&1 </dev/null
 }
 reset_logs() { rm -f "$T/psql.log" "$T/psql.stdin" "$T/docker.log"; }
 
@@ -147,16 +147,16 @@ out="$(PATH="$T/bin:/usr/bin:/bin" AT_STATE_DIR="$T/state" LOCAL_SH_LIB=1 JAVA_H
 contains "Docker is checked" "Docker" "$out"
 
 echo "== DRYRUN prints the plan and starts nothing"
-out="$(PATH="$T/bin:$PATH" AT_STATE_DIR="$T/state" DRYRUN=1 "$LOCAL_SH" up 2>&1)"
+out="$(PATH="$T/bin:$PATH" AT_STATE_DIR="$T/state" DRYRUN=1 "$LOCAL_SH" up 2>&1 </dev/null)"
 contains "plan header" "STACK=monolith plan" "$out"
 contains "plan: core on 8120" "start on :8120" "$out"
 contains "plan: go on 8200" "start on :8200" "$out"
 contains "plan: web apps use the BFF" "BFF_ORIGIN=http://localhost:8200" "$out"
 contains "plan: database step" "provision-core.sql" "$out"
 [[ ! -e "$T/state/pids" && ! -e "$T/state/logs" ]] && ok "DRYRUN creates no state" || bad "DRYRUN created state under $T/state"
-out="$(PATH="$T/bin:$PATH" AT_STATE_DIR="$T/state" DRYRUN=1 STACK=services "$LOCAL_SH" up 2>&1)"
+out="$(PATH="$T/bin:$PATH" AT_STATE_DIR="$T/state" DRYRUN=1 STACK=services "$LOCAL_SH" up 2>&1 </dev/null)"
 contains "services plan" "STACK=services plan" "$out"
-out="$(PATH="$T/bin:$PATH" AT_STATE_DIR="$T/state" DRYRUN=1 "$LOCAL_SH" up geo 2>&1)"
+out="$(PATH="$T/bin:$PATH" AT_STATE_DIR="$T/state" DRYRUN=1 "$LOCAL_SH" up geo 2>&1 </dev/null)"
 contains "SERVICES=geo plans afrotransact-go only" "afrotransact-go: go build" "$out"
 [[ "$out" != *"5. core:"* ]] && ok "SERVICES=geo leaves core out" || bad "SERVICES=geo still plans core"
 out="$(PATH="$T/bin:$PATH" AT_STATE_DIR="$T/state" "$LOCAL_SH" bogus 2>&1)"
