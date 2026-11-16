@@ -16,9 +16,10 @@ cutover.services, which also scales the old per-service Application to 0). User 
 {{- $p := $m.envPrefix | default (upper (replace "-" "_" $name)) -}}
 {{- $enabled := or $m.enabled (eq (get $services $name | default "") "afrotransact-core") -}}
 {{- if $enabled -}}{{- $on = add $on 1 -}}{{- end -}}
-{{- /* mcp-server's McpExposureGuard (profile !local) refuses to start unless MCP_PUBLIC_URL is https or the in-cluster Service URL; core has no
-       per-module values file, so it is set here. The Service `mcp-server` keeps its name after the cutover and selects core's pods. */ -}}
-{{- if and $enabled (eq $name "mcp-server") -}}{{- $_ := set $env "MCP_PUBLIC_URL" (printf "http://mcp-server.%s.svc.cluster.local" $.Release.Namespace) -}}{{- end -}}
+{{- /* mcp-server's McpExposureGuard (profile !local) refuses to start unless MCP_PUBLIC_URL is https or an in-cluster Service URL; core has no
+       per-module values file, so it is set here. It is core's own Service (private: no HTTPRoute, tools/release/upstreams.py checks that) with the
+       module prefix, so it needs no alias Service; <url>/mcp and <url>/.well-known/oauth-protected-resource are served by core under it. */ -}}
+{{- if and $enabled (eq $name "mcp-server") -}}{{- $_ := set $env "MCP_PUBLIC_URL" (printf "http://afrotransact-core.%s.svc.cluster.local/modules/mcp-server" $.Release.Namespace) -}}{{- end -}}
 {{- $_ := set $env (printf "MODULE_%s_ENABLED" $p) (toString (and $enabled true)) -}}
 {{- if and $m.modeEnv $m.mode -}}
 {{- if not (has $m.mode (list "in-process" "http")) -}}{{- fail (printf "modules.%s.mode must be in-process or http (got %q)" $name $m.mode) -}}{{- end -}}
@@ -38,15 +39,8 @@ cutover.services, which also scales the old per-service Application to 0). User 
 {{- $_ := set $env "AT_DB_POOL_TOTAL_MAX" (toString $sum) -}}
 {{- /* No module on (every cutover.services entry empty): the pod would be an idle JVM, so it is scaled to 0. */ -}}
 {{- if eq (int $on) 0 -}}{{- $_ := set .Values "replicas" 0 -}}{{- end -}}
-{{- /* Go modules that are mounted `prefixed` in afrotransact-go (cart, search, carrier-gateway: their paths collide with gateway-bff's facade, so they
-       answer only under /modules/<name>/). Once such a module has moved into the Go deployable, its old Service name (http://cart) selects
-       afrotransact-go's pods but the flat path /v1/... would reach gateway-bff, not the module. Java callers (orders, ai-gateway, mcp-server,
-       inventory, delivery-runs) therefore get the prefixed deployable URL. Before the move the old URL (the standalone service) is right and
-       nothing is set. The flat-mounted modules (geo, media, notifications, promise) keep working through their old Service names. */ -}}
-{{- range $mod, $vars := dict "cart" (list "CART_URL") "search" (list "SEARCH_URL") "carrier-gateway" (list "CARRIER_GATEWAY_URL" "CARRIER_URL") -}}
-{{- if eq (get $services $mod | default "") "afrotransact-go" -}}
-{{- range $v := $vars -}}{{- $_ := set $env $v (printf "http://afrotransact-go/modules/%s" $mod) -}}{{- end -}}
-{{- end -}}
-{{- end -}}
+{{- /* Upstreams (values `upstreams`, library _upstreams.tpl): every URL core uses to reach a module of afrotransact-go, and the Java -> Java edges that are still
+       HTTP (loopback on core itself). One list, no old per-service port. A name the operator sets in extraEnv still wins. */ -}}
+{{- range $k, $v := fromYaml (include "at-service.upstreams.env" .) -}}{{- $_ := set $env $k $v -}}{{- end -}}
 {{- $_ := set .Values "extraEnv" (merge (dict) (.Values.extraEnv | default dict) $env) -}}
 {{ include "at-service.all" . }}

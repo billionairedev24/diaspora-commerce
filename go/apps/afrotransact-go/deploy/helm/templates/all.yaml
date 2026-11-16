@@ -29,5 +29,8 @@ when the figures exceed dbBudget.maxPerPod. With no module on, the pod is idle: 
 {{- end -}}
 {{- $_ := set $env "AT_DB_POOL_TOTAL_MAX" (toString $sum) -}}
 {{- if eq (int $on) 0 -}}{{- $_ := set .Values "replicas" 0 -}}{{- end -}}
+{{- /* Upstreams (values `upstreams`, library _upstreams.tpl): every URL a Go module uses to reach a Java module of afrotransact-core (http://afrotransact-core.<ns>.svc/modules/<m>)
+       or a module that has not moved yet (its own Service). Go -> Go edges inside this binary are in-process (modcfg) and render nothing. A name set in extraEnv wins. */ -}}
+{{- range $k, $v := fromYaml (include "at-service.upstreams.env" .) -}}{{- $_ := set $env $k $v -}}{{- end -}}
 {{- $_ := set .Values "extraEnv" (merge (dict) (.Values.extraEnv | default dict) $env) -}}
 {{ include "at-service.all" . }}

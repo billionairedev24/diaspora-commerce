@@ -72,7 +72,8 @@ spec:
 {{- end -}}
 
 {{- define "at-service.serviceMonitor" -}}
-{{- if .Values.monitoring.serviceMonitor }}
+{{- /* A service that moved into a deployable keeps its Service name (rollback path) but must not be scraped a second time: the deployable has its own ServiceMonitor / Alloy target. */ -}}
+{{- if and .Values.monitoring.serviceMonitor (not (include "at-service.movedTo" .)) }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
