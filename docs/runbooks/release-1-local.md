@@ -80,6 +80,44 @@ What you may need to set: nothing for the defaults. `.local/secrets.env` (provid
 The rest of this page is the advanced path: running a deployable by hand, what each setting means, how to detach a module. One
 section per deployable, the Java one first, then the Go one.
 
+## Demo data: seeding, re-seeding, wiping, checking
+
+`make up` seeds an empty catalogue once (`SEED=0 make up` skips it; log `.local/logs/seed.log`). Everything below is idempotent.
+
+```bash
+make seed                              # re-run everything that is missing (STACK=monolith: reaches afrotransact-go's modules itself)
+make seed ARGS="--only products"       # one step: sellers, size-charts, products, content, ads, preorders, pickups, bookings, ops, users
+make seed ARGS="--only ops"            # orders, fulfilment, returns, dispatch, payouts (needs the first-party sign-in below)
+make seed-check                        # offline, read-only: every demo product against the catalog's recorded schemas
+make seed-test                         # the seeder's unit tests
+make smoke                             # with the stack up: proves catalogue, photos, search, cart, tax, checkout, apps, orders, metrics
+```
+
+**Wipe and start over.** There is no `make seed-reset`: the services own their data. `make reset` removes the Docker volumes (Kafka,
+search index, MinIO photos), `make db-reset` also recreates every database (asks you to type `wipe`), and `rm -rf .local/seed` forgets
+the upload cache and downloaded photos. Then `make up` (seeds by itself) or `make seed`.
+
+**What a product needs (publish gate).** Catalog refuses a product that lacks what its category requires (`GET /v1/listing-rules`):
+description, typed facts (net weight, servings, shelf life, storage, ingredients, material, model, age grade), a dangerous-goods
+answer, the package of every variant, a barcode where the barcode is required, a label photo for food, health and personal care.
+The seeder reads those rules and the product type for each category and fills them (`tools/seed/seedlib/listing.py`; nothing is keyed
+on a category): the product's own data where the dataset has it, else a value derived from the field's type, options and units.
+Demo barcodes are GTIN-13 with the restricted GS1 prefix `200` (never a real company's), label photos are generated stand-ins.
+`make seed-check` runs the same code on recorded schemas (`tools/seed/testdata`, rebuilt by `python3 tools/seed/gen_testdata.py`;
+`--record URL` refreshes them from a running catalog). Products in a gated category (NEEDS_APPROVAL) or without a usable photo are
+skipped with a reason in the summary.
+
+**Photos.** Every kept photo has at least 500 px on its short side and 1000 px on its long side (media's rules); the size of the real
+file is checked before any upload, and a photo media refuses is replaced by another candidate. If MinIO was recreated the upload cache
+is dropped with one line and the photos are uploaded again.
+
+**Order data needs identity's first-party sign-in.** The `ops` and `users` steps sign the test customers in as gateway-bff does (client
+credentials `gateway-bff`, scope `auth:first-party`, then `POST /v1/auth/password`; the local secret is identity's default or
+`GATEWAY_BFF_CLIENT_SECRET`). In core with `at.security.enabled=false` identity used to answer every such call with 403
+`identity.first-party-client-required` (the local actor resolver turned the BFF's service token into the local super admin): fixed in core
+(`CurrentUser.caller()`, `BearerServiceTokenVerifier`), so core must be rebuilt (`make restart SERVICE=core`) for the orders to seed. The
+seeder checks this once and says so in one sentence instead of failing every step.
+
 ## Java: afrotransact-core (one JVM, every Java module)
 
 `afrotransact-core` is every Java service as a module of one JVM (ADR 0011). This page is how to run it on your machine

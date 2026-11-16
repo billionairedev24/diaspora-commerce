@@ -249,3 +249,35 @@ the callee side of the failure mapping as a test, orders' own persistence rows d
 | 11 | Checkout failure messages differ in wording for I/O failures ("... did not answer" without the exception tail) | Trivial | Accepted |
 | 12 | Contract drift independent of release 1: 3 seller routes unimplemented; `orders.yaml` was invalid YAML | Low | YAML fixed; seller routes: decide implement or drop |
 | 13 | Transactions: modules commit in separate schemas and separate transaction managers, so a caller's rollback never undoes a callee's commit, **as over HTTP**. Checkout relies on compensations, which are proven | None | By design |
+
+## 8. `make smoke`: proof the running stack works (and re-seeding)
+
+`make smoke` (`tools/smoke/release1.sh`, bash + curl + jq) runs against the stack `make up` started and prints one `PASS` / `FAIL` line per
+check (`FAIL  <check>  ->  <URL> status <code>`), a summary and exits non-zero when anything failed. `make up` prints the hint at the end; it
+is never run automatically. It is read-only except an add-to-cart and one checkout that stops at the payment step (the test customer
+`customer.houston@afrotransact.test` gets an unpaid "awaiting payment" order; `SMOKE_CHECKOUT=0` skips it).
+
+| Check | How |
+|---|---|
+| core readiness, every module UP | `:8120/actuator/health/readiness`, `/actuator/health` (no DOWN component); STACK=services: `:8100-8115` |
+| afrotransact-go ready | `:8200/readyz` |
+| products >= 40 (`SMOKE_MIN_PRODUCTS`), photo on every hit, files served, home rails have photos | `GET /v1/search`, `GET /v1/home` through the BFF, then a HEAD on three photo URLs |
+| search `iru`, `rice` | `GET /v1/search?q=` |
+| a product in every top-level department | category tree, then `GET /v1/search?department=` (`SMOKE_DEPT_SKIP`, default `Services`, for departments that are not products in search) |
+| product page price, photo, seller; storefront `/p/<atin>`; a seller store `/b/<slug>` with products | `GET /v1/products/<atin>`, storefront pages |
+| cart add and read, estimated tax for ZIP 77042 | guest cookie jar: `POST /v1/cart/items`, `GET /v1/cart`, `GET /v1/checkout/tax-estimate?zip=77042` |
+| checkout reaches the payment-intent step | signs the test customer in like the BFF, `GET /v1/checkout/summary`, `POST /v1/checkout/orders`, expects a `paymentClientSecret` (local Stripe stand-in) |
+| staff console and Seller Center login pages, Mailpit | 200 after redirects, `:8025/api/v1/info` |
+| search index document count > 0 | Meilisearch `/stats` (or Elasticsearch `_cat/count`); on 0 it says to run `make reindex-search` |
+| seeded orders in the staff order list | `GET /v1/admin/orders` on core (`ORDERS_URL`; `:8104` in STACK=services) |
+| Prometheus targets for core and afrotransact-go UP | `:9090/api/v1/targets`: `:8101` (served by core; core's own `:8120` is not a scrape target) and `:8200` |
+
+Addresses: `BFF_URL`, `CORE_URL`, `IDENTITY_URL`, `ORDERS_URL`, `STOREFRONT_URL`, `SELLER_CENTER_URL`, `STAFF_CONSOLE_URL`, `MAILPIT_URL`,
+`MEILISEARCH_URL`, `PROMETHEUS_URL` override the defaults; the web ports follow `.local/web-ports`; `STACK=services` switches to the old
+ports. `make smoke-test` runs the script against a fake stack (no stack needed). **Not run against a real stack when written**: the response
+shapes come from `contracts/openapi/gateway-bff.yaml`; the first real run may show a check whose field name differs.
+
+Re-seeding, wiping and the seed validation are in `release-1-local.md` ("Demo data"). Two defects found while preparing this section and
+fixed: identity answered `403 identity.first-party-client-required` to every first-party sign-in in core on the local profile (the seeder's
+order data and any BFF sign-in), and `make seed` run by hand used the pre-release-1 ports of media, geo, cart and search in STACK=monolith.
+
