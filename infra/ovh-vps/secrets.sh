@@ -140,7 +140,8 @@ databases() {
   done
 }
 
-# KEY=VALUE lines for one service (values may be empty when a third-party key was not given).
+# KEY=VALUE records for one service, each terminated by a NUL byte (values may be empty when a third-party key was not given, and may
+# span lines: SIGNING_KEY_PEM is a PEM). Read them with `mapfile -d '' -t` or `read -r -d ''`, never line by line.
 service_keys() {
   local svc="$1" db="$2"
   local common=("APP_ENV=$PROFILE" "KAFKA_BOOTSTRAP=$KAFKA")
@@ -199,8 +200,14 @@ service_keys() {
     trust-ops)        out+=("${common[@]}" "TRUSTOPS_CLIENT_SECRET=$(gen TRUSTOPS_CLIENT_SECRET)") ;;
     *)                die "no secret keys defined for $svc (add it to secrets.sh)" ;;
   esac
-  # later entries win (e.g. KAFKA_BOOTSTRAP listed twice); print KEY=VALUE, one per line
-  printf '%s\n' "${out[@]}" | awk -F= '{k=$1; v=substr($0,length(k)+2); a[k]=v; if(!(k in s)){s[k]=++n; o[n]=k}} END{for(i=1;i<=n;i++) print o[i] "=" a[o[i]]}'
+  # later entries win (e.g. KAFKA_BOOTSTRAP listed twice), first position kept; NUL-terminated so a multi-line value stays one record
+  local -A seen=(); local -a order=(); local kv key
+  for kv in "${out[@]}"; do
+    key="${kv%%=*}"
+    [[ -v seen[$key] ]] || order+=("$key")
+    seen[$key]="${kv#*=}"
+  done
+  for key in "${order[@]}"; do printf '%s=%s\0' "$key" "${seen[$key]}"; done
 }
 
 signing_key() { # an RSA 3072 PKCS#8 key (identity signs RS256 and refuses any other key type), kept so tokens survive re-runs
@@ -226,7 +233,7 @@ services_secrets() {
   [[ -z "$PG_SSLROOTCERT" ]] || secret "$NS" pg-ca "ca.crt=$(cat "$EXTERNAL_PG_CA_FILE")"
   local svc rt db wave kv
   while read -r svc rt db wave; do
-    mapfile -t kv < <(service_keys "$svc" "$db")
+    mapfile -d '' -t kv < <(service_keys "$svc" "$db")
     secret "$NS" "${svc}-secrets" "${kv[@]}"
     echo "  $svc: ${#kv[@]} keys"
   done < <(services)
