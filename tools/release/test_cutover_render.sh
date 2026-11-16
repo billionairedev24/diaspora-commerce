@@ -25,6 +25,16 @@ out="$("$helm" template go "$go" -f "$go/values-prod.yaml" --set-json 'cutover.s
 grep -A1 'name: AT_MODULES_CART_ENABLED' <<<"$out" | grep -q 'value: "true"' || fail "cart is not enabled in the Go deployable by cutover.services"
 grep -A1 'name: AT_MODULES_CARRIER_GATEWAY_ENABLED' <<<"$out" | grep -q 'value: "true"' || fail "carrier-gateway env name (CARRIER_GATEWAY) is wrong"
 grep -q 'replicas: 1' <<<"$out" || fail "a deployable with a module on must run 1 replica"
+# 1c. Go modules mounted `prefixed` (cart, search, carrier-gateway) answer only under /modules/<name>/: once moved into afrotransact-go, core's
+#     callers get the prefixed deployable URL; before the move, and for flat-mounted modules (geo), nothing is set.
+out="$("$helm" template core "$core" -f "$core/values-prod.yaml" --set-json 'cutover.services={"catalog":"afrotransact-core","cart":"afrotransact-go","carrier-gateway":"afrotransact-go"}')"
+grep -A1 'name: CART_URL' <<<"$out" | grep -q 'value: "http://afrotransact-go/modules/cart"' || fail "CART_URL is not the prefixed afrotransact-go URL after cart moved"
+grep -A1 'name: CARRIER_GATEWAY_URL' <<<"$out" | grep -q 'value: "http://afrotransact-go/modules/carrier-gateway"' || fail "CARRIER_GATEWAY_URL is not the prefixed URL"
+grep -q 'name: SEARCH_URL' <<<"$out" && fail "SEARCH_URL must not be set while search has not moved"
+grep -q 'name: MCP_PUBLIC_URL' <<<"$out" && fail "MCP_PUBLIC_URL must not be set while mcp-server is not in core"
+out2="$("$helm" template core "$core" -n afrotransact-prod -f "$core/values-prod.yaml" --set-json 'cutover.services={"mcp-server":"afrotransact-core"}')"
+grep -A1 'name: MCP_PUBLIC_URL' <<<"$out2" | grep -q 'value: "http://mcp-server.afrotransact-prod.svc.cluster.local"' || fail "core must set MCP_PUBLIC_URL to the in-cluster mcp-server Service when the module is on (McpExposureGuard)"
+grep -q 'name: GEO_URL' <<<"$out" && fail "GEO_URL must stay the old Service name (geo is mounted flat)"
 for c in "$core" "$go"; do
   "$helm" template idle "$c" -f "$c/values-prod.yaml" | grep -q 'replicas: 0' || fail "$c with no module on must be scaled to 0"
 done
