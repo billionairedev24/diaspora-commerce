@@ -73,6 +73,7 @@ class DatasetTest(unittest.TestCase):
 
 class HomeModulesTest(unittest.TestCase):
     PAID = {"home_brand_banner", "home_sponsored_products", "home_ad_row", "home_advertorial"}
+    FILL = "rail_fill"
 
     def test_modules_are_ordered_by_distinct_priorities_among_the_rails_and_banners(self):
         prios = [m["priority"] for m in D.HOME_MODULES] + [r["priority"] for r in D.RAILS] + [b["priority"] for b in D.BANNERS]
@@ -80,7 +81,7 @@ class HomeModulesTest(unittest.TestCase):
 
     def test_paid_demo_modules_name_their_advertiser_and_ad_rows_have_two_or_three_ads(self):
         for m in D.HOME_MODULES:
-            self.assertIn(m["slot"], self.PAID | {"home_block"})
+            self.assertIn(m["slot"], self.PAID | {"home_block", self.FILL})
             if m["slot"] in ("home_brand_banner", "home_advertorial"):
                 self.assertTrue(m["payload"]["advertiser"], m["name"])
             if m["slot"] == "home_ad_row":
@@ -90,6 +91,25 @@ class HomeModulesTest(unittest.TestCase):
                 self.assertEqual(len(ads), len(m["ad_images"]))
             if m["slot"] == "home_block":
                 self.assertIn("type", m["payload"])
+
+
+    def test_rail_fill_demo_tiles_are_valid_labelled_and_never_in_a_migration(self):
+        fills = [m for m in D.HOME_MODULES if m["slot"] == self.FILL]
+        self.assertTrue(any(m["payload"].get("advertiser") for m in fills), "a paid tile")
+        self.assertTrue(any(not m["payload"].get("advertiser") for m in fills), "an editorial tile")
+        for m in fills:
+            p = m["payload"]
+            self.assertLessEqual(len(p["headline"]), 60)
+            self.assertLessEqual(len(p.get("text", "")), 140)
+            self.assertTrue(p["cta"] and p["href"].startswith("/"))
+            self.assertTrue(m.get("image"), "a tile has a real photo or is text only; the seed uploads a photo")
+            text = (p["headline"] + " " + p.get("text", "")).lower()
+            for banned in ("diwali", "holi", "eid", "ramadan"):
+                self.assertNotIn(banned, text)
+        root = Path(__file__).resolve().parents[3]
+        for sql in (root / "java/services/content/src/main/resources/db/migration").glob("*.sql"):
+            body = sql.read_text().lower()
+            self.assertNotIn("'rail_fill'", body.replace("('rail_fill',", ""), sql.name)  # the slot row only, no placement
 
 
 class LibraryFilterTest(unittest.TestCase):
