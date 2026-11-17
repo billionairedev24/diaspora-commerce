@@ -392,7 +392,8 @@ paths:
       description: |
         The storefront remembers viewed ATINs in the browser (nothing is stored server side) and asks for their cards here.
         Order is kept (most recent first); a product is listed once (variant ATINs collapse to their product, at most 12 cards); unknown, unavailable, out-of-stock, held-for-tax and photo-less products are dropped. The
-        storefront hides the rail when `items` is empty.
+        storefront hides the rail when `items` is empty. A short rail also carries `fill` (a Sponsored or editorial tile; see
+        `RailFill`); this rail is never topped up with products the shopper did not open.
       parameters:
         - {name: atins, in: query, required: true, description: 'Comma separated ATINs (product or variant), most recent first; at most 20 are used.', schema: {type: string}}
       responses:
@@ -405,6 +406,8 @@ paths:
                 required: [items]
                 properties:
                   items: {type: array, items: {$ref: '#/components/schemas/ProductSummary'}}
+                  fill:
+                    $ref: '#/components/schemas/RailFill'
   /v1/home/ad-events:
     post:
       tags: [Site]
@@ -5237,6 +5240,33 @@ components:
         title: {type: string}
         href: {type: string}
         items: {type: array, items: {$ref: '#/components/schemas/ProductSummary'}}
+        fill:
+          $ref: '#/components/schemas/RailFill'
+    RailFill:
+      type: object
+      description: |
+        The one tile that fills the columns a short rail leaves empty, resolved by the gateway together with the rail (no second
+        request). Order of preference: more relevant eligible products (appended to `items`, never here), then a Sponsored tile
+        (a paid `rail_fill` placement, then the sponsored-products auction), then a staff editorial `rail_fill` placement.
+        When nothing qualifies the field is absent and the storefront narrows the rail: no placeholder, no empty box.
+        A tile with `sponsored: true` always names its advertiser and is labelled "Sponsored". `imageUrl` is present only when
+        it is a real photograph; `products` are in stock with a real photo. Impressions and clicks use the existing ad
+        mechanism: `POST /v1/home/ad-events` with `id` for a placement tile, `POST /v1/search/clicks` with `searchId` and the
+        product's `sponsor.adToken` for auction products.
+      required: [kind, sponsored, title, href]
+      properties:
+        kind: {type: string, enum: [placement, sponsored-products]}
+        id: {type: string, description: 'Placement id (kind placement); counted through /v1/home/ad-events.'}
+        sponsored: {type: boolean}
+        advertiser: {type: string}
+        title: {type: string}
+        body: {type: string}
+        cta: {type: string}
+        href: {type: string}
+        imageUrl: {type: [string, 'null']}
+        products: {type: array, maxItems: 3, items: {$ref: '#/components/schemas/ProductSummary'}}
+        searchId: {type: string}
+        maxPerSession: {type: integer, minimum: 1}
     LocaleLabels:
       type: object
       description: 'Label per locale. `en` is always present; a missing locale falls back to `en`, never to a key.'
