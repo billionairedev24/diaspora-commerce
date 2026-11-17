@@ -11,7 +11,10 @@ import { getDb, type MockOffer, type MockSession, nextId } from './db';
 import { arrivalWindow, deliveryOptions, deliveryPromise, locationForZip, mergeWindows, metroOf, nearestFc } from './delivery';
 import { atinOf,DEPARTMENTS, type FixtureProduct, PLATFORM_SELLER } from './fixtures/catalog';
 import { PLACEMENTS, SPONSORED_SEARCH, type TileRule, ZIP_TARGETING } from './fixtures/content';
+import { pickRailFill } from '../rail-fill';
+import { type RailFill } from '../schemas/home';
 import { composeBody } from './home-blocks';
+import { applyMockRailFills, mockRailFillPlacements } from './rail-fill-mock';
 import { type Catalog } from './home-dynamic';
 import { completePhrases, matchScore } from './matching';
 import { fixturePreorderEligible, withPreorderPackage } from './preorders';
@@ -447,6 +450,13 @@ export function recentlyViewed(atins: string[], loc: DeliveryLocation, now: Date
   return out;
 }
 
+/** The rail-fill tile of a short "Recently viewed" row (never more products: that rail holds only what was opened). */
+export function recentlyViewedFill(items: ProductSummary[], loc: DeliveryLocation, now: Date): RailFill | null {
+  if (!items.length) return null;
+  const pool = liveCatalog(loc, now).products.map(({ ageDays: _a, ...p }) => p);
+  return pickRailFill({ items, department: undefined, placements: mockRailFillPlacements(pool) }).fill;
+}
+
 /** Placements targeted at ZIP prefixes show only to shoppers whose ZIP starts with one of them. */
 const targeted = (id: string, zip: string) => !ZIP_TARGETING[id] || ZIP_TARGETING[id].some((prefix) => zip.startsWith(prefix));
 
@@ -492,6 +502,7 @@ export function home(loc: DeliveryLocation, now: Date, userId: string | null = n
   const personal = userId ? basedOnOrders(all, userId) : null;
   const tiles = resolveTiles(all, rank, near).filter((t) => targeted(t.id, loc.zip));
   const blocks = composeBody({ rails, personal, eligible: all.filter(eligibleForHome), loc, now, userId, rank, tiles });
+  applyMockRailFills(blocks, all, { used: tiles.flatMap((t) => t.cells.map((c) => c.atin).filter((a): a is string => !!a)) });
   return {
     announcements: PLACEMENTS.announcements,
     hero: activeHero(PLACEMENTS.hero, now).filter((h) => targeted(h.id, loc.zip)),

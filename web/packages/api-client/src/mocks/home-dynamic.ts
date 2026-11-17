@@ -12,6 +12,7 @@ import { CRAWLER_HEADER, HOME_SEEN_HEADER, HOME_VARIANT_HEADER,VISIT_WINDOW_HEAD
 import { type ProductSummary } from '../schemas/catalog';
 import { type HeroSlide, type Home, type HomeBlock, type HomeCell, type HomeModuleDecision, type ServiceCard } from '../schemas/home';
 import { type DeliveryLocation } from '../schemas/location';
+import { applyMockRailFills } from './rail-fill-mock';
 import { type LocaleLabels, type SiteCommunity, type SiteDepartment, type SiteNavigation, type SiteSitemap } from '../schemas/site-nav';
 import { type HomeBand, type HomeCaps, type HomeModuleRule, type HomePreview, type HomePreviewQuery, type HomeSettings } from '../staff-home';
 
@@ -645,6 +646,7 @@ export function composeDynamicHome(input: ComposeInput): Composed {
   const kept = withSponsored.slice(0, room);
   for (const b of withSponsored.slice(room)) if (b.key !== 'sponsored' && b.key !== 'department-rail' && b.key !== 'sell') dropped.set(b.key, 'page-full');
   const final: HomeBlock[] = [...kept, sell].map(({ key: _k, ...b }) => b);
+  applyMockRailFills(final, catalog.products.map(strip));
   final.forEach((b, i) => {
     if (b.tracking) b.tracking = { ...b.tracking, position: i + 1 };
   });

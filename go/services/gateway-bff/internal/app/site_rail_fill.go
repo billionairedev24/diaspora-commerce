@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"hash/fnv"
+	"slices"
 	"strings"
 	"time"
 
@@ -76,6 +77,34 @@ func railDepartment(items []domain.ProductSummary) string {
 	return best
 }
 
+// relaxableSource is whether a content rail of this source kind keeps its meaning when topped up with more products of its department.
+func relaxableSource(kind string) bool {
+	switch kind {
+	case "search", "department-bestsellers", "community":
+		return true
+	}
+	return false
+}
+
+// relaxMode says how a rail may be topped up with more products: not at all (personal, delivery-promise and spotlight
+// rails would be mislabelled), only with real deals (a deals rail), or with popular in-stock products of its department.
+func relaxMode(b domain.HomeBlock) (ok bool, dealsOnly bool) {
+	switch b.Type {
+	case domain.BlockDeals:
+		return true, true
+	case domain.BlockRail:
+		if b.Rail != nil && b.Rail.Relaxable {
+			return true, false
+		}
+		mod := b.Module
+		if b.Tracking != nil && mod == "" {
+			mod = b.Tracking.Module
+		}
+		return mod == domain.ModGroceries || mod == domain.ModDeptRail, false
+	}
+	return false, false
+}
+
 // fillable says whether a block is an organic product rail that may get a fill.
 func fillable(b domain.HomeBlock) bool {
 	if b.Rail == nil || b.Sponsored {
@@ -104,7 +133,8 @@ func (s *siteServiceImpl) fillRails(ctx context.Context, blocks []domain.HomeBlo
 	auctions := 0
 	for _, i := range short {
 		b := &blocks[i]
-		res := s.fillOne(ctx, b.Rail.ID, b.Rail.Items, cands, sc, used, quiet, b.Type != domain.BlockBasedOnOrders, &auctions, now)
+		relax, deals := relaxMode(*b)
+		res := s.fillOne(ctx, b.Rail.ID, b.Rail.Items, cands, sc, used, quiet, relax, deals, &auctions, now)
 		b.Rail.Items = res.Items
 		b.Rail.Fill = res.Fill
 		for _, p := range res.Items {
@@ -122,14 +152,18 @@ func (s *siteServiceImpl) fillRails(ctx context.Context, blocks []domain.HomeBlo
 }
 
 // fillOne resolves the fill of one rail.
-func (s *siteServiceImpl) fillOne(ctx context.Context, railID string, items []domain.ProductSummary, cands []domain.RailFillCandidate, sc shopperScope, used map[string]bool, quiet, relax bool, auctions *int, now time.Time) domain.RailFillResult {
+func (s *siteServiceImpl) fillOne(ctx context.Context, railID string, items []domain.ProductSummary, cands []domain.RailFillCandidate, sc shopperScope, used map[string]bool, quiet, relax, dealsOnly bool, auctions *int, now time.Time) domain.RailFillResult {
 	dept := railDepartment(items)
 	in := domain.RailFillInput{Items: items, Department: dept, Used: used, Placements: cands, Rotate: rotation(sc.seed, railID)}
 	// (1) relaxed products: the same department, nearest sellers first, popular and in stock. Only fetched when needed.
 	// A personal rail (based on orders) is never topped up: the shopper's bought products would come back.
 	if relax {
 		if rel, err := s.resolveRail(ctx, domain.RailSource{Kind: "department-bestsellers", Department: dept, Limit: 24}, sc); err == nil {
-			in.Relaxed = rankForShopper(eligibleOnly(rel), sc) // nearest sellers first, never filtered out
+			pool := eligibleOnly(rel)
+			if dealsOnly { // a "Deals of the day" rail only ever holds real deals
+				pool = slices.DeleteFunc(slices.Clone(pool), func(p domain.ProductSummary) bool { return discountPercent(p) < dealMinPercent })
+			}
+			in.Relaxed = rankForShopper(pool, sc) // nearest sellers first, never filtered out
 		}
 	}
 	if !quiet {
@@ -174,6 +208,6 @@ func (s *siteServiceImpl) RecentlyViewedRail(ctx context.Context, c *domain.Call
 	}
 	sc := newScope(loc, c, now)
 	auctions := 0
-	res := s.fillOne(ctx, "recently-viewed", items, s.railFillCandidates(ctx, pl, loc, now), sc, map[string]bool{}, false, false, &auctions, now)
+	res := s.fillOne(ctx, "recently-viewed", items, s.railFillCandidates(ctx, pl, loc, now), sc, map[string]bool{}, false, false, false, &auctions, now)
 	return items, res.Fill, nil
 }

@@ -22,6 +22,7 @@ export * from './membership-client';
 export { formatMoney, percentOff, splitMoney } from './money';
 export { countSmsSegments, MAX_SMS_SEGMENTS, missingPlaceholders, templatePlaceholders } from './notifications';
 export * from './preorders';
+export * from './rail-fill';
 export { bffProblemType, PROBLEM_TYPE_BASE } from './problem-types';
 export { creditKeys, creditQueries } from './query/credit';
 export { deliveryQuoteKeys, deliveryQuoteQueries } from './query/delivery-quotes';
