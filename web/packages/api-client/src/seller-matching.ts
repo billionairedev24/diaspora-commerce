@@ -26,6 +26,11 @@ export const ImageCheckSchema = z.object({
 });
 export type ImageCheck = z.infer<typeof ImageCheckSchema>;
 
+/** The conditions a listing may state (what a category allows is decided by catalog's listing rules, never here). */
+export const OFFER_CONDITIONS = ['NEW', 'RENEWED', 'USED_LIKE_NEW', 'USED_VERY_GOOD', 'USED_GOOD', 'USED_ACCEPTABLE'] as const;
+export type OfferCondition = (typeof OFFER_CONDITIONS)[number];
+const AllowedConditionsSchema = z.array(z.enum(OFFER_CONDITIONS));
+
 /* ── The barcode shortcut ── */
 
 export const MatchRequestSchema = z.object({ gtin: z.string().max(20) });
@@ -55,7 +60,9 @@ export const CatalogMatchSchema = z.object({
   canCreate: z.boolean(),
   createBlockers: z.array(BlockerSchema),
   suggestion: nullableString.optional(),
-  message: nullableString.optional()
+  message: nullableString.optional(),
+  /** What the page's category allows (listing rules). NEW alone, or absent, means the condition is not asked. */
+  allowedConditions: AllowedConditionsSchema.optional()
 });
 export type CatalogMatch = z.infer<typeof CatalogMatchSchema>;
 
@@ -81,7 +88,9 @@ export const MatchCandidateSchema = z.object({
   likely: z.boolean(),
   sellerCount: z.number().int().nullish(),
   canOffer: z.boolean(),
-  blockers: z.array(BlockerSchema)
+  blockers: z.array(BlockerSchema),
+  /** What the page's category allows (listing rules). NEW alone, or absent, means the condition is not asked. */
+  allowedConditions: AllowedConditionsSchema.optional()
 });
 export type MatchCandidate = z.infer<typeof MatchCandidateSchema>;
 export const CandidateListSchema = z.object({
@@ -111,10 +120,31 @@ export const MatchDecisionSchema = z.object({
 });
 export type MatchDecision = z.infer<typeof MatchDecisionSchema>;
 
+/* ── "My size is different": the seller's own size, weight or pack is asked for as one more variant of the page (catalogue staff check it) ── */
+
+export const SizeRequestInputSchema = z.object({
+  query: z.string().min(1).max(200),
+  categoryId: z.string().optional(),
+  atin: z.string(),
+  /** Nothing but the size: 1 kg, 500 ml, 6 pack. */
+  size: z.string().min(1).max(40),
+  note: z.string().max(500).optional()
+});
+export type SizeRequestInput = z.infer<typeof SizeRequestInputSchema>;
+export const SizeRequestResultSchema = z.object({
+  /** REQUESTED: filed for review. ALREADY_REQUESTED: the same size is waiting. ALREADY_ON_PAGE: the page has that size, sell `existingAtin`. */
+  outcome: z.enum(['REQUESTED', 'ALREADY_REQUESTED', 'ALREADY_ON_PAGE']),
+  size: nullableString.optional(),
+  requestId: nullableString.optional(),
+  existingAtin: nullableString.optional(),
+  reviewDueAt: nullableString.optional(),
+  canOffer: z.boolean(),
+  blockers: z.array(BlockerSchema)
+});
+export type SizeRequestResult = z.infer<typeof SizeRequestResultSchema>;
+
 /* ── The price-and-stock form: terms only, never page content ── */
 
-export const OFFER_CONDITIONS = ['NEW', 'RENEWED', 'USED_LIKE_NEW', 'USED_VERY_GOOD', 'USED_GOOD', 'USED_ACCEPTABLE'] as const;
-export type OfferCondition = (typeof OFFER_CONDITIONS)[number];
 export const OFFER_FULFILMENTS = ['SELLER', 'AFROTRANSACT', 'AFROTRANSACT_DELIVERY'] as const;
 export type OfferFulfilment = (typeof OFFER_FULFILMENTS)[number];
 export const OfferOnlyInputSchema = z.object({
@@ -170,7 +200,9 @@ export const ChangeRequestSchema = z.object({
   decidedAt: nullableString.optional(),
   /** Staff's reason: "Not applied, because ...". */
   reason: nullableString.optional(),
-  resolution: nullableString.optional()
+  resolution: nullableString.optional(),
+  /** NEW_VARIANT that staff applied: the variant that now exists on the page; the seller adds price and stock to it. */
+  resultAtin: nullableString.optional()
 });
 export type ChangeRequest = z.infer<typeof ChangeRequestSchema>;
 export const ChangeRequestPageSchema = z.object({ items: z.array(ChangeRequestSchema), total: z.number().int(), page: z.number().int(), size: z.number().int() });
@@ -204,6 +236,8 @@ export function createSellerMatchingApi(request: Requester) {
     candidates: (input: CandidateRequest, signal?: AbortSignal): Promise<CandidateList> =>
       request('/v1/seller/catalog/candidates', CandidateListSchema, { method: 'POST', body: input, signal }),
     decide: (input: DecisionRequest): Promise<MatchDecision> => request('/v1/seller/catalog/candidates/decisions', MatchDecisionSchema, { method: 'POST', body: input }),
+    requestSize: (input: SizeRequestInput): Promise<SizeRequestResult> =>
+      request('/v1/seller/catalog/candidates/size-requests', SizeRequestResultSchema, { method: 'POST', body: input }),
     createOffer: (input: OfferOnlyInput, key?: string): Promise<OfferOnlyResult> =>
       request('/v1/seller/offers', OfferOnlyResultSchema, { method: 'POST', body: input, headers: idem(key) }),
     fileChangeRequest: (atin: string, input: ChangeRequestInput): Promise<ChangeRequest> =>

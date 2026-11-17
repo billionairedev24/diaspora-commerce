@@ -64,7 +64,7 @@ import {
   validatePickupHours
 } from '../../schemas/seller';
 import { defaultStoreConfig, StoreConfigSchema, type StorePageSettings } from '../../schemas/storefront';
-import { CandidateRequestSchema, ChangeRequestInputSchema, ChangeRequestStatusSchema, DecisionRequestSchema, MatchRequestSchema, type ProductImageSlot } from '../../seller-matching';
+import { CandidateRequestSchema, ChangeRequestInputSchema, ChangeRequestStatusSchema, DecisionRequestSchema, MatchRequestSchema, type ProductImageSlot, SizeRequestInputSchema } from '../../seller-matching';
 import { cleanValue, sizesMissingFromChart, valueKey } from '../../size-charts';
 import { mockAddressSuggestions, mockResolveAddress } from '../addresses';
 import { miles } from '../delivery';
@@ -123,6 +123,7 @@ import {
   matchCatalog,
   MatchingMockError,
   registerPage,
+  requestSize,
   searchCandidates,
   verdictForFile,
   withdrawChange
@@ -2141,6 +2142,14 @@ export const sellerHandlers = [
       const b = await body(ctx.request, DecisionRequestSchema);
       require(ctx, 'listings', 'EDIT', 'SELLER');
       return matchingMock(() => decideMatch(ctx.db, ctx.org.id, b));
+    })
+  ),
+  http.post(
+    `${W}/catalog/candidates/size-requests`,
+    route(async (ctx) => {
+      const b = await body(ctx.request, SizeRequestInputSchema);
+      require(ctx, 'listings', 'EDIT', 'SELLER');
+      return matchingMock(() => requestSize(ctx.db, ctx.org.id, b, ctx.now));
     })
   ),
   http.post(
