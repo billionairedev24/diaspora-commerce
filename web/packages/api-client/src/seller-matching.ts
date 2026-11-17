@@ -268,7 +268,9 @@ export const matchingQueries = {
   candidates: (api: SellerMatchingApi, orgId: string, q: CandidateRequest, enabled: boolean) =>
     queryOptions({ queryKey: matchingKeys.candidates(orgId, q), queryFn: ({ signal }) => api.candidates(q, signal), enabled, staleTime: 0, gcTime: 0, retry: false }),
   changeRequests: (api: SellerMatchingApi, orgId: string) =>
-    queryOptions({ queryKey: matchingKeys.changeRequests(orgId), queryFn: ({ signal }) => api.listChangeRequests({ size: 50 }, signal), staleTime: 30_000 }),
+    queryOptions({ queryKey: matchingKeys.changeRequests(orgId), queryFn: ({ signal }) => api.listChangeRequests({ size: 50 }, signal), staleTime: 30_000,
+      // Staff answer while the seller is elsewhere: coming back to the list always asks again, so an approved size can be sold at once.
+      refetchOnMount: 'always' }),
   imageTasks: (api: SellerMatchingApi, orgId: string) =>
     queryOptions({ queryKey: matchingKeys.imageTasks(orgId), queryFn: ({ signal }) => api.listImageTasks(signal), staleTime: 60_000 })
 };
