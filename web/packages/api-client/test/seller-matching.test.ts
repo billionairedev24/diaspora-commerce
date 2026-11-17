@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { createSellerApiClient, isApiError } from '../src';
-import { approveMockPage, getSellerDb, gtinWith, MOCK_GTIN, resetSellerDb, SELLER_ORG, verdictForFile } from '../src/mocks/seller';
+import { approveMockPage, decideMockChange, getSellerDb, gtinWith, MOCK_GTIN, resetSellerDb, SELLER_ORG, verdictForFile } from '../src/mocks/seller';
 import { MOCK_FOOD_ORG } from '../src/mocks/seller/departments';
 import { handleSellerMockRequest } from '../src/mocks/seller-runtime';
 
@@ -141,6 +141,41 @@ describe('catalog matching (mock BFF, S382)', () => {
     expect(await matching.withdrawChangeRequest(title.id)).toMatchObject({ status: 'WITHDRAWN' });
     expect(await problem(matching.withdrawChangeRequest(title.id))).toMatchObject({ status: 409, code: 'CHANGE_REQUEST_DECIDED' });
     expect((await matching.listChangeRequests({ status: 'PENDING' })).items.map((r) => r.type)).toEqual(['WRONG_MATCH']);
+  });
+
+  it('asks for the seller’s own size as a new variant instead of blocking them, once per size', async () => {
+    const { matching } = client();
+    const query = 'raw shea butter 16oz';
+    const found = await matching.candidates({ query });
+    const atin = found.candidates[0]?.atin ?? '';
+    expect(await matching.requestSize({ query, atin, size: '16 oz' })).toMatchObject({ outcome: 'REQUESTED', size: '16 oz', canOffer: false });
+    expect(await matching.requestSize({ query, atin, size: '16oz' })).toMatchObject({ outcome: 'ALREADY_REQUESTED' });
+    expect((await matching.listChangeRequests({ status: 'PENDING' })).items.map((r) => r.type)).toEqual(['NEW_VARIANT']);
+    expect(await matching.requestSize({ query, atin, size: '8 oz' })).toMatchObject({ outcome: 'ALREADY_ON_PAGE', existingAtin: atin, canOffer: true });
+    expect(await problem(matching.requestSize({ query, atin, size: 'a big bag' }))).toMatchObject({ status: 422, code: 'SIZE_INVALID' });
+    expect(await problem(matching.requestSize({ query, atin: 'ATNIKEV001', size: '1 kg' }))).toMatchObject({ status: 422, code: 'CHOICE_NOT_SHOWN' });
+  });
+
+  it('lets the seller add price and stock to the variant once staff apply the request', async () => {
+    const { matching } = client();
+    const query = 'raw shea butter 16oz';
+    const found = await matching.candidates({ query });
+    const atin = found.candidates[0]?.atin ?? '';
+    const asked = await matching.requestSize({ query, atin, size: '16 oz' });
+    expect((await matching.listChangeRequests()).items[0]?.resultAtin ?? null).toBeNull();
+    decideMockChange(getSellerDb(), asked.requestId ?? '', true, 'Checked the size', new Date('2026-11-17T10:00:00Z'));
+    const applied = (await matching.listChangeRequests()).items[0];
+    expect(applied).toMatchObject({ type: 'NEW_VARIANT', status: 'APPLIED' });
+    expect(applied?.resultAtin).toBeTruthy();
+    const offer = await matching.createOffer({ atin: applied?.resultAtin ?? '', priceMinor: 2100, fulfilment: 'SELLER', quantity: 6 });
+    expect(offer).toMatchObject({ status: 'ACTIVE' });
+    expect((await matching.match({ gtin: MOCK_GTIN.live })).variants.map((v) => v.options.Size)).toEqual(['8 oz', '16 oz']);
+  });
+
+  it('reports what each category allows for the condition, from the data and not from the screen', async () => {
+    const { matching } = client();
+    expect((await matching.candidates({ query: 'raw shea butter 8oz' })).candidates[0]?.allowedConditions).toEqual(['NEW']);
+    expect((await matching.candidates({ query: 'lagos book laptop' })).candidates[0]?.allowedConditions).toHaveLength(6);
   });
 
   it('treats a barcode nobody has used as no page, for every organisation (the creator-and-seller path is the seller-center spec add-product.test.tsx)', async () => {

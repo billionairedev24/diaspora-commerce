@@ -1841,7 +1841,7 @@ export interface paths {
          *     first, at most six, scored below the show threshold dropped. `SAME_NAME` is exact (the normalised name, brand and
          *     size are equal in the category); `SIMILAR` is fuzzy and is only a suggestion: both need the seller's click, and a
          *     page that states a size needs the one-tap size confirmation. Nothing about any seller is returned (no name, price,
-         *     stock or cost). An unreachable index answers `searchUnavailable` with no suggestions, never a guess. Limited per
+         *     stock or cost). When the search index cannot be asked or knows nothing, catalog matches on its own tables (live pages, same words) and counts `catalog_candidates_fallback_total{reason}`; only when that fails too is `searchUnavailable` true, with no suggestions, never a guess. Limited per
          *     organisation per hour (422 `catalog.match-rate-limited`). Needs catalog:write (sellers) or catalog:read.
          */
         post: operations["matchCandidates"];
@@ -1863,13 +1863,44 @@ export interface paths {
         /**
          * Record the seller's answer to the candidate list
          * @description `SELL_EXISTING`: the variant must have been in the list for the same `query` and `categoryId`, and when its page
-         *     states a size `sizeConfirmed` must be true (422 `catalog.match-size-unconfirmed`); the answer says whether the
+         *     states a size `sizeConfirmed` must be true (422 `catalog.match-size-unconfirmed`; a seller whose size is different asks for it to be added with `POST /v1/catalog/matches/size-requests` instead of being stopped); the answer says whether the
          *     organisation may sell it (`canOffer` with `blockers`), and the next step is the price, quantity and condition form.
          *     `NONE_OF_THESE`: stored with the pages that were shown. When one of them scored as likely, `possibleDuplicateQueued`
          *     is true and staff are asked to compare the new page with it later; it never blocks adding the page. Limited to a
          *     number of `NONE_OF_THESE` answers per organisation per day (422 `catalog.match-rate-limited`).
          */
         post: operations["matchDecision"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/catalog/matches/size-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sell a different size of a page that exists - ask for it to be added as a variant
+         * @description For a seller whose product is on the page but in another size, weight or pack ("the page is 5 kg, I sell 1 kg").
+         *     Nobody creates a duplicate page: the size is added as one more variant (its own ATIN) under the page, after catalogue
+         *     staff check it like any new variant (a `NEW_VARIANT` change request, payload `source: SELLER_SIZE`). The variant must
+         *     have been in the list for the same `query` and `categoryId`, and the organisation must be allowed to sell on the page
+         *     (a blocker is 422 `catalog.variant-request-blocked`). The size is read like the sizes in names (`5 kg` = `5000 g`):
+         *     a size the page already has answers `ALREADY_ON_PAGE` with the variant to sell, the same size asked twice answers
+         *     `ALREADY_REQUESTED`. A page without variations takes a `Size` variation when staff approve (its only variant keeps its
+         *     own size as its option); a page that varies by something else (colour, size and colour) answers 422
+         *     `catalog.variant-theme-unsupported` and the seller adds the product as new. The variant needs no barcode. Limited to a
+         *     number of waiting requests per organisation (422 `catalog.match-rate-limited`; withdrawing or an answer frees a place).
+         *     When staff apply it the request carries `resultAtin` (GET /v1/change-requests) and the seller adds price, stock and
+         *     shipping with the normal offer form. Needs catalog:write (sellers) or catalog:read.
+         */
+        post: operations["matchSizeRequest"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4066,6 +4097,8 @@ export interface components {
             suggestion?: string;
             /** @description Plain words for INVALID and RESTRICTED, for example "This number is for store use or coupons, not a product barcode." */
             message?: string;
+            /** @description What the page's category allows (listing rules D9). NEW alone where condition is not asked (groceries, food, beauty, health, baby feeding, pet food, clothing, jewelry, digital, services and some home goods), so the form hides the condition field and the server uses NEW; every condition where used or renewed items make sense (electronics, books, toys, furniture and small appliances, kitchenware, sports and office goods). */
+            allowedConditions?: components["schemas"]["ItemCondition"][];
         };
         MatchVariant: {
             atin?: string;
@@ -4129,6 +4162,8 @@ export interface components {
             likely?: boolean;
             canOffer?: boolean;
             blockers?: components["schemas"]["Blocker"][];
+            /** @description What the page's category allows (listing rules D9). NEW alone where condition is not asked (groceries, food, beauty, health, baby feeding, pet food, clothing, jewelry, digital, services and some home goods), so the form hides the condition field and the server uses NEW; every condition where used or renewed items make sense (electronics, books, toys, furniture and small appliances, kitchenware, sports and office goods). */
+            allowedConditions?: components["schemas"]["ItemCondition"][];
         };
         CandidateSearchResult: {
             /** @description Best first, at most six */
@@ -4137,7 +4172,7 @@ export interface components {
             category?: components["schemas"]["MatchCategory"];
             /** @description The name is too short to search yet */
             tooShort: boolean;
-            /** @description The search index did not answer; no suggestions, the seller may still add the product */
+            /** @description Neither the search index nor the catalogue database could answer (the database match runs when the index fails or is empty); no suggestions, the seller may still add the product */
             searchUnavailable: boolean;
         };
         MatchDecisionRequest: {
@@ -4179,6 +4214,43 @@ export interface components {
             /** @description Conditions the category allows (NEW only unless used items are allowed, listing rule D9) */
             allowedConditions?: ("NEW" | "RENEWED" | "USED_LIKE_NEW" | "USED_VERY_GOOD" | "USED_GOOD" | "USED_ACCEPTABLE")[];
             pageOwnerOrgId?: string;
+        };
+        /** @enum {string} */
+        ItemCondition: "NEW" | "RENEWED" | "USED_LIKE_NEW" | "USED_VERY_GOOD" | "USED_GOOD" | "USED_ACCEPTABLE";
+        /** @description The seller sells a different size, weight or pack of a page that was shown. Send the same query and category the list was searched with. */
+        SizeRequestInput: {
+            query: string;
+            /** Format: uuid */
+            categoryId?: string;
+            /** @description The page ATIN, or one of its variant ATINs, as shown */
+            atin: string;
+            /**
+             * @description Nothing but the size, with its unit or pack word - 1 kg, 500 ml, 6 pack. It is read like the sizes in names (5 kg = 5000 g).
+             * @example 1 kg
+             */
+            size: string;
+            /** @description Optional words for the reviewer */
+            note?: string;
+            /** @description Service and staff tokens only */
+            sellerOrgId?: string;
+        };
+        SizeRequestResult: {
+            /**
+             * @description REQUESTED: filed, catalogue staff check it like any new variant. ALREADY_REQUESTED: the organisation already has a waiting request for this size on the page. ALREADY_ON_PAGE: the page already has this size, sell that variant (existingAtin).
+             * @enum {string}
+             */
+            outcome: "REQUESTED" | "ALREADY_REQUESTED" | "ALREADY_ON_PAGE";
+            /** @description The size in the canonical spelling, for example 1 kg */
+            size?: string;
+            /** Format: uuid */
+            requestId?: string;
+            /** @description ALREADY_ON_PAGE - the variant that has the size */
+            existingAtin?: string;
+            /** Format: date-time */
+            reviewDueAt?: string;
+            /** @description ALREADY_ON_PAGE - whether the organisation may sell that variant now */
+            canOffer: boolean;
+            blockers: components["schemas"]["Blocker"][];
         };
         /** @enum {string} */
         ChangeRequestType: "IMAGE_ADD" | "IMAGE_REPLACE" | "TITLE" | "ATTRIBUTE" | "DESCRIPTION" | "CATEGORY" | "BRAND" | "NEW_VARIANT" | "WRONG_MATCH" | "DUPLICATE_PAGE";
@@ -4240,6 +4312,8 @@ export interface components {
             resolution?: string;
             /** Format: int64 */
             version: number;
+            /** @description NEW_VARIANT that staff applied: the ATIN of the variant that now exists on the page, so the seller can add price and stock to it. Null otherwise. */
+            resultAtin?: string;
         };
         ChangeRequestPage: {
             items?: components["schemas"]["ChangeRequest"][];
@@ -7211,6 +7285,44 @@ export interface operations {
                 content?: never;
             };
             /** @description catalog.match-size-unconfirmed, catalog.match-choice-not-shown, catalog.match-choice-missing or catalog.match-rate-limited */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    matchSizeRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SizeRequestInput"];
+            };
+        };
+        responses: {
+            /** @description The answer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SizeRequestResult"];
+                };
+            };
+            /** @description Missing catalog:read or catalog:write */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description catalog.match-choice-not-shown, catalog.variant-size-invalid, catalog.variant-page-size-unknown, catalog.variant-theme-unsupported, catalog.variant-request-blocked or catalog.match-rate-limited */
             422: {
                 headers: {
                     [name: string]: unknown;

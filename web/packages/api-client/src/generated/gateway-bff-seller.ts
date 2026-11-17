@@ -621,7 +621,7 @@ export interface paths {
         };
         /**
          * The storefront built from the DRAFT, for the live preview
-         * @description Same shape as the public `GET /v1/storefronts/{slug}`, but from the draft and for the signed-in organisation only (works before publishing). Not cached.
+         * @description Same shape as the public `GET /v1/storefronts/{slug}`, but from the draft and for the signed-in organisation only (works before publishing and before the page address exists, when `slug` is empty; nothing is looked up by address, so another store is never reachable here). Not cached. 404 only when the organisation itself is not found.
          */
         get: operations["previewStorePage"];
         put?: never;
@@ -1932,7 +1932,7 @@ export interface paths {
          *     seller types ("basmati rice 5kg"); name, brand and size are read from it and the category is the optional chip
          *     (`categoryId`). Up to six live pages with a real photo, best first, each with its photo, brand, size and the number of
          *     sellers (`sellerCount`, null when offers cannot be read). `kind` is `SAME_NAME` or `SIMILAR`; both always need the
-         *     seller's click. Nothing about any seller is returned. `searchUnavailable` means no suggestions, never a guess.
+         *     seller's click. Nothing about any seller is returned. `searchUnavailable` means neither the search index nor catalog's database match could answer: no suggestions, never a guess.
          *     429 `RATE_LIMITED` when the organisation searched too often.
          */
         post: operations["matchCandidates"];
@@ -1955,11 +1955,40 @@ export interface paths {
          * "This is my product" or "Not here, add it as new"
          * @description catalog `POST /v1/catalog/matches/decisions` (Listings: EDIT). `SELL_EXISTING` names a page that was in the list and
          *     carries the one-tap size answer (`sizeConfirmed`, 422 `SIZE_UNCONFIRMED` when the page states a size and it is not
-         *     true; 422 `CHOICE_NOT_SHOWN` for a page that was not in the list); the answer says whether the seller may sell it
+         *     true; the seller whose size is different uses `POST /v1/seller/catalog/candidates/size-requests` instead of being stopped; 422 `CHOICE_NOT_SHOWN` for a page that was not in the list); the answer says whether the seller may sell it
          *     and the next step is the price, quantity and condition form. `NONE_OF_THESE` is recorded so staff can review likely
          *     duplicates and never blocks adding the product.
          */
         post: operations["matchDecision"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/catalog/candidates/size-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sell a different size, weight or pack of a page that exists
+         * @description catalog `POST /v1/catalog/matches/size-requests` (Listings: EDIT). For the seller who says "No, a different size" on
+         *     a candidate: their size (`size`, nothing but the size, "1 kg", "500 ml", "6 pack") is asked for as one more variant of
+         *     the page, which catalogue staff check like any new variant; nobody is stopped by a size and nobody creates a duplicate
+         *     page. Send the same `query` and `categoryId` the list was searched with. `outcome` is `REQUESTED` (filed, answer
+         *     within `reviewDueAt`), `ALREADY_REQUESTED` (the same size is already waiting) or `ALREADY_ON_PAGE` (the page already
+         *     has that size: sell `existingAtin`, which is never shown). When staff apply it, the request in
+         *     `GET /v1/seller/change-requests` carries `resultAtin` and the seller adds price and stock with `POST /v1/seller/offers`.
+         *     422 `SIZE_INVALID` (not a size with a unit), `SIZE_PAGE_UNKNOWN` (the page states no size), `SIZE_NOT_ADDABLE` (the page
+         *     varies by something else, add the product as new), `SIZE_REQUEST_BLOCKED` (the seller may not sell on the page yet),
+         *     `CHOICE_NOT_SHOWN`; 429 `RATE_LIMITED` when too many sizes are waiting.
+         */
+        post: operations["matchSizeRequest"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6312,6 +6341,8 @@ export interface components {
             sellerCount?: number | null;
             canOffer: boolean;
             blockers: components["schemas"]["Blocker"][];
+            /** @description What the page category allows (listing rules D9). NEW alone where the condition is not asked (groceries, food, beauty, health, baby, pets, clothing, jewelry, consumables); more only where used or renewed items are real (electronics, books, toys, furniture, kitchenware, sports and office goods). The offer form shows the condition field only when more than NEW is listed. */
+            allowedConditions?: components["schemas"]["OfferCondition"][];
         };
         CandidateList: {
             candidates: components["schemas"]["MatchCandidate"][];
@@ -6319,7 +6350,7 @@ export interface components {
             category?: components["schemas"]["MatchCategory"] | null;
             /** @description The name is too short to search yet */
             tooShort: boolean;
-            /** @description The search did not answer; the seller may still add the product as new */
+            /** @description Neither the search index nor the catalogue database answered; the seller may still add the product as new */
             searchUnavailable: boolean;
         };
         DecisionRequest: {
@@ -6342,6 +6373,34 @@ export interface components {
             canOffer: boolean;
             blockers: components["schemas"]["Blocker"][];
             possibleDuplicateQueued: boolean;
+        };
+        SizeRequestInput: {
+            query: string;
+            /** Format: uuid */
+            categoryId?: string;
+            /** @description The page or one of its variants, as shown */
+            atin: string;
+            /**
+             * @description Nothing but the size: 1 kg, 500 ml, 6 pack
+             * @example 1 kg
+             */
+            size: string;
+            /** @description Optional words for the reviewer */
+            note?: string;
+        };
+        SizeRequestResult: {
+            /** @enum {string} */
+            outcome: "REQUESTED" | "ALREADY_REQUESTED" | "ALREADY_ON_PAGE";
+            /** @description The size as catalog spells it, for example 1 kg */
+            size?: string | null;
+            /** Format: uuid */
+            requestId?: string | null;
+            /** @description ALREADY_ON_PAGE: the variant that has the size (never shown) */
+            existingAtin?: string | null;
+            /** Format: date-time */
+            reviewDueAt?: string | null;
+            canOffer: boolean;
+            blockers: components["schemas"]["Blocker"][];
         };
         CatalogMatch: {
             result: components["schemas"]["MatchResultKind"];
@@ -6372,6 +6431,8 @@ export interface components {
             suggestion?: string | null;
             /** @description Plain words for INVALID and RESTRICTED */
             message?: string | null;
+            /** @description What the page category allows (listing rules D9). NEW alone where the condition is not asked (groceries, food, beauty, health, baby, pets, clothing, jewelry, consumables); more only where used or renewed items are real (electronics, books, toys, furniture, kitchenware, sports and office goods). The offer form shows the condition field only when more than NEW is listed. */
+            allowedConditions?: components["schemas"]["OfferCondition"][];
         };
         /** @enum {string} */
         OfferCondition: "NEW" | "RENEWED" | "USED_LIKE_NEW" | "USED_VERY_GOOD" | "USED_GOOD" | "USED_ACCEPTABLE";
@@ -6379,7 +6440,7 @@ export interface components {
         OfferOnlyInput: {
             /** @description The matched variant */
             atin: string;
-            /** @description Generated when blank */
+            /** @description Optional and not sent by Seller Center for a page that exists: the catalogue item (its ATIN) already identifies it. Generated when blank. */
             sellerSku?: string;
             condition?: components["schemas"]["OfferCondition"];
             /** @description Required for any condition other than NEW */
@@ -6458,6 +6519,8 @@ export interface components {
             /** @description Staff reason, shown to the seller */
             reason?: string | null;
             resolution?: string | null;
+            /** @description NEW_VARIANT that staff applied: the variant that now exists on the page; the seller adds price and stock to it (never shown) */
+            resultAtin?: string | null;
         };
         ChangeRequestPage: {
             items: components["schemas"]["ChangeRequest"][];
@@ -10652,6 +10715,36 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MatchDecision"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    matchSizeRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SizeRequestInput"];
+            };
+        };
+        responses: {
+            /** @description The answer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SizeRequestResult"];
                 };
             };
             401: components["responses"]["Problem"];

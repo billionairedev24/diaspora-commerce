@@ -20,7 +20,9 @@ import {
   OFFER_CONDITIONS,
   type OfferOnlyInput,
   type OfferOnlyResult,
-  type ProductImageSlot
+  type ProductImageSlot,
+  type SizeRequestInput,
+  type SizeRequestResult
 } from '../../seller-matching';
 import { MOCK_FASHION_ORG, MOCK_FOOD_ORG } from './departments';
 
@@ -57,6 +59,8 @@ export interface MockPage {
   gated: boolean;
   /** A seller's own tax decision is not on file for this item: an offer on it is TAX_HELD. */
   taxHeld: boolean;
+  /** Used and renewed items are real in this page's category (listing rules): the offer form asks for the condition. */
+  usedOk?: boolean;
   children: MockChild[];
 }
 interface MockOffer {
@@ -124,6 +128,8 @@ function seedPages(): MockPage[] {
       ownerOrg: MOCK_FASHION_ORG, status: 'LIVE', gated: true, taxHeld: false, children: [{ atin: 'ATNIKEV001', gtin14: gtin14Of(MOCK_GTIN.gated), options: { Size: '10' } }] },
     { parentAtin: 'ATPENDNG01', title: 'Ankara Fabric, 6 yards', brand: 'Adire Atelier', category: 'Fashion › Women › Dresses', categoryId: 'pt-dresses', imageUrl: 'https://img.afrotransact.dev/seed-fabric.webp',
       ownerOrg: MOCK_FASHION_ORG, status: 'IN_REVIEW', gated: false, taxHeld: false, children: [{ atin: 'ATPENDNGV1', gtin14: gtin14Of(MOCK_GTIN.pending), options: {} }] },
+    { parentAtin: 'ATLAPTOP01', title: 'Lagos Book 14 laptop', brand: 'Kente Computing', category: 'Electronics › Computers › Laptops', categoryId: 'pt-laptops', imageUrl: 'https://img.afrotransact.dev/seed-laptop.webp',
+      ownerOrg: MOCK_FASHION_ORG, status: 'LIVE', gated: false, taxHeld: false, usedOk: true, children: [{ atin: 'ATLAPTOPV1', gtin14: null, options: {} }] },
     { parentAtin: 'ATKAFTAN01', title: 'Linen Kaftan', brand: 'Adire Atelier', category: 'Fashion › Men › Kaftans & shirts', categoryId: 'pt-mens-tops', imageUrl: 'https://img.afrotransact.dev/seed-kaftan.webp',
       ownerOrg: MOCK_FASHION_ORG, status: 'LIVE', gated: false, taxHeld: false,
       children: [{ atin: 'ATKAFTANS1', gtin14: gtin14Of(MOCK_GTIN.sizeA), options: { Size: 'Small' } }, { atin: 'ATKAFTANL1', gtin14: gtin14Of(MOCK_GTIN.sizeB), options: { Size: 'Large' } }] }
@@ -214,6 +220,9 @@ function rank(st: MockMatchingState, query: string, categoryId: string | undefin
   return out.sort((a, b) => b.score - a.score).slice(0, 6);
 }
 
+/** What the page's category allows: every condition where used items are real, else NEW only (the listing rules decide on the server). */
+const conditionsOf = (page: MockPage): (typeof OFFER_CONDITIONS)[number][] => (page.usedOk ? [...OFFER_CONDITIONS] : ['NEW']);
+
 const blockersOf = (st: MockMatchingState, orgId: string, page: MockPage, atin: string | null) => {
   const blockers = [];
   if (page.status !== 'LIVE') blockers.push({ code: 'catalog.page-not-live', message: 'This product page is not live yet. Try again once it is approved.' });
@@ -236,7 +245,7 @@ export function searchCandidates(db: MatchingHost, orgId: string, req: Candidate
     const blockers = blockersOf(st, orgId, page, only);
     return { parentAtin: page.parentAtin, atin: only, title: page.title, brand: page.brand, image: { url: page.imageUrl, width: 1600, height: 1600 }, category: page.category,
       sizeLabel: sizeWords(page), variants, kind: same ? 'SAME_NAME' : 'SIMILAR', likely: score >= 75, sellerCount: only ? sellerCount(st, only) : new Set(st.offers.filter((o) => page.children.some((c) => c.atin === o.atin)).map((o) => o.orgId)).size,
-      canOffer: blockers.length === 0, blockers };
+      canOffer: blockers.length === 0, blockers, allowedConditions: conditionsOf(page) };
   });
   st.shown[`${orgId}|${query}|${req.categoryId ?? ''}`] = ranked.flatMap((r) => r.page.children.map((c) => c.atin));
   const top = ranked[0]?.page;
@@ -260,6 +269,36 @@ export function decideMatch(db: MatchingHost, orgId: string, req: DecisionReques
   const blockers = blockersOf(st, orgId, hit.page, hit.child.atin);
   st.decisions.push({ orgId, choice: req.choice, query: req.query, atin: hit.child.atin, likelyShown: false });
   return { decisionId: id, choice: 'SELL_EXISTING', atin: hit.child.atin, canOffer: blockers.length === 0, blockers, possibleDuplicateQueued: false };
+}
+
+/** "My size is different": the size is asked for as one more variant of the page. Mirrors catalog's SizeVariantRules: only a size with a unit, a size the page has is sold, the same size twice is one request. */
+export function requestSize(db: MatchingHost, orgId: string, req: SizeRequestInput, now: Date): SizeRequestResult {
+  const st = stateOf(db);
+  const shown = st.shown[`${orgId}|${req.query.trim().replace(/\s+/g, ' ')}|${req.categoryId ?? ''}`] ?? [];
+  const hit = findChild(st, req.atin) ?? (st.pages.find((p) => p.parentAtin === req.atin) ? { page: st.pages.find((p) => p.parentAtin === req.atin) as MockPage, child: st.pages.find((p) => p.parentAtin === req.atin)?.children[0] as MockChild } : undefined);
+  if (!hit || !shown.includes(hit.child.atin)) throw new MatchingMockError(422, 'CHOICE_NOT_SHOWN', 'Choose a product from the list.');
+  const blockers = blockersOf(st, orgId, hit.page, null);
+  if (blockers.length) throw new MatchingMockError(422, 'SIZE_REQUEST_BLOCKED', blockers[0]?.message ?? 'You cannot sell on this page yet.');
+  const text = req.size.trim().replace(/\s+/g, ' ');
+  const key = sizeKey(text);
+  if (key === null || text.replace(SIZE_RE, '').trim() !== '') throw new MatchingMockError(422, 'SIZE_INVALID', 'Type the size with its unit, like 1 kg, 500 ml or 6 pack.');
+  const label = key.replace(/(\d)([a-z]+)$/, '$1 $2');
+  const own = pageSize(hit.page);
+  const options = hit.page.children.map((c) => sizeKey(Object.values(c.options).join(' ')) ?? (c.atin === hit.page.children[0]?.atin ? own : null));
+  const same = hit.page.children.find((_, i) => options[i] === key);
+  if (same) return { outcome: 'ALREADY_ON_PAGE', size: label, requestId: null, existingAtin: same.atin, reviewDueAt: null, canOffer: true, blockers: [] };
+  if (own === null && hit.page.children.every((c) => Object.keys(c.options).length === 0)) throw new MatchingMockError(422, 'SIZE_PAGE_UNKNOWN', 'This page does not state a size, so we cannot tell what is different.');
+  const waiting = st.requests.find((r) => r.orgId === orgId && r.type === 'NEW_VARIANT' && r.status === 'PENDING' && r.atin === hit.page.parentAtin && r.field === key);
+  if (waiting) return { outcome: 'ALREADY_REQUESTED', size: label, requestId: waiting.id, existingAtin: null, reviewDueAt: waiting.slaDueAt ?? null, canOffer: false, blockers: [] };
+  if (st.requests.filter((r) => r.orgId === orgId && r.type === 'NEW_VARIANT' && r.status === 'PENDING').length >= 20) {
+    throw new MatchingMockError(429, 'RATE_LIMITED', 'You have many sizes waiting for review.');
+  }
+  st.seq += 1;
+  const due = new Date(now.getTime() + 2 * 86_400_000).toISOString();
+  const filed = { id: `00000000-0000-4000-8000-${String(st.seq).padStart(12, '0')}`, atin: hit.page.parentAtin, title: hit.page.title, type: 'NEW_VARIANT' as const, field: key,
+    payload: { source: 'SELLER_SIZE', options: { Size: label } }, note: req.note ?? null, status: 'PENDING' as const, requestedAt: now.toISOString(), slaDueAt: due, decidedAt: null, reason: null, resolution: null, orgId };
+  st.requests.unshift(filed);
+  return { outcome: 'REQUESTED', size: label, requestId: filed.id, existingAtin: null, reviewDueAt: due, canOffer: false, blockers: [] };
 }
 
 /** The barcode shortcut: MATCH, NO_MATCH, INVALID or RESTRICTED, as catalog answers it (an exact match, never a guess). */
@@ -297,7 +336,7 @@ export function matchCatalog(db: MatchingHost, orgId: string, req: MatchRequest)
     result: 'MATCH', digits, atin: child?.atin ?? null, parentAtin: page.parentAtin, productStatus: page.status, title: page.title, brand: page.brand,
     image: { url: page.imageUrl, width: 1600, height: 1600 }, category: page.category, variantOptions: child?.options ?? {},
     variants: page.children.map((c) => ({ atin: c.atin, options: c.options })), sellerCount: child ? sellerCount(st, child.atin) : null,
-    canOffer: blockers.length === 0, blockers, canCreate: false,
+    canOffer: blockers.length === 0, blockers, canCreate: false, allowedConditions: conditionsOf(page),
     createBlockers: open
       ? [{ code: 'catalog.wrong-match-open', message: 'We are checking this barcode. We will tell you within 2 business days.' }]
       : [{ code: 'catalog.gtin-exists', message: 'A page for this barcode already exists. Sell it instead of creating a new one.' }]
@@ -410,6 +449,20 @@ export function decideMockChange(db: MatchingHost, id: string, applied: boolean,
   r.status = applied ? 'APPLIED' : 'REJECTED';
   r.reason = reason;
   r.decidedAt = now.toISOString();
+  if (applied && r.type === 'NEW_VARIANT') {
+    const st = stateOf(db);
+    const page = st.pages.find((p) => p.parentAtin === r.atin);
+    const size = (r.payload as { options?: Record<string, string> } | null)?.options?.Size;
+    if (page && size) {
+      st.seq += 1;
+      const atin = `ATVAR${String(st.seq).padStart(5, '0')}`;
+      page.children.forEach((c) => {
+        if (Object.keys(c.options).length === 0) c.options = { Size: sizeWords(page) ?? '' };
+      });
+      page.children.push({ atin, gtin14: null, options: { Size: size } });
+      r.resultAtin = atin;
+    }
+  }
 }
 
 /** Improve your image tasks of an organisation's live listings (seeded from the first two live listings it has). */
