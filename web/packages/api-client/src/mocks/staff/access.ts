@@ -280,7 +280,7 @@ export function accessHandlers(W: string, deps: PreorderHandlerDeps) {
         if (!b.firstName.trim()) errors.firstName = 'Enter a name of up to 80 characters';
         if (!b.lastName.trim()) errors.lastName = 'Enter a name of up to 80 characters';
         if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(b.email.trim())) errors.email = 'Enter a valid work email address';
-        else if (!b.email.trim().toLowerCase().endsWith('@afrotransact.com')) errors.email = 'Staff are invited with a afrotransact.com address';
+        else if (!b.email.trim().toLowerCase().endsWith('@afrotransact.com')) errors.email = 'Staff are invited with a company email address';
         const role = s.roles[b.roleKey];
         if (!role || role.portal !== 'platform') errors.roleKey = 'Choose a staff role';
         if (b.reason.trim().length < 3 || b.reason.trim().length > 300) errors.reason = 'Give a reason of 3 to 300 characters';
