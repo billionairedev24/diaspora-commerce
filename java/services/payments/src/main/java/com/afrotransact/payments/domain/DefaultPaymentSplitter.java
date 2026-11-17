@@ -64,10 +64,12 @@ public class DefaultPaymentSplitter implements PaymentSplitter {
             Money take = line.items().basisPoints(bps);
             Money commission = line.isService() ? zero : take;
             Money connectionFee = line.isService() ? take : zero;
-            boolean fba = line.fulfilment() == Fulfilment.FBA;
-            Money fbaFee = fba && !retail ? fbaPerUnit(schedule, line).times(line.quantity()) : zero;
-            Money deliveryFee = line.fulfilment() == Fulfilment.AFROTRANSACT_DELIVERY && !retail
-                    ? line.deliveryFee() : zero;
+            // Fulfilled by AfroTransact costs the seller nothing (owner decision): AfroTransact collects from the seller and
+            // delivers, and the customer pays the delivery fee (AfroTransact revenue, below). The per-unit FBA fee and the
+            // seller's pickup-delivery fee are retired: the fee schedule still carries them so stored payments and old
+            // versions stay readable, but they are never applied to a new payment, whatever a schedule says.
+            Money fbaFee = zero;
+            Money deliveryFee = zero;
             boolean preorder = line.fulfilment().shippingIsLocalDeliveryFee();
             boolean shippingToPlatform = preorder || line.fulfilment().platformShips() && !retail;
             acc.items = acc.items.plus(line.items());
@@ -161,14 +163,5 @@ public class DefaultPaymentSplitter implements PaymentSplitter {
         private Money gross() {
             return items.plus(shipping).plus(tax);
         }
-    }
-
-    /** The seller's negotiated FBA fee snapshotted on the line, else its plan's, else the version's default. */
-    private static Money fbaPerUnit(FeeSchedule schedule, OrderLine line) {
-        AppliedRate rate = line.rate();
-        if (rate != null && rate.negotiatedFbaMinor() != null) {
-            return Money.of(rate.negotiatedFbaMinor(), schedule.currency());
-        }
-        return schedule.fbaPerUnitFor(rate == null ? null : rate.planCode());
     }
 }

@@ -94,6 +94,8 @@ class OfferServiceImpl implements OfferService {
         // An offer carries offer terms only: the page's content is the page's (S383).
         PageContentLocked.refuse(cmd.unknownFields());
         validateCreate(cmd);
+        requireNoPerProductShipping(cmd.shippingMinor(), 0);
+        requireNoHeldSellerStock(cmd.fulfilment(), org);
         requireListingRoom(org);
         ShipFrom shipFrom = cmd.fulfilment() == Fulfilment.AFROTRANSACT_DELIVERY
                 ? pickupShipFrom(org, cmd.shipFrom()) : cmd.shipFrom();
@@ -207,6 +209,31 @@ class OfferServiceImpl implements OfferService {
         return box;
     }
 
+    /**
+     * A product carries no shipping charge of its own. A seller's own shipping (only while the staff switch is on, off by
+     * default) is one flat charge per order set once in the seller's shipping settings (orders), never per product, so any
+     * other amount is refused. An existing offer keeps the amount it already has (history); it can only be set to 0.
+     */
+    private static void requireNoPerProductShipping(Long requestedMinor, long currentMinor) {
+        if (requestedMinor != null && requestedMinor != 0 && requestedMinor != currentMinor) {
+            throw new OfferRuleViolation("The offer is not valid", Map.of("shippingMinor",
+                    "A product has no shipping charge of its own. AfroTransact delivers, or the customer picks up"));
+        }
+    }
+
+    /**
+     * AfroTransact holds no seller stock: Fulfilled by AfroTransact means it collects from the seller's pickup location and
+     * delivers (AFROTRANSACT_DELIVERY, with a location). A marketplace seller cannot create a stock-held offer; AfroTransact
+     * Retail's own stock is unaffected, and offers that already exist stay readable.
+     */
+    private void requireNoHeldSellerStock(Fulfilment fulfilment, String org) {
+        if (fulfilment == Fulfilment.AFROTRANSACT && kindOf(org) == SellerKind.SELLER) {
+            throw new BusinessRuleException("offers.seller-stock-not-held", "AfroTransact does not keep sellers' stock. "
+                    + "Choose Fulfilled by AfroTransact with one of your pickup locations: we collect from you and "
+                    + "deliver to the customer");
+        }
+    }
+
     /** The plan's listing cap: one more live listing must fit (there is no limit on shops or users). */
     private void requireListingRoom(String sellerOrgId) {
         ListingEntitlementsClient.ListingAllowance allowance = entitlements.allowance(sellerOrgId);
@@ -242,6 +269,12 @@ class OfferServiceImpl implements OfferService {
                             : cmd.inventorySku().trim().toUpperCase(Locale.ROOT));
             if (proposed.fulfilment() == Fulfilment.SELLER) {
                 requireShipFrom(proposed.shipFrom(), new LinkedHashMap<>(), true);
+            }
+            if (cmd.shippingMinor() != null) {
+                requireNoPerProductShipping(cmd.shippingMinor(), t.shippingMinor());
+            }
+            if (proposed.fulfilment() == Fulfilment.AFROTRANSACT && t.fulfilment() != Fulfilment.AFROTRANSACT) {
+                requireNoHeldSellerStock(proposed.fulfilment(), o.sellerOrgId());
             }
             Offer.Terms next = proposed;
             if (proposed.fulfilment() == Fulfilment.AFROTRANSACT_DELIVERY) {

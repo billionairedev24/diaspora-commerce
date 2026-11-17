@@ -146,7 +146,13 @@ class DeliveryPricingTest {
     private static PaymentLine captured(OrderLine line) {
         FeeSchedule s = Fixtures.scheduleWithDelivery(Fixtures.launchDelivery(List.of()));
         PaymentSplit split = new DefaultPaymentSplitter(Fixtures.RETAIL).split(List.of(line), s, usd(100));
-        return PaymentLine.uncaptured(line).captured(UUID.randomUUID(), split.line(line.lineId()).orElseThrow());
+        PaymentLine p = PaymentLine.uncaptured(line).captured(UUID.randomUUID(),
+                split.line(line.lineId()).orElseThrow());
+        // LEGACY: a line captured before the seller's pickup-delivery fee was retired still carries its fee (the splitter
+        // never charges one now), and refunds of such a line still give it back pro rata.
+        return new PaymentLine(p.line(), p.captureId(), p.commission(), p.fbaFee(), p.shippingToPlatform(),
+                p.refundedItems(), p.refundedShipping(), p.refundedTax(), p.commissionReversed(),
+                line.deliveryFee(), null);
     }
 
     private static long amount(Journal j, String code, EntrySide side) {

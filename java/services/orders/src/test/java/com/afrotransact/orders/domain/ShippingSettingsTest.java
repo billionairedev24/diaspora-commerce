@@ -34,12 +34,21 @@ class ShippingSettingsTest {
     @Test
     void aChangeIsTheNextVersionAndASameValueSaveIsDetected() {
         ShippingSettings v1 = ShippingSettingsFixtures.of(599, null, false);
-        ShippingSettings v2 = v1.next(699, 6000L, false, "staff-2", "Fuel went up this month", Instant.EPOCH);
+        ShippingSettings v2 = v1.next(699, 6000L, false, false, "staff-2", "Fuel went up this month", Instant.EPOCH);
         assertThat(v2.version()).isEqualTo(2);
         assertThat(v2.updatedBy()).isEqualTo("staff-2");
-        assertThat(v1.sameAs(599, null, false)).isTrue();
-        assertThat(v1.sameAs(599, null, true)).isFalse();
-        assertThat(v1.sameAs(600, null, false)).isFalse();
-        assertThat(v2.sameAs(699, 6000L, false)).isTrue();
+        assertThat(v1.sameAs(599, null, false, false)).isTrue();
+        assertThat(v1.sameAs(599, null, false, true)).as("the self-shipping switch is part of a change").isFalse();
+        assertThat(v1.sameAs(599, null, true, false)).isFalse();
+        assertThat(v1.sameAs(600, null, false, false)).isFalse();
+        assertThat(v2.sameAs(699, 6000L, false, false)).isTrue();
+    }
+
+    @Test
+    void selfShippingIsOffByDefaultInEveryFixture() {
+        assertThat(ShippingSettingsFixtures.of(599, null, false).sellerSelfShippingEnabled()).isFalse();
+        assertThat(ShippingSettingsFixtures.of(599, null, true).sellerSelfShippingEnabled())
+                .as("the retired carrier switch never turns self-shipping on").isFalse();
+        assertThat(ShippingSettingsFixtures.withSelfShipping(599, null, true).sellerSelfShippingEnabled()).isTrue();
     }
 }

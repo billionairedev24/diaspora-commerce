@@ -57,8 +57,10 @@ class LocalDeliveryQuotesImpl implements LocalDeliveryQuotes {
             throw new OrdersRuleViolation(CheckoutCodes.DELIVERY_UNAVAILABLE,
                     "AfroTransact Delivery from sellers' stores is not available right now");
         }
+        // Fulfilled by AfroTransact costs the seller nothing: the customer pays the delivery fee (the flat staff fee replaces the
+        // distance charge at checkout) and AfroTransact keeps it. The tariff's seller fee is retired, so it is never snapshotted.
         return new LocalDelivery(from.locationId(), from.lat(), from.lng(), d.straightLineMiles(), d.roadMiles(),
-                d.method(), q.customerChargeMinor(), q.sellerFeeMinor(), q.scheduleVersion(), d.durationMinutes());
+                d.method(), q.customerChargeMinor(), 0, q.scheduleVersion(), d.durationMinutes());
     }
 
     private static OrdersRuleViolation unavailable(String what) {

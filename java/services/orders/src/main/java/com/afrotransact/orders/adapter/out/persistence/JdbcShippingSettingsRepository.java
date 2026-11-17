@@ -17,8 +17,8 @@ import org.springframework.stereotype.Repository;
 class JdbcShippingSettingsRepository implements ShippingSettingsRepository {
 
     private static final String COLUMNS = """
-            currency, version, flat_fee_minor, free_above_minor, seller_carrier_shipping_enabled, updated_at,
-            updated_by, reason""";
+            currency, version, flat_fee_minor, free_above_minor, seller_carrier_shipping_enabled,
+            seller_self_shipping_enabled, updated_at, updated_by, reason""";
 
     private final JdbcClient jdbc;
     private final JsonCodec json;
@@ -44,24 +44,25 @@ class JdbcShippingSettingsRepository implements ShippingSettingsRepository {
     public void update(ShippingSettings s) {
         jdbc.sql("""
                 update shipping_settings set version = :version, flat_fee_minor = :fee, free_above_minor = cast(:free as bigint),
-                    seller_carrier_shipping_enabled = :carrier, updated_at = :at, updated_by = :by, reason = :reason
+                    seller_carrier_shipping_enabled = :carrier, seller_self_shipping_enabled = :self, updated_at = :at, updated_by = :by, reason = :reason
                 where currency = :currency
                 """)
                 .param("version", s.version()).param("fee", s.flatFeeMinor()).param("free", s.freeAboveMinor())
-                .param("carrier", s.sellerCarrierShippingEnabled()).param("at", Sql.ts(s.updatedAt()))
-                .param("by", s.updatedBy()).param("reason", s.reason()).param("currency", s.currency()).update();
+                .param("carrier", s.sellerCarrierShippingEnabled()).param("self", s.sellerSelfShippingEnabled())
+                .param("at", Sql.ts(s.updatedAt())).param("by", s.updatedBy()).param("reason", s.reason())
+                .param("currency", s.currency()).update();
     }
 
     @Override
     public void insert(ShippingSettings s) {
         jdbc.sql("""
                 insert into shipping_settings (currency, version, flat_fee_minor, free_above_minor,
-                    seller_carrier_shipping_enabled, updated_at, updated_by, reason)
-                values (:currency, :version, :fee, cast(:free as bigint), :carrier, :at, :by, :reason)
+                    seller_carrier_shipping_enabled, seller_self_shipping_enabled, updated_at, updated_by, reason)
+                values (:currency, :version, :fee, cast(:free as bigint), :carrier, :self, :at, :by, :reason)
                 """)
                 .param("currency", s.currency()).param("version", s.version()).param("fee", s.flatFeeMinor())
                 .param("free", s.freeAboveMinor()).param("carrier", s.sellerCarrierShippingEnabled())
-                .param("at", Sql.ts(s.updatedAt())).param("by", s.updatedBy()).param("reason", s.reason()).update();
+                .param("self", s.sellerSelfShippingEnabled()).param("at", Sql.ts(s.updatedAt())).param("by", s.updatedBy()).param("reason", s.reason()).update();
     }
 
     @Override
@@ -92,10 +93,12 @@ class JdbcShippingSettingsRepository implements ShippingSettingsRepository {
     }
 
     /** The fields of a record as the change log keeps them. */
-    record Snapshot(long flatFeeMinor, Long freeAboveMinor, boolean sellerCarrierShippingEnabled) {
+    record Snapshot(long flatFeeMinor, Long freeAboveMinor, boolean sellerCarrierShippingEnabled,
+                    boolean sellerSelfShippingEnabled) {
 
         static Snapshot of(ShippingSettings s) {
-            return new Snapshot(s.flatFeeMinor(), s.freeAboveMinor(), s.sellerCarrierShippingEnabled());
+            return new Snapshot(s.flatFeeMinor(), s.freeAboveMinor(), s.sellerCarrierShippingEnabled(),
+                    s.sellerSelfShippingEnabled());
         }
     }
 
@@ -105,13 +108,14 @@ class JdbcShippingSettingsRepository implements ShippingSettingsRepository {
             return null;
         }
         return new ShippingSettings(rs.getString("currency"), n.flatFeeMinor(), n.freeAboveMinor(),
-                n.sellerCarrierShippingEnabled(), rs.getLong("version"), Sql.instant(rs, "changed_at"),
+                n.sellerCarrierShippingEnabled(), n.sellerSelfShippingEnabled(), rs.getLong("version"), Sql.instant(rs, "changed_at"),
                 rs.getString("actor_id"), rs.getString("reason"));
     }
 
     private static ShippingSettings read(ResultSet rs, int n) throws SQLException {
         return new ShippingSettings(rs.getString("currency"), rs.getLong("flat_fee_minor"),
-                rs.getObject("free_above_minor", Long.class), rs.getBoolean("seller_carrier_shipping_enabled"), rs.getLong("version"),
+                rs.getObject("free_above_minor", Long.class), rs.getBoolean("seller_carrier_shipping_enabled"),
+                rs.getBoolean("seller_self_shipping_enabled"), rs.getLong("version"),
                 Sql.instant(rs, "updated_at"), rs.getString("updated_by"), rs.getString("reason"));
     }
 }
