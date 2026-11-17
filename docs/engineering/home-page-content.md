@@ -230,6 +230,12 @@ gateway: `states` (two-letter codes, e.g. `["TX","GA"]`) against the shopper's d
   counted again. It is a courtesy cap, not a billing control.
 - **Failure is quiet.** A counter request that fails is ignored; a storage error means "no cap".
 
+### Rail fill tiles
+
+Slot `rail_fill` (staff or paid) fills the empty columns of a short rail; see dynamic-home.md, Part 2b. It follows every rule of this
+section: a paid tile names its advertiser and is labelled Sponsored, counts per placement through `/v1/home/ad-events`, honours
+`maxPerSession`, and a tile without a real photo is text only.
+
 ### Layout
 
 - One content width for everything: hero, tiles, bands and carousels all sit in `.page` (`--at-page-max` 1500 px, centred,
