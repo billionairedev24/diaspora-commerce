@@ -32,6 +32,13 @@ inputs:
     description: Environment defaults the image must declare (space separated NAME=value), e.g. APP_ENV=prod.
     required: false
     default: ""
+  verified:
+    description: >
+      'true' (default): the image comes from a pipeline whose verify job passed. 'false' = the one-time manual UAT-only build
+      (.github/workflows/uat-unverified-image.yml): adds the OCI label org.afrotransact.verified=false, the extra tag <sha>-unverified and
+      signs with the annotation org.afrotransact.verified=false, which promote / _deploy refuse for prod and trial.
+    required: false
+    default: "true"
 outputs:
   image:
     description: Image repository without tag.
@@ -89,7 +96,9 @@ runs:
           type=raw,value=${{ steps.meta.outputs.tag }}
           type=sha,format=short
           type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
+          type=raw,value=${{ steps.meta.outputs.tag }}-unverified,enable=${{ inputs.verified != 'true' }}
         labels: |
+          org.afrotransact.verified=${{ inputs.verified }}
           org.opencontainers.image.title=${{ inputs.service }}
           com.afrotransact.service=${{ inputs.service }}
 
@@ -200,11 +209,14 @@ runs:
       env:
         REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
         SERVICE: ${{ inputs.service }}
+        VERIFIED: ${{ inputs.verified }}
       run: |
-        cosign sign --yes "$REF"
+        # The annotation is part of the signed payload: tools/release/image_verdict.py reads it back from `cosign verify` (the guard of
+        # promote and _deploy). Without -a the verdict would be "unmarked".
+        cosign sign --yes -a "org.afrotransact.verified=${VERIFIED}" "$REF"
         cosign attest --yes --type spdxjson --predicate "sbom-${SERVICE}.spdx.json" "$REF"
         {
           echo "### Image"
           echo "\`$REF\`"
-          echo "- signed (keyless, Fulcio/Rekor) and SBOM attested"
+          echo "- signed (keyless, Fulcio/Rekor) and SBOM attested; org.afrotransact.verified=${VERIFIED}"
         } >> "$GITHUB_STEP_SUMMARY"

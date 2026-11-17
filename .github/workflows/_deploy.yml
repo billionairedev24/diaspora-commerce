@@ -48,8 +48,43 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Refuses an UNVERIFIED image (built by uat-unverified-image.yml, verify skipped) for prod and trial BEFORE the environment's reviewers
+  # are asked to approve the deploy job. dev has no guard (it only receives images of the green pipelines).
+  guard:
+    if: inputs.environment != 'dev'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: release-1
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Image verdict (verified | unverified), refused for prod and trial when unverified
+        env:
+          SERVICE: ${{ inputs.service }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          TAG: ${{ inputs.tag }}
+          REPO: ${{ github.repository }}
+          SIGNER: ^https://github\.com/${{ github.repository }}/\.github/workflows/(_(java|go)-service\.yml@refs/heads/main|(core|afrotransact-go|uat-unverified-image)\.yml@refs/heads/release-1)$
+        run: |
+          [[ "$TAG" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::tag must be a full git sha"; exit 1; }
+          cosign verify "ghcr.io/${REPO,,}/${SERVICE}:${TAG}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp "$SIGNER" > verify.json
+          python3 tools/release/image_verdict.py --env "$ENVIRONMENT" --service "$SERVICE" --file verify.json
+
   deploy:
     name: ${{ inputs.service }} -> ${{ inputs.environment }}
+    needs: guard
+    # guard is skipped for dev: a skipped need must not skip the deploy; a failed (refused) guard must.
+    if: ${{ !cancelled() && (needs.guard.result == 'success' || needs.guard.result == 'skipped') }}
     runs-on: ubuntu-latest
     environment:
       name: ${{ inputs.environment }}
@@ -69,8 +104,10 @@ jobs:
       GITOPS_BRANCH: ${{ (inputs.service == 'afrotransact-core' || inputs.service == 'afrotransact-go' || inputs.environment != 'dev') && 'release-1' || vars.GITOPS_BRANCH || 'main' }}
       HAS_GITOPS_APP: ${{ secrets.GITOPS_APP_ID != '' }}
       # Keyless certs from reusable workflows carry the called workflow as identity.
-      # Per-service images are signed by the reusable pipelines on main; the deployables by their own workflows on release-1.
-      SIGNER: ^https://github\.com/${{ github.repository }}/\.github/workflows/(_(java|go)-service\.yml@refs/heads/main|(core|afrotransact-go)\.yml@refs/heads/release-1)$
+      # Per-service images are signed by the reusable pipelines on main; the deployables by their own workflows on release-1, and, for UAT
+      # only, by uat-unverified-image.yml (verify skipped): its signature carries org.afrotransact.verified=false, which the guard below
+      # (tools/release/image_verdict.py) refuses for prod and trial.
+      SIGNER: ^https://github\.com/${{ github.repository }}/\.github/workflows/(_(java|go)-service\.yml@refs/heads/main|(core|afrotransact-go|uat-unverified-image)\.yml@refs/heads/release-1)$
     steps:
       - name: Validate inputs
         run: |
@@ -131,6 +168,11 @@ jobs:
           echo "ref=${repo}@${digest}" >> "$GITHUB_OUTPUT"
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
           echo "::notice::verified ${src} = ${digest}"
+
+      - name: Image verdict (second check on the verified signature, refuses unverified for prod and trial)
+        if: env.skip != 'true' && inputs.environment != 'dev'
+        id: verdict
+        run: python3 tools/release/image_verdict.py --env "$ENVIRONMENT" --service "$SERVICE" --file verify.json
 
       - name: Cloud login
         if: env.skip != 'true'
@@ -201,6 +243,7 @@ jobs:
         if: env.skip != 'true'
         env:
           DIGEST: ${{ steps.src.outputs.digest }}
+          VERDICT: ${{ steps.verdict.outputs.verdict }}
         run: |
           set -euo pipefail
           case "$SERVICE" in
@@ -217,6 +260,9 @@ jobs:
             # Argo CD Image Updater-friendly: a single image.tag key per environment file.
             # Pin the tag (readable) and the digest (what the kubelet actually pulls: repo:tag@sha256:...).
             TAG="$TAG" DIGEST="$DIGEST" yq -i '.image.tag = strenv(TAG) | .image.digest = strenv(DIGEST)' "$values"
+            # An unverified image (UAT only) leaves a marker that check_launch_set.py --require-tags refuses in prod and trial files;
+            # every other pin removes a stale marker.
+            if [[ "$VERDICT" == unverified ]]; then yq -i '.image.unverified = true' "$values"; else yq -i 'del(.image.unverified)' "$values"; fi
             if git diff --quiet; then echo "::notice::already at $TAG ($DIGEST)"; break; fi
             git commit -am "deploy($SERVICE): $ENVIRONMENT -> ${TAG:0:12}@${DIGEST:7:12} [skip ci]" \
               -m "cloud=$CLOUD image=${{ steps.mirror.outputs.image }} run=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

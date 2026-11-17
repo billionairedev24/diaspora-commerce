@@ -100,6 +100,14 @@ def generator_revisions(node):
 REVISION_FAILS = []
 
 
+def unverified_pin_error(env, name, values):
+    """prod and trial must never pin an image of the one-time manual UAT build that skipped verify (_deploy.yml marks it image.unverified: true)."""
+    if env in ("prod", "trial") and (values.get("image") or {}).get("unverified"):
+        return (f"  FAIL [{env}] {name}: image.unverified is set - this pin is an image built WITHOUT a green verify (UAT-only); "
+                f"promote an image from a green verify instead")
+    return None
+
+
 def apps_for(env):
     built, err = ra.kustomize_build(ra.ROOT / "infra/argocd/envs" / env)
     if built is None:
@@ -186,6 +194,10 @@ def main():
                 for dep, spec in release1_plan()["deployables"].items():
                     values = yaml.safe_load((ra.ROOT / spec["chart"] / f"values-{env}.yaml").read_text()) or {}
                     img = values.get("image", {})
+                    err = unverified_pin_error(env, dep, values)
+                    if err:
+                        bad += 1
+                        print(err)
                     if not re.fullmatch(r"[0-9a-f]{40}", str(img.get("tag", ""))) or not re.fullmatch(r"sha256:[0-9a-f]{64}", str(img.get("digest", ""))):
                         bad += 1
                         print(f"  FAIL [{env}] {dep}: image.tag / image.digest are not pinned (run the promote workflow for {dep})")
@@ -194,6 +206,10 @@ def main():
                 chart = next(iter(glob.glob(str(ra.ROOT / f"*/services/{svc}/deploy/helm"))))
                 # prod pins live in values-prod.yaml, trial pins in values-trial.yaml: two files, promoted separately
                 values = yaml.safe_load((pathlib.Path(chart) / f"values-{env}.yaml").read_text()) or {}
+                err = unverified_pin_error(env, svc, values)
+                if err:
+                    bad += 1
+                    print(err)
                 tag = values.get("image", {}).get("tag", "")
                 if not re.fullmatch(r"[0-9a-f]{40}", str(tag)):
                     bad += 1

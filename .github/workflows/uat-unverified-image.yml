@@ -1,0 +1,129 @@
+# ONE-TIME MANUAL image build for UAT ONLY that skips `verify` (owner decision, while the red verify jobs of core.yml and
+# afrotransact-go.yml are being fixed). It runs ONLY the image build + push (publish-image: Trivy image scan, SBOM, cosign keyless
+# signature), never on push or pull_request, only from release-1, only after the owner's rules of the GitHub environment `uat`, and only
+# with confirm_uat_only = UAT-ONLY-UNVERIFIED.
+#
+# What marks the image as unverified (so prod can never take it):
+#   - tag <full sha>            the normal deterministic tag (promote and _deploy need a 40-hex tag, so it stays)
+#   - tag <full sha>-unverified an extra human-visible tag (not a valid promote input)
+#   - OCI label                 org.afrotransact.verified=false
+#   - cosign signature annotation org.afrotransact.verified=false (signed, tamper-proof; this is what the guard reads)
+# promote.yml / _deploy.yml refuse such an image for prod and trial (tools/release/image_verdict.py) and write image.unverified: true into
+# values-uat.yaml; check_launch_set.py --require-tags refuses that marker in values-prod.yaml / values-trial.yaml.
+# A green core.yml / afrotransact-go.yml run still produces the verified image (label and annotation = true) exactly as before.
+# Steps for the owner: docs/runbooks/release-1-go-live.md, "Interim: unverified UAT images".
+name: uat-unverified-image
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: Deployable to build
+        type: choice
+        options: [afrotransact-core, afrotransact-go]
+      skip_verify:
+        description: Must be true. Builds WITHOUT running verify; the image is for UAT only.
+        type: boolean
+        default: false
+      confirm_uat_only:
+        description: Type UAT-ONLY-UNVERIFIED to confirm that this image can never go to prod
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uat-unverified-image-${{ inputs.service }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          SKIP_VERIFY: ${{ inputs.skip_verify }}
+          CONFIRM: ${{ inputs.confirm_uat_only }}
+        run: |
+          [[ "$GITHUB_REF" == refs/heads/release-1 ]] || { echo "::error::run this from release-1 (Use workflow from: release-1); got $GITHUB_REF"; exit 1; }
+          [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]] || { echo "::error::manual runs only"; exit 1; }
+          [[ "$SKIP_VERIFY" == true ]] || { echo "::error::skip_verify is false: this workflow only builds WITHOUT verify. For a verified image run core / afrotransact-go on release-1."; exit 1; }
+          [[ "$CONFIRM" == UAT-ONLY-UNVERIFIED ]] || { echo "::error::confirm_uat_only must be exactly UAT-ONLY-UNVERIFIED"; exit 1; }
+
+  image-core:
+    name: image afrotransact-core (UNVERIFIED, uat only)
+    needs: guard
+    if: inputs.service == 'afrotransact-core'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment:
+      name: uat
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - id: publish
+        uses: ./.github/actions/publish-image
+        with:
+          service: afrotransact-core
+          context: java
+          dockerfile: java/Dockerfile
+          build-args: |
+            SERVICE=core
+            PROJECT=apps/core
+            JAR_GLOB=afrotransact-core-*.jar
+          push: "true"
+          verified: "false"
+          max-size-mb: "420"
+          required-env: SPRING_PROFILES_ACTIVE=prod
+      - name: Summary
+        env:
+          IMAGE: ${{ steps.publish.outputs.image }}
+          TAG: ${{ steps.publish.outputs.tag }}
+          DIGEST: ${{ steps.publish.outputs.digest }}
+        run: |
+          {
+            echo "### UNVERIFIED image (UAT only): afrotransact-core"
+            echo "- image: \`${IMAGE}:${TAG}@${DIGEST}\` (also tagged \`${TAG}-unverified\`)"
+            echo "- next: promote with \`gh workflow run promote.yml --ref release-1 -f service=afrotransact-core -f environment=uat -f tag=${TAG}\`"
+            echo "- prod and trial refuse this image (label and signature annotation org.afrotransact.verified=false)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  image-go:
+    name: image afrotransact-go (UNVERIFIED, uat only)
+    needs: guard
+    if: inputs.service == 'afrotransact-go'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment:
+      name: uat
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - id: publish
+        uses: ./.github/actions/publish-image
+        with:
+          service: afrotransact-go
+          context: go
+          dockerfile: go/Dockerfile.afrotransact-go
+          push: "true"
+          verified: "false"
+          max-size-mb: "120"
+          required-env: APP_ENV=prod PORT=8080
+      - name: Summary
+        env:
+          IMAGE: ${{ steps.publish.outputs.image }}
+          TAG: ${{ steps.publish.outputs.tag }}
+          DIGEST: ${{ steps.publish.outputs.digest }}
+        run: |
+          {
+            echo "### UNVERIFIED image (UAT only): afrotransact-go"
+            echo "- image: \`${IMAGE}:${TAG}@${DIGEST}\` (also tagged \`${TAG}-unverified\`)"
+            echo "- next: promote with \`gh workflow run promote.yml --ref release-1 -f service=afrotransact-go -f environment=uat -f tag=${TAG}\`"
+            echo "- prod and trial refuse this image (label and signature annotation org.afrotransact.verified=false)"
+          } >> "$GITHUB_STEP_SUMMARY"

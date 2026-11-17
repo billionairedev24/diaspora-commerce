@@ -102,6 +102,25 @@ cd <worktree of origin/release-1>
    `gh run list --workflow core.yml --branch release-1 --limit 3` and in GHCR `afrotransact-core:<sha>`. Then `Actions > promote > afrotransact-core, environment $ENV, tag <full sha>`, same for `afrotransact-go`;
    `python3 infra/argocd/scripts/check_launch_set.py --env $ENV --require-tags` must print OK. Rollback: re-promote the previous sha.
 
+   **Interim: unverified UAT images (owner decision, while `verify` is red; UAT ONLY).** `.github/workflows/uat-unverified-image.yml` builds, scans (Trivy), SBOMs and cosign-signs the image **without running verify**. It is manual only, runs only from release-1, waits for the rules of the GitHub environment `uat`, and needs `skip_verify=true` plus `confirm_uat_only=UAT-ONLY-UNVERIFIED`.
+   ```bash
+   gh workflow run uat-unverified-image.yml --ref release-1 -f service=afrotransact-core -f skip_verify=true -f confirm_uat_only=UAT-ONLY-UNVERIFIED
+   gh workflow run uat-unverified-image.yml --ref release-1 -f service=afrotransact-go   -f skip_verify=true -f confirm_uat_only=UAT-ONLY-UNVERIFIED
+   gh run watch   # approve the `uat` environment prompt if it has reviewers
+   ```
+   Read the result: the run summary prints `ghcr.io/billionairedev24/diaspora-commerce/<service>:<sha>@sha256:<digest>`; or `gh run view <run-id> --log | grep 'UNVERIFIED image'`. Check the marking (all four must hold):
+   `cosign verify ghcr.io/billionairedev24/diaspora-commerce/afrotransact-core:<sha> --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp '^https://github\.com/billionairedev24/diaspora-commerce/\.github/workflows/uat-unverified-image\.yml@refs/heads/release-1$' | jq '.[].optional'`
+   shows `"org.afrotransact.verified": "false"`; the same image also has the tag `<sha>-unverified` and the OCI label `org.afrotransact.verified=false`.
+   Then promote to **uat only** (the `<sha>` is the full 40-character sha of the run, which is the tag the summary prints):
+   ```bash
+   gh workflow run promote.yml --ref release-1 -f service=afrotransact-core -f environment=uat -f tag=<full sha>
+   gh workflow run promote.yml --ref release-1 -f service=afrotransact-go   -f environment=uat -f tag=<full sha>
+   python3 infra/argocd/scripts/check_launch_set.py --env uat --require-tags     # OK; values-uat.yaml now has image.unverified: true
+   ```
+   Design: the tag stays the full sha because promote and `_deploy` accept nothing else; the marking is therefore NOT in the tag name alone but in (1) the extra tag `<sha>-unverified` (visible, not a valid promote input), (2) the OCI label, and (3) the **cosign signature annotation** `org.afrotransact.verified` (signed, so it cannot be edited without a certificate of an allowed workflow; this is what the guard reads). A normal green `core` / `afrotransact-go` run signs with `org.afrotransact.verified=true`.
+   Guard: `_deploy.yml` (used by promote) runs `tools/release/image_verdict.py` in a job BEFORE the environment's approval and again in the deploy job: for `prod` and `trial` an `unverified` digest, or an unannotated afrotransact-core / afrotransact-go digest, is refused; `uat` accepts it and writes `image.unverified: true` into `values-uat.yaml`. `check_launch_set.py --require-tags` fails if that marker is in `values-prod.yaml` / `values-trial.yaml`. Tests: `python3 tools/release/test_image_verdict.py` (part of `make release-1-check`).
+   **Production needs an image from a fully green verify.** When verify is green, the normal pipeline publishes `<sha>` (replacing the unverified tag of the same sha only if you re-run uat-unverified-image on the same commit: do not) and promote `prod` with a sha built by `core` / `afrotransact-go`. Remove the unverified UAT pin by promoting a verified sha to uat. Remove `uat-unverified-image.yml` once verify is green.
+
 ## 5. OVH cluster, Layerbase, Cloudflare edge (who: you; where: your machine)
 
 1. **OVH cluster**: `cd infra/tofu/bootstrap/ovh && tofu init && tofu apply ...` then `cd ../../envs/$ENV` (`cp terraform.tfvars.example terraform.tfvars`: `cloud = "ovh"`, `region = "US-EAST-VA-1"`, `ovh_endpoint = "ovh-us"`, `ovh_service_name = <project id>`, `admin_cidrs = [<your IP>/32]`, uat: `disposable = true`), `tofu plan -out plan.out && tofu apply plan.out`.

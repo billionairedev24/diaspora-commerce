@@ -173,6 +173,7 @@ release-1-check: ## Release 1 delivery files, offline: workflows generated, laun
 	python3 infra/argocd/scripts/check_launch_set.py
 	python3 tools/release/check_delivery.py
 	python3 tools/release/test_route_diff.py
+	python3 tools/release/test_image_verdict.py
 	python3 tools/release/chart_env_sync.py
 	python3 tools/release/test_upstreams.py
 	python3 tools/release/upstreams.py
