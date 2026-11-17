@@ -11,3 +11,21 @@
 bdd0f451e2ddf86e83988f3487c9219537227078:java/services/identity/src/test/java/com/afrotransact/identity/it/PasskeyCeremonyIT.java:generic-api-key:64
 # gateway-bff staff pre-order test: fake Idempotency-Key header value
 1a2380f99ce4a179d973a4b443a6a2d1454e46cc:go/services/gateway-bff/internal/adapter/httpapi/preorders_staff_test.go:generic-api-key:249
+# Reviewed 2026-11-17 (release-1 CI): fake credentials in unit-test fixtures and mock data (s3cret in a DSN parse test, re_test_key/whsec_ placeholders,
+# a stripe-shaped string and ghp_abc... samples in the deploy guide test, JWT-shaped test bearers, the visitor cookie name, geo keys in mocks), and
+# config/command text the generic rule mis-reads (k3s install flags, empty OVH_API_* vars, runbook prose). No real secret.
+596f8d6a23927aa949c8cfec43130a780c6cd98f:go/apps/afrotransact-go/internal/modcfg/lookup_test.go:afrotransact-jdbc-password-in-url:51
+d7a89b36b8bacd7fb90f771fe273c43a3aa8a17f:docs/runbooks/ovh-production.md:generic-api-key:255
+66db699047e5967f8102f240761c234c27dbfa35:go/services/notifications/internal/config/validate_test.go:generic-api-key:15
+7cf14e35c66b1d576a9916b22f1e2b4e0444c958:tools/deploy/test/test-guide.sh:afrotransact-stripe-live-key:296
+7cf14e35c66b1d576a9916b22f1e2b4e0444c958:tools/deploy/test/test-guide.sh:stripe-access-token:12
+7cf14e35c66b1d576a9916b22f1e2b4e0444c958:tools/deploy/test/test-guide.sh:stripe-access-token:296
+07ba8252a08ebdbb57763a5fda97048330cfba35:go/services/gateway-bff/internal/app/session_enforce_test.go:generic-api-key:288
+e7423d28bf7423104618652c3ef36402b6e7c814:web/apps/storefront/src/lib/runs/visitor.ts:generic-api-key:7
+6ec76de42639cea358842ac1e234d4fff424b771:web/packages/api-client/src/mocks/staff/runs.ts:generic-api-key:76
+5f4df3416fb2c2b37f1b30778381a06d14fefbe9:web/packages/api-client/src/mocks/staff/runs.ts:generic-api-key:64
+c985a5b352e5c7a585a09b260fc5cc40c6fdb6e8:java/services/identity/src/test/java/com/afrotransact/identity/application/SessionAndInspectorServicesTest.java:generic-api-key:132
+84a7b07f876c511dbad881b95fd29f216ba7aecf:go/services/gateway-bff/internal/adapter/httpapi/staff_identity_test.go:jwt:39
+c985a5b352e5c7a585a09b260fc5cc40c6fdb6e8:java/services/identity/src/test/java/com/afrotransact/identity/it/IdentityAdminIT.java:generic-api-key:351
+eca616a790ad83455c0b45f9ee416245cdd3c6f7:infra/ovh-vps/bootstrap.sh:generic-api-key:23
+167e7a81eb6a6d1041ab99b22d442be35b4212be:tools/ovh/api.sh:generic-api-key:21
