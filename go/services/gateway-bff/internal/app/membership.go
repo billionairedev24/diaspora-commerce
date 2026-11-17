@@ -308,7 +308,8 @@ func quoteMembership(ctx context.Context, client port.MembershipClient, c *domai
 	for _, p := range pkgs {
 		items += p.SubtotalMinor
 		seller[p.PackageID] = p.Seller.Name
-		if o, ok := chosenOption(p, packageDelivery); ok && o.FeeMinor > 0 {
+		// The seller's own shipping is the seller's revenue: no AfroTransact plan waives it.
+		if o, ok := chosenOption(p, packageDelivery); ok && o.FeeMinor > 0 && o.Key != domain.OptionSellerShips {
 			fees = append(fees, port.UpMembershipFee{Key: p.PackageID, Kind: membershipFeeKind(o.Key), FeeMinor: o.FeeMinor})
 		}
 	}

@@ -11,6 +11,8 @@ import (
 
 // ---------------------------------------------------------------- delivery fee (orders: shipping settings)
 //
+// The record also holds the staff switch for sellers who ship themselves (off by default).
+//
 // Settings › Flat delivery fee (listing rules D16, section 3 "Launch shipping"): AfroTransact sets all shipping at launch. ONE
 // staff-edited record, owned by orders, is the single source of the fee: this BFF's estimate and orders' charge both read
 // it. Viewing needs the Fees & commissions module (orders:shipping.view for the history); changing needs Edit and
@@ -35,9 +37,9 @@ func shippingSettingsResource() *staffResource {
 		if v, ok := o["freeAboveMinor"].(float64); ok && v > 0 {
 			o["freeAboveText"] = "Free from " + moneyText(v)
 		}
-		o["carrierText"] = "Off"
-		if boolean(o, "sellerCarrierShippingEnabled") {
-			o["carrierText"] = "On"
+		o["sellerShipsText"] = "Off"
+		if boolean(o, "sellerSelfShippingEnabled") {
+			o["sellerShipsText"] = "On"
 		}
 		return o, nil
 	}
@@ -64,7 +66,7 @@ func shippingSettingsResource() *staffResource {
 		key: "shipping-settings", module: feesModule, title: "Flat delivery fee",
 		names: []nameRef{personRef("updatedBy", "Changed by"), personRef("changedBy", "Changed by").inList("history")},
 		columns: []domain.Column{col("name", "Setting", "strong", 22), col("flatFeeText", "Delivery fee", "text", 16), col("freeAboveText", "Free delivery", "text", 20),
-			col("carrierText", "Seller carrier shipping", "text", 18), col("updatedByName", "Last changed by", "text", 24)},
+			col("sellerShipsText", "Sellers ship themselves", "text", 18), col("updatedByName", "Last changed by", "text", 24)},
 		list: func(ctx context.Context, sc staffCtx, _ staffQuery) (staffList, error) {
 			o, err := get(ctx, sc, "shipping")
 			if err != nil {
@@ -90,9 +92,10 @@ func shippingSettingsResource() *staffResource {
 					fieldOf("Pre-order deliveries", "The fee set on their own pre-order or run (Settings > Pre-orders)", "text"),
 					fieldOf("Address too far for standard delivery", "The shopper asks for a quote; customer care agrees the amount", "text"),
 				}},
-				{Title: "Seller carrier shipping", Fields: []domain.DetailField{
-					fieldOf("Seller-shipped carrier options (retired, no effect)", jstr(o, "carrierText"), "text"),
-					fieldOf("Why it is off", "At launch AfroTransact sets all shipping. Turn it on only when sellers ship themselves.", "text"),
+				{Title: "Sellers who ship themselves", Fields: []domain.DetailField{
+					fieldOf("Sellers may ship themselves", jstr(o, "sellerShipsText"), "text"),
+					fieldOf("Why it is off", "Off until the problem of several items from one seller with different shipping fees is solved (docs/engineering/seller-self-shipping-options.md). Turn it on only when the owner has chosen a rule.", "text"),
+					fieldOf("When it is on", "A seller sets one flat shipping charge per order in Settings. The shopper sees it as \"Shipped by the seller\" at checkout, the seller keeps all of it and AfroTransact takes no commission on it.", "text"),
 				}},
 				{Title: "How it applies", Fields: []domain.DetailField{
 					fieldOf("One source", "The estimate in the cart and checkout and the amount charged when the order is placed both read this record.", "text"),
@@ -124,17 +127,17 @@ func shippingSettingsResource() *staffResource {
 				fee.Help = "One flat fee for Delivery by AfroTransact and for AfroTransact collecting from a store. 0 is free."
 				above := withValue(withRange(ff("freeAbove", "Free delivery on packages of (dollars, blank = never free)", "number", false), 100_000), free)
 				above.Help = "A package whose items cost this much or more is delivered free."
-				carrier := withValue(ff("sellerCarrierShipping", "Offer seller-shipped carrier options at checkout", "toggle", false), boolean(o, "sellerCarrierShippingEnabled"))
-				carrier.Help = "Retired: sellers do not ship themselves, so this switch changes nothing. AfroTransact delivers (the customer pays the fee) or the customer collects."
+				sellerShips := withValue(ff("sellerSelfShipping", "Let sellers ship themselves", "toggle", false), boolean(o, "sellerSelfShippingEnabled"))
+				sellerShips.Help = "Off by default. When on, sellers can set their own flat shipping charge per order (their revenue, their responsibility) and shoppers can choose it at checkout. Turning it off hides it everywhere and refuses it on the server."
 				return domain.Form{Title: "Change the delivery fee", SubmitLabel: "Save",
-					ChangeKeys: []string{"flatFee", "freeAbove", "sellerCarrierShipping"},
+					ChangeKeys: []string{"flatFee", "freeAbove", "sellerSelfShipping"},
 					Intro:      "Shoppers see the new fee within 15 seconds and are charged it on new orders; placed orders keep what they paid. Every change is kept with who made it and why.",
-					Fields: []domain.FormField{section(fee, "What shoppers pay"), section(above, "What shoppers pay"), section(carrier, "Carrier shipping"),
+					Fields: []domain.FormField{section(fee, "What shoppers pay"), section(above, "What shoppers pay"), section(sellerShips, "Sellers who ship themselves"),
 						section(withMax(withMin(ff("reason", "Why it changes (at least 10 characters)", "textarea", true), 10), 500), "Why")}}
 			},
 			save: func(ctx context.Context, sc staffCtx, o jobj, v jobj, _ string) error {
-				body := jobj{"flatFeeMinor": minorOf(v, "flatFee"), "sellerCarrierShippingEnabled": vb(v, "sellerCarrierShipping"),
-					"reason": vs(v, "reason"), "expectedVersion": int64(num(o, "version"))}
+				body := jobj{"flatFeeMinor": minorOf(v, "flatFee"), "sellerCarrierShippingEnabled": boolean(o, "sellerCarrierShippingEnabled"), // retired, kept as stored
+					"sellerSelfShippingEnabled": vb(v, "sellerSelfShipping"), "reason": vs(v, "reason"), "expectedVersion": int64(num(o, "version"))}
 				if raw := v["freeAbove"]; raw != nil && raw != "" {
 					body["freeAboveMinor"] = minorOf(v, "freeAbove")
 				}

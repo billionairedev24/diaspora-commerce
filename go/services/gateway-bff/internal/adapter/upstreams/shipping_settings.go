@@ -29,6 +29,7 @@ func (s *shippingSettingsImpl) Current(ctx context.Context, currency string) (do
 		FlatFeeMinor                 *int64 `json:"flatFeeMinor"`
 		FreeAboveMinor               *int64 `json:"freeAboveMinor"`
 		SellerCarrierShippingEnabled bool   `json:"sellerCarrierShippingEnabled"`
+		SellerSelfShippingEnabled    bool   `json:"sellerSelfShippingEnabled"`
 	}
 	if _, err := call(ctx, s.c, httpclient.Request{Path: "/v1/public/shipping-settings", Query: url.Values{"currency": {currency}}}, &out); err != nil {
 		return domain.ShippingSettings{}, err
@@ -41,5 +42,6 @@ func (s *shippingSettingsImpl) Current(ctx context.Context, currency string) (do
 		return domain.ShippingSettings{}, fmt.Errorf("orders shipping settings: freeAboveMinor must be above 0")
 	}
 	return domain.ShippingSettings{Currency: out.Currency, Version: out.Version, FlatFeeMinor: *out.FlatFeeMinor,
-		FreeAboveMinor: out.FreeAboveMinor, SellerCarrierShippingEnabled: out.SellerCarrierShippingEnabled}, nil
+		FreeAboveMinor: out.FreeAboveMinor, SellerCarrierShippingEnabled: out.SellerCarrierShippingEnabled,
+		SellerSelfShippingEnabled: out.SellerSelfShippingEnabled}, nil
 }

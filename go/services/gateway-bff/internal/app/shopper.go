@@ -34,6 +34,9 @@ type ShopperDeps struct {
 	// LocalDelivery and Offers price AfroTransact Delivery from the seller's store on the checkout page (S255; optional).
 	LocalDelivery port.LocalDeliveryClient
 	Offers        port.StorefrontOffersClient
+	// SelfShipping reads the sellers that ship themselves and their flat charge (orders; optional). Empty while the staff switch
+	// is off (the default), so the checkout then offers nothing but pickup and Delivered by AfroTransact.
+	SelfShipping port.SelfShippingClient
 	// Coupons validates checkout coupon codes (offers-service; optional).
 	Coupons port.CheckoutCouponsClient
 	// Credit reads the shopper's AfroTransact credit for the checkout page and the credit screens (optional).
@@ -269,6 +272,8 @@ func methodKey(deliveryMethod, serviceLevel string) string {
 		return "afrotransact_delivery"
 	case "PICKUP":
 		return "pickup"
+	case "SELLER_SELF_SHIPS":
+		return domain.ModeSellerShips // the seller's own shipping (staff switch, off by default)
 	case "SELLER_SHIPS":
 		return domain.ModeLegacySellerShipped
 	}

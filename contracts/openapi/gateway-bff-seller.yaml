@@ -519,6 +519,41 @@ paths:
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/self-shipping:
+    get:
+      tags: [Orders]
+      operationId: getSelfShipping
+      security: [{sessionCookie: []}]
+      summary: Your own shipping charge (only while AfroTransact lets sellers ship themselves)
+      description: |
+        orders `GET /v1/seller/self-shipping` (Orders view). `available` is a staff switch that is off by default; while it is false
+        the app shows nothing about shipping yourself. The charge is one flat amount per order package, not per product.
+      responses:
+        '200': {description: Your setting, content: {application/json: {schema: {$ref: '#/components/schemas/SellerSelfShipping'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Orders]
+      operationId: setSelfShipping
+      security: [{sessionCookie: []}]
+      summary: Set your own flat shipping charge per order
+      description: |
+        orders `PUT /v1/seller/self-shipping` (Orders edit). 409 `SELF_SHIPPING_DISABLED` while the staff switch is off (the default),
+        so the server refuses it even if a client shows the field. 422 for a charge outside $0.00 to $100.00. You keep the whole
+        charge; you are responsible for it being the right amount.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/SellerSelfShippingRequest'}}}
+      responses:
+        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/SellerSelfShipping'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/seller/orders/{orderNumber}/shipments/{shipmentId}/rates:
     post:
       tags: [Orders]
@@ -3468,7 +3503,7 @@ paths:
       operationId: postSellerFbaInbound
       security: [{sessionCookie: []}]
       summary: inventory `POST /v1/inbound/shipments`
-      description: 'Mirrors inventory `POST /v1/inbound/shipments` with the member''s token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory''s `InboundShipment` (contracts/openapi/inventory.yaml).'
+      description: 'Mirrors inventory `POST /v1/inbound/shipments` with the member''s token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory''s `InboundShipment` (contracts/openapi/inventory.yaml). RETIRED: AfroTransact keeps no seller stock (Fulfilled by AfroTransact means it collects from your pickup location and delivers), so this is always refused with 410 FBA_INBOUND_RETIRED. Reading existing plans stays.'
       parameters:
         - {$ref: '#/components/parameters/IfMatch'}
         - {$ref: '#/components/parameters/IdempotencyKey'}
@@ -3481,6 +3516,7 @@ paths:
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
+        '410': {$ref: '#/components/responses/Problem'}
         '409': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
@@ -3506,7 +3542,7 @@ paths:
       operationId: putSellerFbaInboundById
       security: [{sessionCookie: []}]
       summary: inventory `PUT /v1/inbound/shipments/{id}`
-      description: 'Mirrors inventory `PUT /v1/inbound/shipments/{id}` with the member''s token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory''s `InboundShipment` (contracts/openapi/inventory.yaml).'
+      description: 'Mirrors inventory `PUT /v1/inbound/shipments/{id}` with the member''s token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory''s `InboundShipment` (contracts/openapi/inventory.yaml). RETIRED: AfroTransact keeps no seller stock (Fulfilled by AfroTransact means it collects from your pickup location and delivers), so this is always refused with 410 FBA_INBOUND_RETIRED. Reading existing plans stays.'
       parameters:
         - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
         - {$ref: '#/components/parameters/IfMatch'}
@@ -3520,6 +3556,7 @@ paths:
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
+        '410': {$ref: '#/components/responses/Problem'}
         '409': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
@@ -3530,7 +3567,7 @@ paths:
       operationId: putSellerFbaInboundTracking
       security: [{sessionCookie: []}]
       summary: inventory `PUT /v1/inbound/shipments/{id}/tracking`
-      description: 'Mirrors inventory `PUT /v1/inbound/shipments/{id}/tracking` with the member''s token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory''s `InboundTrackingResult` (contracts/openapi/inventory.yaml).'
+      description: 'Mirrors inventory `PUT /v1/inbound/shipments/{id}/tracking` with the member''s token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory''s `InboundTrackingResult` (contracts/openapi/inventory.yaml). RETIRED: AfroTransact keeps no seller stock (Fulfilled by AfroTransact means it collects from your pickup location and delivers), so this is always refused with 410 FBA_INBOUND_RETIRED. Reading existing plans stays.'
       parameters:
         - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
         - {$ref: '#/components/parameters/IfMatch'}
@@ -3544,6 +3581,7 @@ paths:
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
+        '410': {$ref: '#/components/responses/Problem'}
         '409': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
@@ -3554,7 +3592,7 @@ paths:
       operationId: postSellerFbaInboundShip
       security: [{sessionCookie: []}]
       summary: inventory `POST /v1/inbound/shipments/{id}/ship`
-      description: 'Mirrors inventory `POST /v1/inbound/shipments/{id}/ship` with the member''s token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory''s `InboundShipment` (contracts/openapi/inventory.yaml).'
+      description: 'Mirrors inventory `POST /v1/inbound/shipments/{id}/ship` with the member''s token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory''s `InboundShipment` (contracts/openapi/inventory.yaml). RETIRED: AfroTransact keeps no seller stock (Fulfilled by AfroTransact means it collects from your pickup location and delivers), so this is always refused with 410 FBA_INBOUND_RETIRED. Reading existing plans stays.'
       parameters:
         - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
         - {$ref: '#/components/parameters/IfMatch'}
@@ -3568,6 +3606,7 @@ paths:
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
+        '410': {$ref: '#/components/responses/Problem'}
         '409': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
@@ -3578,7 +3617,7 @@ paths:
       operationId: postSellerFbaInboundCancel
       security: [{sessionCookie: []}]
       summary: inventory `POST /v1/inbound/shipments/{id}/cancel`
-      description: 'Mirrors inventory `POST /v1/inbound/shipments/{id}/cancel` with the member''s token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory''s `InboundShipment` (contracts/openapi/inventory.yaml).'
+      description: 'Mirrors inventory `POST /v1/inbound/shipments/{id}/cancel` with the member''s token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory''s `InboundShipment` (contracts/openapi/inventory.yaml). RETIRED: AfroTransact keeps no seller stock (Fulfilled by AfroTransact means it collects from your pickup location and delivers), so this is always refused with 410 FBA_INBOUND_RETIRED. Reading existing plans stays.'
       parameters:
         - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
         - {$ref: '#/components/parameters/IfMatch'}
@@ -3592,6 +3631,7 @@ paths:
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
+        '410': {$ref: '#/components/responses/Problem'}
         '409': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
@@ -5166,7 +5206,8 @@ components:
         status: {$ref: '#/components/schemas/ShipmentStatus'}
         statusLabel: {type: string}
         fulfilment: {$ref: '#/components/schemas/Fulfilment'}
-        fulfilmentMode: {type: string, enum: [legacy_seller_shipped, afrotransact_delivery, fulfilled_by_afrotransact, pickup, preorder_run], description: 'Two modes exist. afrotransact_delivery: Fulfilled by AfroTransact from your location (AfroTransact collects and delivers; the customer pays the delivery fee, you pay nothing for it). fulfilled_by_afrotransact: AfroTransact fulfils and delivers it. pickup: Seller pickup. legacy_seller_shipped: an old order you shipped yourself before self-shipping was retired; history, you have no steps on it.'}
+        needsShipDetails: {type: boolean, description: 'The next step is Mark shipped and you ship it yourself, so say how it left (tracking number or details). Only ever true while sellers may ship themselves (a staff switch, off by default)'}
+        fulfilmentMode: {type: string, enum: [seller_ships, legacy_seller_shipped, afrotransact_delivery, fulfilled_by_afrotransact, pickup, preorder_run], description: 'seller_ships: you ship it yourself at your own shipping charge (only while the staff switch is on, off by default). Two modes exist otherwise. afrotransact_delivery: Fulfilled by AfroTransact from your location (AfroTransact collects and delivers; the customer pays the delivery fee, you pay nothing for it). fulfilled_by_afrotransact: AfroTransact fulfils and delivers it. pickup: Seller pickup. legacy_seller_shipped: an old order you shipped yourself before self-shipping was retired; history, you have no steps on it.'}
         perishable: {type: boolean}
         lines:
           type: array
@@ -5228,6 +5269,24 @@ components:
       properties:
         status: {$ref: '#/components/schemas/SellerStatusAction'}
         handoverCode: {type: string, pattern: '^\d{4}$', description: 'The buyer''s 4-digit code; required when status is DELIVERED (handing a pickup order over), ignored otherwise'}
+        shipNote: {type: string, maxLength: 500, description: 'How you sent it (who took it, when). With PICKED_UP, only for an order you ship yourself (a staff switch, off by default)'}
+        trackingNumber: {type: string, maxLength: 80, description: 'Tracking number, no spaces. With PICKED_UP, only for an order you ship yourself'}
+        trackingCarrier: {type: string, maxLength: 40, description: Optional name of whoever carried it; customers only see the tracking number}
+    SellerSelfShipping:
+      type: object
+      required: [available, enabled, chargeMinor, currency, version]
+      properties:
+        available: {type: boolean, description: 'AfroTransact lets sellers ship themselves (a staff switch, off by default). While false nothing about it is shown and every change is refused with 409 SELF_SHIPPING_DISABLED'}
+        enabled: {type: boolean, description: You ship your own orders and charge the flat shipping below (false while not available)}
+        chargeMinor: {type: integer, minimum: 0, maximum: 10000, description: 'One flat shipping charge for each order package of yours, never per product. It is your charge and your responsibility; you keep all of it and AfroTransact takes no commission on it'}
+        currency: {type: string, examples: [USD]}
+        version: {type: integer}
+    SellerSelfShippingRequest:
+      type: object
+      required: [enabled, chargeMinor]
+      properties:
+        enabled: {type: boolean}
+        chargeMinor: {type: integer, minimum: 0, maximum: 10000}
     Parcel:
       type: object
       required: [weightLb]

@@ -474,8 +474,7 @@ func TestSellerSpoofsAreOverwrittenWhereTheBFFRelays(t *testing.T) {
 			func(r testkit.Request) bool {
 				return r.Path == "/v1/lots" && strings.Contains(r.Query, "ownerOrg="+testkit.TenantSellerOrgA)
 			}},
-		{"fba create", testkit.Call{Method: "POST", Path: "/v1/seller/fba/inbound", Body: map[string]any{"ownerOrg": b, "OwnerOrg": b, "OWNERORG": b, "nodeId": "n1"}},
-			func(r testkit.Request) bool { return r.Path == "/v1/inbound/shipments" && r.Method == "POST" }},
+		// "fba create" is gone: sending stock to AfroTransact is retired (410 FBA_INBOUND_RETIRED), so nothing reaches inventory.
 		{"run pickups", testkit.Call{Method: "GET", Path: "/v1/seller/run-pickups", Query: url.Values{"orgId": {b}}},
 			func(r testkit.Request) bool {
 				return r.Path == "/v1/seller/run-pickups" && strings.Contains(r.Query, "orgId="+testkit.TenantSellerOrgA)

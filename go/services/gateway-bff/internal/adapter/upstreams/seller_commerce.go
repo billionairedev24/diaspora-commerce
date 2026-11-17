@@ -367,6 +367,19 @@ func (o *sellerOrdersImpl) Analytics(ctx context.Context, bearer string, from, t
 	return out, err
 }
 
+func (o *sellerOrdersImpl) SelfShipping(ctx context.Context, bearer string) (port.SellerSelfShipping, error) {
+	var out port.SellerSelfShipping
+	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/seller/self-shipping", Bearer: bearer, UserBearer: true}, &out)
+	return out, err
+}
+
+func (o *sellerOrdersImpl) SetSelfShipping(ctx context.Context, bearer string, enabled bool, chargeMinor int64) (port.SellerSelfShipping, error) {
+	var out port.SellerSelfShipping
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPut, Path: "/v1/seller/self-shipping", Bearer: bearer, UserBearer: true,
+		JSON: map[string]any{"enabled": enabled, "chargeMinor": chargeMinor}}, &out)
+	return out, err
+}
+
 func (o *sellerOrdersImpl) Split(ctx context.Context, bearer, number string) (port.OrderSplit, error) {
 	var out port.OrderSplit
 	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/orders/" + url.PathEscape(number) + "/payment-split", Bearer: bearer, UserBearer: true}, &out)

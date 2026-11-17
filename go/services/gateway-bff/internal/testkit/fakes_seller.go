@@ -1396,6 +1396,28 @@ func (u *Upstreams) ordersRoutes(mux *http.ServeMux) {
 		u.seller.tracking = b.TrackingNumber
 		writeJSON(w, 200, u.orderJSON())
 	})
+	mux.HandleFunc("GET /v1/seller/self-shipping", func(w http.ResponseWriter, _ *http.Request) {
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		writeJSON(w, 200, map[string]any{"sellerOrgId": "org_seller", "currency": "USD", "available": u.opts.SellerSelfShipping,
+			"enabled": u.opts.SellerSelfShipping && u.selfShipEnabled, "chargeMinor": u.selfShipCharge, "version": 1})
+	})
+	mux.HandleFunc("PUT /v1/seller/self-shipping", func(w http.ResponseWriter, r *http.Request) {
+		var b struct {
+			Enabled     bool  `json:"enabled"`
+			ChargeMinor int64 `json:"chargeMinor"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		if !u.opts.SellerSelfShipping {
+			problem(w, 409, "orders.self-shipping-disabled", "Sellers cannot ship orders themselves yet", nil)
+			return
+		}
+		u.selfShipEnabled, u.selfShipCharge = b.Enabled, b.ChargeMinor
+		writeJSON(w, 200, map[string]any{"sellerOrgId": "org_seller", "currency": "USD", "available": true, "enabled": b.Enabled,
+			"chargeMinor": b.ChargeMinor, "version": 2})
+	})
 	mux.HandleFunc("GET /v1/orders/{number}/payment-split", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, map[string]any{"orderId": "o1", "chargeMinor": 8189, "currency": "USD", "recipients": []map[string]any{
 			{"recipient": SellerOrgID, "kind": "SELLER", "itemsMinor": 6498, "shippingMinor": 0, "taxMinor": 0, "commissionMinor": 520, "fbaFeesMinor": 0,

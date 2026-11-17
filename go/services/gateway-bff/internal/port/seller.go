@@ -1128,6 +1128,10 @@ type SellerOrdersClient interface {
 	Analytics(ctx context.Context, bearer string, from, to time.Time) (SalesAnalytics, error)
 	// Split is GET /v1/orders/{number}/payment-split (a seller sees its own row).
 	Split(ctx context.Context, bearer, orderNumber string) (OrderSplit, error)
+	// SelfShipping is the seller's own shipping setting (GET /v1/seller/self-shipping); Available is the staff switch.
+	SelfShipping(ctx context.Context, bearer string) (SellerSelfShipping, error)
+	// SetSelfShipping sets the seller's own flat per-order charge (409 orders.self-shipping-disabled while the switch is off).
+	SetSelfShipping(ctx context.Context, bearer string, enabled bool, chargeMinor int64) (SellerSelfShipping, error)
 }
 
 // OrderSplit is orders' Split (payments' split of one order).

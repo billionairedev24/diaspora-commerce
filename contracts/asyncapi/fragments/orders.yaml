@@ -384,7 +384,7 @@ components:
               sellerName: {type: [string, 'null']}
               fulfilmentType: {type: string, enum: [SELLER_FULFILLED, FBA_AFROTRANSACT, RETAIL_1P, PREORDER]}
               preorder: {$ref: '#/components/schemas/OrdersPreorderBlock'}
-              deliveryMethod: {type: string, enum: [CARRIER, SELLER_SHIPS, AFROTRANSACT_DELIVERY, PICKUP], description: 'CARRIER and SELLER_SHIPS are legacy (self-shipping is retired): old shipments only, never produced for a new order'}
+              deliveryMethod: {type: string, enum: [CARRIER, SELLER_SHIPS, SELLER_SELF_SHIPS, AFROTRANSACT_DELIVERY, PICKUP], description: 'CARRIER and SELLER_SHIPS are legacy history: old shipments only, never produced for a new order. SELLER_SELF_SHIPS is the seller shipping themselves at their own flat charge, produced only while the staff switch is on (off by default)'}
               serviceLevel: {type: [string, 'null'], examples: [standard, express, local, pickup, preorder_door]}
               windowId: {type: [string, 'null'], description: S272 pre-order window (PREORDER shipments)}
               fulfilment: {type: [string, 'null'], enum: [DOOR, PICKUP, null], description: S272 pre-order fulfilment}
@@ -476,7 +476,7 @@ components:
         shipmentId: {type: string, format: uuid}
         sellerOrgId: {type: string}
         fulfilmentType: {type: string, enum: [SELLER_FULFILLED, FBA_AFROTRANSACT, RETAIL_1P, PREORDER]}
-        deliveryMethod: {type: string, enum: [CARRIER, SELLER_SHIPS, AFROTRANSACT_DELIVERY, PICKUP], description: 'CARRIER and SELLER_SHIPS are legacy (self-shipping is retired): old shipments only, never produced for a new order'}
+        deliveryMethod: {type: string, enum: [CARRIER, SELLER_SHIPS, SELLER_SELF_SHIPS, AFROTRANSACT_DELIVERY, PICKUP], description: 'CARRIER and SELLER_SHIPS are legacy history: old shipments only, never produced for a new order. SELLER_SELF_SHIPS is the seller shipping themselves at their own flat charge, produced only while the staff switch is on (off by default)'}
         from: {$ref: '#/components/schemas/OrdersShipmentStatus'}
         to: {$ref: '#/components/schemas/OrdersShipmentStatus'}
         actorType: {type: string, enum: [CUSTOMER, SELLER, PLATFORM_ADMIN, FULFILMENT_OPS, CARRIER, COURIER, DELIVERY_STAFF, PICKUP_POINT, SYSTEM]}

@@ -497,6 +497,65 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/SellerAnalytics'
+  /v1/seller/self-shipping:
+    get:
+      tags:
+      - Seller self-shipping
+      summary: My own shipping charge
+      description: 'available is the staff switch sellerSelfShippingEnabled (off by default): false means the option is not offered anywhere. enabled and chargeMinor are the seller''s own setting. Staff name the organisation with org.'
+      operationId: sellerSelfShipping
+      parameters:
+      - name: org
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: currency
+        in: query
+        required: false
+        schema:
+          type: string
+          default: USD
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellerSelfShippingSetting'
+    put:
+      tags:
+      - Seller self-shipping
+      summary: Set my own shipping charge (flat, per order)
+      description: 409 orders.self-shipping-disabled while the staff switch is off. 422 orders.invalid-self-shipping-charge outside 0 to 100.00. One charge for each order package of this seller, never per product; the seller keeps it and takes responsibility for it.
+      operationId: setSellerSelfShipping
+      parameters:
+      - name: org
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: currency
+        in: query
+        required: false
+        schema:
+          type: string
+          default: USD
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SellerSelfShippingRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellerSelfShippingSetting'
+        '409':
+          description: orders.self-shipping-disabled
   /v1/seller/shipments:
     get:
       tags:
@@ -1095,6 +1154,41 @@ paths:
 
 components:
   schemas:
+    SellerSelfShippingSetting:
+      type: object
+      properties:
+        sellerOrgId:
+          type: string
+        currency:
+          type: string
+        available:
+          type: boolean
+          description: The staff switch (off by default)
+        enabled:
+          type: boolean
+        chargeMinor:
+          type: integer
+          format: int64
+        version:
+          type: integer
+          format: int64
+    SellerSelfShippingRequest:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        chargeMinor:
+          type: integer
+          format: int64
+      required:
+      - chargeMinor
+    OfferedSelfShipping:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellerSelfShippingSetting'
     PayLinkToken:
       type: object
       description: The token of the pay-now link
