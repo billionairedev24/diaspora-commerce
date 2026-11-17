@@ -41,6 +41,18 @@ groups:
           runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/KafkaDeadLetterMessages.md
           dashboard: /d/at-kafka-consumer-lag
 
+      # Go notifications consumer: events set aside in failed_event (permanent upstream 4xx, or retries exhausted).
+      # The offset is committed, so nothing is blocked, but those notifications were not created until replayed.
+      - alert: NotificationsEventsFailed
+        expr: |
+          sum by (env, reason) (increase(notifications_events_failed_total[30m])) > 0
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Notifications consumer set aside events ({{ $labels.reason }})"
+          description: "{{ $value }} events were dead-lettered in the last 30 minutes (failed_event table). upstream_client_error is usually a service token without users:read."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/NotificationsEventsFailed.md
+
       # Java consumers (platform-events): the DLQ write itself failed, so the partition is blocked on that record
       # (its offset is not committed and it is retried). Metric: events_dead_letter_failures_total.
       - alert: KafkaDeadLetterWriteFailing
