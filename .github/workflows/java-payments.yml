@@ -3,40 +3,8 @@
 # Release 1 (ADR 0011): triggers only on main and develop (and PRs into them). The release-1 branch builds the deployables instead
 # (core.yml, afrotransact-go.yml), so release-1 CI stays cheap; run this one by hand with workflow_dispatch when needed.
 name: java-payments
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
-  push:
-    branches: [main, develop]
-    paths:
-      - java/services/payments/**
-      - java/libs/**
-      - java/platform-parent/**
-      - java/config/**
-      - java/Dockerfile
-      - java/.mvn/**
-      - java/mvnw
-      - contracts/openapi/payments.yaml
-      - infra/helm/library/**
-      - .github/workflows/java-payments.yml
-      - .github/workflows/_java-service.yml
-      - .github/actions/publish-image/**
-      - .github/actions/helm-check/**
-  pull_request:
-    branches: [main, develop]
-    paths:
-      - java/services/payments/**
-      - java/libs/**
-      - java/platform-parent/**
-      - java/config/**
-      - java/Dockerfile
-      - java/.mvn/**
-      - java/mvnw
-      - contracts/openapi/payments.yaml
-      - infra/helm/library/**
-      - .github/workflows/java-payments.yml
-      - .github/workflows/_java-service.yml
-      - .github/actions/publish-image/**
-      - .github/actions/helm-check/**
   workflow_dispatch:
 
 permissions:

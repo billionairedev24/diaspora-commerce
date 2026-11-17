@@ -18,7 +18,7 @@
 #   destroy               delete the server (and a Postgres running on it), the state bucket and the state user.
 #                         Type ovh-vps in confirm-destroy.
 name: ovh-vps
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
   workflow_dispatch:
     inputs:

@@ -311,6 +311,12 @@ def main() -> int:
     args = parser.parse_args()
 
     files = render()
+    # While .github/ci-manual-only exists (tools/ci/manual_only.py disable) the generated workflows stay manual-only.
+    if (ROOT / ".github" / "ci-manual-only").exists():
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from manual_only import transform  # noqa: E402  (sibling script)
+
+        files = {path: transform(content) for path, content in files.items()}
     stale = []
     for path, content in files.items():
         current = path.read_text(encoding="utf-8") if path.exists() else None

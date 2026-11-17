@@ -12,26 +12,8 @@
 #   supply-chain checks: Go toolchain pins agree, third-party actions SHA-pinned, security ignores not expired
 #   OWASP ZAP baseline against the dev environment (scheduled / manual)
 name: security
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
-  push:
-    branches: [main, release-1]
-  pull_request:
-    paths:
-      - .github/workflows/**
-      - .github/actions/**
-      - go/go.work
-      - go/**/go.mod
-      - go/services/*/Dockerfile
-      - tools/ci/check_*_pins.py
-      - Makefile
-      - CLAUDE.md
-      - trivy.yaml
-      - .gitleaks.toml
-      - tools/security/**
-  schedule:
-    - cron: "17 3 * * 1" # weekly, Monday 03:17 UTC
-    - cron: "43 4 * * *" # daily: expiring ignores and fresh advisories
   workflow_dispatch:
 
 permissions:

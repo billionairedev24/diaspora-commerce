@@ -7,12 +7,8 @@
 #               sync, capacity of the one node, shellcheck, secrets renderer test) and the Argo CD render of every environment through kubeconform.
 # No path filter on purpose: a required check must always report. Read-only token.
 name: release-1-parity
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
-  push:
-    branches: [release-1]
-  pull_request:
-    branches: [release-1]
   workflow_dispatch:
 
 permissions:

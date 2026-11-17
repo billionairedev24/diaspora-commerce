@@ -1,18 +1,7 @@
 # tools/ops/kafka-replay (Go): vet and test on every change to the tool. No image; operators build it (README).
 name: tool-kafka-replay
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
-  push:
-    branches: [main, release-1]
-    paths:
-      - tools/ops/kafka-replay/**
-      - go/.golangci.yml
-      - .github/workflows/tool-kafka-replay.yml
-  pull_request:
-    paths:
-      - tools/ops/kafka-replay/**
-      - go/.golangci.yml
-      - .github/workflows/tool-kafka-replay.yml
   workflow_dispatch:
 
 permissions:

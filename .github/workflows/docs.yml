@@ -1,18 +1,8 @@
 # Developer portal (docs/portal, Docusaurus) -> Cloudflare Pages. PRs get a preview deployment (branch
 # alias), main deploys production. Skips cleanly until docs/portal exists.
 name: docs
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
-  pull_request:
-    paths:
-      - docs/**
-      - contracts/**
-      - .github/workflows/docs.yml
-  push:
-    branches: [main, release-1]
-    paths:
-      - docs/**
-      - contracts/**
   workflow_dispatch:
 
 permissions:

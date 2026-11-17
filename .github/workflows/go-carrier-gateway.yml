@@ -3,32 +3,8 @@
 # Release 1 (ADR 0011): triggers only on main and develop (and PRs into them). The release-1 branch builds the deployables instead
 # (core.yml, afrotransact-go.yml), so release-1 CI stays cheap; run this one by hand with workflow_dispatch when needed.
 name: go-carrier-gateway
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
-  push:
-    branches: [main, develop]
-    paths:
-      - go/services/carrier-gateway/**
-      - go/pkg/**
-      - go/.golangci.yml
-      - contracts/openapi/carrier-gateway.yaml
-      - infra/helm/library/**
-      - .github/workflows/go-carrier-gateway.yml
-      - .github/workflows/_go-service.yml
-      - .github/actions/publish-image/**
-      - .github/actions/helm-check/**
-  pull_request:
-    branches: [main, develop]
-    paths:
-      - go/services/carrier-gateway/**
-      - go/pkg/**
-      - go/.golangci.yml
-      - contracts/openapi/carrier-gateway.yaml
-      - infra/helm/library/**
-      - .github/workflows/go-carrier-gateway.yml
-      - .github/workflows/_go-service.yml
-      - .github/actions/publish-image/**
-      - .github/actions/helm-check/**
   workflow_dispatch:
 
 permissions:

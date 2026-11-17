@@ -2,27 +2,8 @@
 # storefront (web): PR -> Cloudflare preview URL; main and release-1 -> dev; manual dispatch -> uat/prod (prod needs approval, and only
 # a commit that release-1 contains: _web-app.yml). Pushes to the two lines share one concurrency group so dev is never deployed twice at once.
 name: web-storefront
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
-  push:
-    branches: [main, release-1]
-    paths:
-      - web/apps/storefront/**
-      - web/packages/**
-      - web/package.json
-      - web/pnpm-lock.yaml
-      - web/pnpm-workspace.yaml
-      - .github/workflows/web-storefront.yml
-      - .github/workflows/_web-app.yml
-  pull_request:
-    paths:
-      - web/apps/storefront/**
-      - web/packages/**
-      - web/package.json
-      - web/pnpm-lock.yaml
-      - web/pnpm-workspace.yaml
-      - .github/workflows/web-storefront.yml
-      - .github/workflows/_web-app.yml
   workflow_dispatch:
     inputs:
       environment:

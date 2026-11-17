@@ -13,7 +13,7 @@
 # A green core.yml / afrotransact-go.yml run still produces the verified image (label and annotation = true) exactly as before.
 # Steps for the owner: docs/runbooks/release-1-go-live.md, "Interim: unverified UAT images".
 name: uat-unverified-image
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
   workflow_dispatch:
     inputs:

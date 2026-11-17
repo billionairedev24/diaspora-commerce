@@ -6,23 +6,8 @@
 #   apply  : main -> dev automatically (GitHub environment dev-infra); uat/prod only via workflow_dispatch
 #            in uat-infra / prod-infra (prod-infra has required reviewers)
 name: tofu
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
-  pull_request:
-    paths:
-      - infra/tofu/**
-      - infra/cloudflare/**
-      - infra/policy/**
-      - .github/workflows/tofu.yml
-      - .github/actions/tofu-init/**
-      - .github/actions/cloud-login/**
-  push:
-    branches: [main, release-1]
-    paths:
-      - infra/tofu/**
-      - infra/cloudflare/**
-      - infra/policy/**
-      - .github/workflows/tofu.yml
   workflow_dispatch:
     inputs:
       environment:

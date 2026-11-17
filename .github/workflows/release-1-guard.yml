@@ -3,14 +3,8 @@
 # `git push origin HEAD:release-1` (docs/runbooks/release-1-deploy.md, "Keeping main in release-1").
 # Runs on every push to release-1, on pull requests into it, daily (main moves without release-1 moving) and by hand.
 name: release-1-guard
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
-  push:
-    branches: [release-1]
-  pull_request:
-    branches: [release-1]
-  schedule:
-    - cron: "17 5 * * *"
   workflow_dispatch:
 
 permissions:

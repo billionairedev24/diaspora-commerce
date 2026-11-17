@@ -10,10 +10,8 @@
 # otherwise GITHUB_TOKEN is used and the CI is started with workflow_dispatch on the branch. Scheduled workflows run from the default branch:
 # release-1 should be the default branch (docs/runbooks/release-1-deploy.md, "Settings the owner changes").
 name: release-1-sync
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
-  schedule:
-    - cron: "41 4 * * *"
   workflow_dispatch:
     inputs:
       include_develop:

@@ -9,12 +9,8 @@
 # Triggers only on release-1: the per-service workflows (java-<service>.yml) run on main and develop. Prod is promoted by hand
 # (promote.yml, service afrotransact-core). Runbook: docs/runbooks/release-1-deploy.md.
 name: core
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
-  push:
-    branches: [release-1]
-  pull_request:
-    branches: [release-1]
   workflow_dispatch:
 
 permissions:

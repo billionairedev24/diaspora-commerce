@@ -2,16 +2,8 @@
 # java/platform-parent/pom.xml). Non-blocking for now: the job reports but never fails the pull request.
 # Hand-written (tools/ci/gen_workflows.py generates only the per-service, web and promote workflows).
 name: reproducible-build
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
-  pull_request:
-    paths:
-      - java/platform-parent/pom.xml
-      - java/libs/**
-      - tools/ci/reproducible-build-check.sh
-      - .github/workflows/reproducible-build.yml
-  schedule:
-    - cron: "0 4 * * 1"
   workflow_dispatch:
 
 permissions:

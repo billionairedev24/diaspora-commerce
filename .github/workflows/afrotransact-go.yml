@@ -7,12 +7,8 @@
 #   deploy-dev: pins the signed digest in values-dev.yaml on release-1 (Argo CD syncs afrotransact-go-dev automatically)
 # Triggers only on release-1: go-<service>.yml run on main and develop. Every job is skipped until go/apps/afrotransact-go/go.mod exists.
 name: afrotransact-go
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
-  push:
-    branches: [release-1]
-  pull_request:
-    branches: [release-1]
   workflow_dispatch:
 
 permissions:

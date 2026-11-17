@@ -1,17 +1,9 @@
 # docs/backlog/backlog.csv must stay importable into Jira: parses, expected header, unique ids, valid
 # statuses/types/priorities, stories point at existing epics.
 name: backlog
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
-  pull_request:
-    paths:
-      - docs/backlog/**
-      - tools/backlog/**
-      - .github/workflows/backlog.yml
-  push:
-    branches: [main, release-1]
-    paths:
-      - docs/backlog/**
+  workflow_dispatch:
 
 permissions:
   contents: read

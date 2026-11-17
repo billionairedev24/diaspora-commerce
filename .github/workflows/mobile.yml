@@ -4,16 +4,8 @@
 #   workflow_dispatch                -> build or OTA update for a chosen app/profile (development | preview | production)
 # Channels map 1:1 to profiles in each app's eas.json: development, preview, production.
 name: mobile
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
-  push:
-    tags:
-      - "mobile-v*"
-      - "mobile-customer-v*"
-      - "mobile-driver-v*"
-    branches: [main, release-1]
-    paths:
-      - mobile/**
   workflow_dispatch:
     inputs:
       app:
