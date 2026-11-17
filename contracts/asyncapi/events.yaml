@@ -9139,12 +9139,13 @@ components:
                 $ref: '#/components/schemas/OrdersPreorderBlock'
               deliveryMethod:
                 type: string
-                description: CARRIER and SELLER_SHIPS are legacy (self-shipping is retired): old shipments only, never produced for a new order
                 enum:
                 - CARRIER
                 - SELLER_SHIPS
                 - AFROTRANSACT_DELIVERY
                 - PICKUP
+                description: 'CARRIER and SELLER_SHIPS are legacy (self-shipping is retired): old shipments only, never produced
+                  for a new order'
               serviceLevel:
                 type:
                 - string
@@ -9450,12 +9451,13 @@ components:
           - PREORDER
         deliveryMethod:
           type: string
-          description: CARRIER and SELLER_SHIPS are legacy (self-shipping is retired): old shipments only, never produced for a new order
           enum:
           - CARRIER
           - SELLER_SHIPS
           - AFROTRANSACT_DELIVERY
           - PICKUP
+          description: 'CARRIER and SELLER_SHIPS are legacy (self-shipping is retired): old shipments only, never produced
+            for a new order'
         from:
           $ref: '#/components/schemas/OrdersShipmentStatus'
         to:
