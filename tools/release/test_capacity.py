@@ -3,6 +3,7 @@
 import contextlib
 import io
 import pathlib
+import re
 import shutil
 import sys
 import tempfile
@@ -52,12 +53,13 @@ class Capacity(unittest.TestCase):
 
     def test_core_request_below_the_schedule_at_the_batch_production_is_at(self):
         plan = self.root / "infra/argocd/launch-set/release-1.yaml"
-        text = plan.read_text().replace("  prod:\n    afrotransact-core: []\n    afrotransact-go: []",
-                                        "  prod:\n    afrotransact-core: [catalog, tax-returns]\n    afrotransact-go: [cart, geo]")
+        # Production runs the whole launch set now: put it back at batch 1 (the state this check is about).
+        text = re.sub(r"(  prod:\n)    afrotransact-core: \[[^\]]*\]\n    afrotransact-go: \[[^\]]*\]",
+                      r"\1    afrotransact-core: [catalog, tax-returns]\n    afrotransact-go: [cart, geo]", plan.read_text())
         self.assertNotEqual(text, plan.read_text())
         plan.write_text(text)
         v = self.root / "java/apps/core/deploy/helm/values-prod.yaml"
-        v.write_text(v.read_text().replace("memory: 768Mi}", "memory: 512Mi}"))
+        v.write_text(v.read_text().replace("memory: 1536Mi}", "memory: 512Mi}"))
         rc, out = self.run_check(self.root)
         self.assertEqual(rc, 1)
         self.assertIn("reserves 512 Mi for core, the schedule says 768 Mi", out)
