@@ -49,7 +49,7 @@ func (l labelled) Gather() ([]*dto.MetricFamily, error) {
 		}
 		out = append(out, f)
 	}
-	return out, err
+	return out, err //nolint:wrapcheck // the Gatherer contract: partial families and the gather error pass through unchanged
 }
 
 func isProcessFamily(name string) bool {

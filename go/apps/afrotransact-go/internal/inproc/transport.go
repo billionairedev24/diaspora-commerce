@@ -60,7 +60,7 @@ func (t *transportImpl) RoundTrip(req *http.Request) (*http.Response, error) {
 	host := req.URL.Hostname()
 	name, ok := strings.CutSuffix(host, HostSuffix)
 	if !ok {
-		return t.fallback.RoundTrip(req)
+		return t.fallback.RoundTrip(req) //nolint:wrapcheck // a RoundTripper hands the fallback transport's error back unchanged (callers match its types)
 	}
 	t.mu.RLock()
 	h := t.handlers[name]
@@ -113,7 +113,7 @@ func (r *recorder) Write(b []byte) (int, error) {
 	if r.status == 0 {
 		r.status = http.StatusOK
 	}
-	return r.body.Write(b)
+	return r.body.Write(b) //nolint:wrapcheck // io.Writer: bytes.Buffer.Write never fails, and the error would be passed through unchanged anyway
 }
 
 func (r *recorder) Flush() {}

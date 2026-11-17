@@ -83,7 +83,7 @@ func (h *hostImpl) route(r *http.Request) *running {
 		if pattern == "" {
 			continue
 		}
-		if standardPaths[patternPath(pattern)] && !(m == h.edge && !probePaths[patternPath(pattern)]) {
+		if standardPaths[patternPath(pattern)] && (m != h.edge || probePaths[patternPath(pattern)]) {
 			continue
 		}
 		return m

@@ -162,7 +162,7 @@ func TestRealPromiseModuleBootsInsideTheHost(t *testing.T) {
 	defer func() { _ = h.Close(t.Context()) }()
 	get := func(path string) *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()
-		h.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		h.Handler().ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil))
 		return rec
 	}
 	if rec := get("/modules/promise/openapi.yaml"); rec.Code != 200 || !strings.Contains(rec.Body.String(), "openapi") {

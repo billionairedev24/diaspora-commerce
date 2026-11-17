@@ -56,7 +56,7 @@ func run() error {
 	h, err := host.New(host.Config{Env: env, Getenv: os.LookupEnv, Logger: log, Transport: transport,
 		MetricsPublic: mgmtAddr == "" && !sharedEnv(env)}, registry.Specs())
 	if err != nil {
-		return err
+		return fmt.Errorf("build host: %w", err)
 	}
 	for _, m := range h.Modules() {
 		log.Info("module", "name", m.Name, "enabled", m.Enabled, "mode", m.Mode, "mount", string(m.Mount))
@@ -74,7 +74,7 @@ func run() error {
 
 	if err := h.Start(ctx); err != nil {
 		_ = h.Close(context.WithoutCancel(ctx))
-		return err
+		return fmt.Errorf("start host: %w", err)
 	}
 
 	addr := ":" + firstNonEmpty(os.Getenv("AFROTRANSACT_GO_PORT"), os.Getenv("PORT"), defaultPort)

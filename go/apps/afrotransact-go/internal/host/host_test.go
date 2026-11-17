@@ -100,12 +100,9 @@ func env(m map[string]string) func(string) (string, bool) {
 	return func(k string) (string, bool) { v, ok := m[k]; return v, ok }
 }
 
-func get(t *testing.T, h http.Handler, path string, hdr ...string) *httptest.ResponseRecorder {
+func get(t *testing.T, h http.Handler, path string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, path, nil)
-	for i := 0; i+1 < len(hdr); i += 2 {
-		req.Header.Set(hdr[i], hdr[i+1])
-	}
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	return rec
@@ -456,7 +453,7 @@ func TestInProcessCallRunsTheCalleesAuthMiddleware(t *testing.T) {
 	h := newHost(t, nil, []host.Spec{search, bff})
 	client := &http.Client{Transport: h.Transport()}
 
-	req, _ := http.NewRequest(http.MethodGet, base+"/v1/search?q=berbere", nil)
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, base+"/v1/search?q=berbere", nil)
 	req.Header.Set("Authorization", "Bearer token-123")
 	resp, err := client.Do(req)
 	if err != nil {
@@ -467,7 +464,8 @@ func TestInProcessCallRunsTheCalleesAuthMiddleware(t *testing.T) {
 	if resp.StatusCode != 200 || string(body) != "results:berbere" || gotAuth.Load() != "Bearer token-123" {
 		t.Fatalf("in-process call = %d %q auth=%v", resp.StatusCode, body, gotAuth.Load())
 	}
-	resp, err = client.Get(base + "/v1/search?q=x")
+	noAuth, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, base+"/v1/search?q=x", nil)
+	resp, err = client.Do(noAuth)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -480,21 +478,25 @@ func TestInProcessCallRunsTheCalleesAuthMiddleware(t *testing.T) {
 	if !strings.Contains(metrics, `http_server_requests_total{method="GET",module="search",`) {
 		t.Errorf("the callee's request metrics should count in-process calls: %.400s", metrics)
 	}
-	if _, err := client.Get("http://geo" + inproc.HostSuffix + "/x"); !errors.Is(err, inproc.ErrModuleDown) {
+	geoReq, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://geo"+inproc.HostSuffix+"/x", nil)
+	if resp, err := client.Do(geoReq); !errors.Is(err, inproc.ErrModuleDown) {
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
 		t.Errorf("a call to a module that is not running = %v", err)
 	}
 }
 
 func TestSharedDatabaseSuppliesPerModuleSchemas(t *testing.T) {
 	got := map[string]string{}
-	mk := func(name string, schema string) host.Spec {
+	mk := func(name string) host.Spec {
 		return spec(name, nil, func(o *fakeOpts) {
 			o.onDeps = func(d module.Deps) { got[name], _ = d.Lookup("DB_URL") }
 		}, func(o *fakeOpts) {})
 	}
-	cart, geo := mk("cart", "cart"), mk("geo", "geo,public")
+	cart, geo := mk("cart"), mk("geo")
 	cart.Schema, geo.Schema = "cart", "geo,public"
-	noDB := mk("promise", "")
+	noDB := mk("promise")
 	newHost(t, map[string]string{"AT_GO_DB_URL": "postgres://app:pw@db:5432/go?sslmode=require", "GEO_DB_URL": "postgres://geo:pw@db:5432/go"},
 		[]host.Spec{cart, geo, noDB})
 	if want := "postgres://app:pw@db:5432/go?search_path=cart&sslmode=require"; got["cart"] != want {

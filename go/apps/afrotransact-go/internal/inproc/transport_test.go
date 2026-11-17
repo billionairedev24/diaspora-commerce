@@ -21,7 +21,7 @@ func TestServesThroughTheHandlerWithMethodHeadersBodyAndQuery(t *testing.T) {
 		w.WriteHeader(http.StatusCreated)
 		_, _ = w.Write([]byte(r.Method + ":" + string(b)))
 	}))
-	req, _ := http.NewRequest(http.MethodPost, inproc.URL("cart")+"/v1/x?a=1", strings.NewReader("body"))
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, inproc.URL("cart")+"/v1/x?a=1", strings.NewReader("body"))
 	req.Header.Set("Authorization", "Bearer t")
 	resp, err := (&http.Client{Transport: tr}).Do(req)
 	if err != nil {
@@ -41,7 +41,8 @@ func TestOtherHostsGoToTheFallback(t *testing.T) {
 	real := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "network") }))
 	defer real.Close()
 	tr := inproc.New(nil)
-	resp, err := (&http.Client{Transport: tr}).Get(real.URL)
+	realReq, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, real.URL, nil)
+	resp, err := (&http.Client{Transport: tr}).Do(realReq)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,14 +54,21 @@ func TestOtherHostsGoToTheFallback(t *testing.T) {
 
 func TestMissingModuleAndCancelledContext(t *testing.T) {
 	tr := inproc.New(nil)
-	if _, err := (&http.Client{Transport: tr}).Get(inproc.URL("geo") + "/x"); !errors.Is(err, inproc.ErrModuleDown) {
+	downReq, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, inproc.URL("geo")+"/x", nil)
+	if resp, err := (&http.Client{Transport: tr}).Do(downReq); !errors.Is(err, inproc.ErrModuleDown) {
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
 		t.Errorf("err = %v", err)
 	}
 	tr.Register("geo", http.NotFoundHandler())
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, inproc.URL("geo")+"/x", nil)
-	if _, err := (&http.Client{Transport: tr}).Do(req); !errors.Is(err, context.Canceled) {
+	if resp, err := (&http.Client{Transport: tr}).Do(req); !errors.Is(err, context.Canceled) {
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
 		t.Errorf("err = %v", err)
 	}
 }

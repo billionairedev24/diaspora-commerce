@@ -6,7 +6,7 @@ package registry
 import (
 	"github.com/billionairedev24/diaspora-commerce/go/apps/afrotransact-go/internal/host"
 	authzsync "github.com/billionairedev24/diaspora-commerce/go/services/authz-sync"
-	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway"
+	carriergateway "github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway"
 	"github.com/billionairedev24/diaspora-commerce/go/services/cart"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/bffmodule"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo"
