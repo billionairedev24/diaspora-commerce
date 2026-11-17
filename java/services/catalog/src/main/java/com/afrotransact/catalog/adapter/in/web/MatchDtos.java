@@ -77,7 +77,9 @@ final class MatchDtos {
                     + "barcode is invalid or restricted, or a wrong-match report on it is open)") boolean canCreate,
             List<BlockerDto> createBlockers,
             @Schema(description = "A corrected barcode when only the check digit is wrong") String suggestion,
-            @Schema(description = "Plain words for INVALID and RESTRICTED") String message) {
+            @Schema(description = "Plain words for INVALID and RESTRICTED") String message,
+            @Schema(description = "What the matched page's category allows (listing rules D9): NEW alone where condition "
+                    + "is not asked") List<ItemCondition> allowedConditions) {
 
         static MatchResponse of(MatchResult r) {
             return new MatchResponse(r.result().name(), r.gtin14(),
@@ -85,7 +87,8 @@ final class MatchDtos {
                     PageImageDto.of(r.image()), r.category(), r.categoryId(), r.variantOptions(),
                     r.variants().stream().map(MatchVariantDto::of).toList(), r.canOffer(),
                     r.blockers().stream().map(BlockerDto::of).toList(), r.canCreate(),
-                    r.createBlockers().stream().map(BlockerDto::of).toList(), r.suggestion(), r.message());
+                    r.createBlockers().stream().map(BlockerDto::of).toList(), r.suggestion(), r.message(),
+                    r.allowedConditions());
         }
     }
 

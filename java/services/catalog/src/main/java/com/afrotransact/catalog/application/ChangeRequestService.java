@@ -78,7 +78,14 @@ public interface ChangeRequestService {
      * @param title    the page title now
      * @param overdue  waiting past its SLA
      * @param ageHours hours since it was filed
+     * @param resultAtin NEW_VARIANT that staff applied: the ATIN of the variant that now exists on the page (the seller
+     *                   sells it next); null otherwise
      */
-    record ChangeRequestView(ProductChangeRequest request, String title, boolean overdue, long ageHours) {
+    record ChangeRequestView(ProductChangeRequest request, String title, boolean overdue, long ageHours,
+                             String resultAtin) {
+
+        public ChangeRequestView(ProductChangeRequest request, String title, boolean overdue, long ageHours) {
+            this(request, title, overdue, ageHours, null);
+        }
     }
 }

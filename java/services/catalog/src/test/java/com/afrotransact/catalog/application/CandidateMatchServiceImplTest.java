@@ -31,16 +31,21 @@ import com.afrotransact.catalog.application.CandidateMatchService.Choice;
 import com.afrotransact.catalog.application.CandidateMatchService.DecisionCommand;
 import com.afrotransact.catalog.application.CandidateMatchService.DecisionResult;
 import com.afrotransact.catalog.application.CandidateMatchService.RowKind;
+import com.afrotransact.catalog.application.CandidateMatchService.SizeRequestCommand;
+import com.afrotransact.catalog.application.CandidateMatchService.SizeRequestOutcome;
+import com.afrotransact.catalog.application.CandidateMatchService.SizeRequestResult;
 import com.afrotransact.catalog.application.CandidateMatchService.RowMatch;
 import com.afrotransact.catalog.application.OfferEligibilityService.Eligibility;
 import com.afrotransact.catalog.domain.Atin;
 import com.afrotransact.catalog.domain.CatalogPolicy;
 import com.afrotransact.catalog.domain.CategoryLevel;
 import com.afrotransact.catalog.domain.CategoryNode;
+import com.afrotransact.catalog.domain.ChangeRequestType;
 import com.afrotransact.catalog.domain.ItemCondition;
 import com.afrotransact.catalog.domain.ListingOwner;
 import com.afrotransact.catalog.domain.ListingOwnerKind;
 import com.afrotransact.catalog.domain.Product;
+import com.afrotransact.catalog.domain.ProductChangeRequest;
 import com.afrotransact.catalog.domain.ProductImage;
 import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.Variant;
@@ -48,6 +53,7 @@ import com.afrotransact.catalog.domain.matching.CandidateRanker.Kind;
 import com.afrotransact.catalog.domain.matching.MatchThresholds;
 import com.afrotransact.catalog.port.CandidateRecall;
 import com.afrotransact.catalog.port.CandidateRecall.RecallUnavailable;
+import com.afrotransact.catalog.port.ChangeRequestRepository;
 import com.afrotransact.catalog.port.CategoryRepository;
 import com.afrotransact.catalog.port.MatchDecisionRepository;
 import com.afrotransact.catalog.port.MatchDecisionRepository.Decision;
@@ -77,6 +83,8 @@ class CandidateMatchServiceImplTest {
     private final MatchDecisionRepository decisions = mock(MatchDecisionRepository.class);
     private final ActorResolver actors = mock(ActorResolver.class);
     private final MatchMetrics metrics = mock(MatchMetrics.class);
+    private final ChangeRequestRepository requests = mock(ChangeRequestRepository.class);
+    private final ChangeRequestEvents requestEvents = mock(ChangeRequestEvents.class);
     private final Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
     private final SearchRateLimiter limiter = new SearchRateLimiterImpl(clock);
     private final MatchThresholds thresholds = new MatchThresholds(45, 75, 6, 30, 3, 5, 2);
@@ -86,6 +94,9 @@ class CandidateMatchServiceImplTest {
     @BeforeEach
     void setUp() {
         when(settings.current()).thenReturn(POLICY);
+        when(requests.findByProduct(any(), anyString())).thenReturn(List.of());
+        when(requests.search(any())).thenReturn(new ChangeRequestRepository.Page(List.of(), 0, 0, 1));
+        when(requests.insert(any())).thenAnswer(i -> i.getArgument(0));
         when(actors.current()).thenReturn(new Actor("user_b", PrincipalType.SELLER_MEMBER, Optional.of("org_b"), Set.of(),
                 Set.of(CatalogPermissions.WRITE)));
         when(categories.findById(RICE)).thenReturn(Optional.of(node(RICE, "Grocery › Pantry › Rice")));
@@ -96,7 +107,7 @@ class CandidateMatchServiceImplTest {
             return new Eligibility(v.atin().value(), p.atin().value(), true, List.of(), List.of(ItemCondition.NEW), "org_a");
         });
         service = new CandidateMatchServiceImpl(recall, products, categories, eligibility, settings, decisions, limiter,
-                thresholds, actors, metrics, clock);
+                thresholds, actors, metrics, requests, requestEvents, clock);
     }
 
     private static CategoryNode node(UUID id, String path) {
@@ -407,5 +418,123 @@ class CandidateMatchServiceImplTest {
         index(live("Leather Oxford Shoes", "Clarks", SHOES));
 
         assertThat(service.matchRow("org_b", "Tilda Basmati Rice 5kg", "Tilda", RICE).kind()).isEqualTo(RowKind.NONE);
+    }
+
+    private SizeRequestResult askSize(Product page, String size) {
+        return service.requestSize(new SizeRequestCommand("tilda basmati rice 5kg", RICE,
+                page.variants().getFirst().atin().value(), size, null, null));
+    }
+
+    @Test
+    void aSellerWhoSellsADifferentSizeFilesAVariantRequestInsteadOfBeingBlocked() {
+        Product exact = live("Tilda Basmati Rice 5kg", "Tilda", RICE);
+        index(exact);
+
+        SizeRequestResult result = askSize(exact, "1kg");
+
+        assertThat(result.outcome()).isEqualTo(SizeRequestOutcome.REQUESTED);
+        assertThat(result.size()).isEqualTo("1 kg");
+        ArgumentCaptor<ProductChangeRequest> filed = ArgumentCaptor.forClass(ProductChangeRequest.class);
+        verify(requests).insert(filed.capture());
+        ProductChangeRequest r = filed.getValue();
+        assertThat(r.type()).isEqualTo(ChangeRequestType.NEW_VARIANT);
+        assertThat(r.requestedByOrg()).isEqualTo("org_b");
+        assertThat(r.payload()).containsEntry("source", "SELLER_SIZE").containsEntry("options", Map.of("Size", "1 kg"))
+                .containsEntry("existingOptions", Map.of("Size", "5 kg"));
+        verify(requestEvents).created(eq(r), eq(exact), any());
+    }
+
+    @Test
+    void aSizeThePageAlreadyHasIsSoldNotRequested() {
+        Product exact = live("Tilda Basmati Rice 5kg", "Tilda", RICE);
+        index(exact);
+
+        SizeRequestResult result = askSize(exact, "5000 g");
+
+        assertThat(result.outcome()).isEqualTo(SizeRequestOutcome.ALREADY_ON_PAGE);
+        assertThat(result.existingAtin()).isEqualTo(exact.variants().getFirst().atin().value());
+        assertThat(result.canOffer()).isTrue();
+        verify(requests, never()).insert(any());
+    }
+
+    @Test
+    void theSameSizeAskedTwiceIsOneRequest() {
+        Product exact = live("Tilda Basmati Rice 5kg", "Tilda", RICE);
+        index(exact);
+        ProductChangeRequest waiting = ProductChangeRequest.filed(exact.id(), exact.atin().value(), null, null,
+                ChangeRequestType.NEW_VARIANT, "MASS:100000:1", Map.of("options", Map.of("Size", "1 kg")), null, "org_b",
+                "user_b", NOW, NOW.plusSeconds(3600));
+        when(requests.findByProduct(exact.id(), "org_b")).thenReturn(List.of(waiting));
+
+        SizeRequestResult result = askSize(exact, "1 kg");
+
+        assertThat(result.outcome()).isEqualTo(SizeRequestOutcome.ALREADY_REQUESTED);
+        assertThat(result.requestId()).isEqualTo(waiting.id());
+        verify(requests, never()).insert(any());
+    }
+
+    @Test
+    void aTextThatIsNotASizeIsRefusedInPlainWords() {
+        Product exact = live("Tilda Basmati Rice 5kg", "Tilda", RICE);
+        index(exact);
+
+        assertThatThrownBy(() -> askSize(exact, "a big bag")).isInstanceOf(BusinessRuleException.class)
+                .extracting("code").isEqualTo("catalog.variant-size-invalid");
+    }
+
+    @Test
+    void aPageThatWasNotInTheListTakesNoSizeRequest() {
+        index(live("Tilda Basmati Rice 5kg", "Tilda", RICE));
+        Product hidden = live("Leather Oxford Shoes", "Clarks", SHOES);
+
+        assertThatThrownBy(() -> askSize(hidden, "1 kg")).isInstanceOf(BusinessRuleException.class)
+                .extracting("code").isEqualTo("catalog.match-choice-not-shown");
+    }
+
+    @Test
+    void anOrganisationThatCannotSellOnThePageCannotAskForASizeOnIt() {
+        Product exact = live("Tilda Basmati Rice 5kg", "Tilda", RICE);
+        index(exact);
+        doReturn(new Eligibility(exact.variants().getFirst().atin().value(), exact.atin().value(), false,
+                List.of(new Blocker("offers.selling-approval-required", "Approval needed")), List.of(ItemCondition.NEW),
+                "org_a")).when(eligibility).evaluate(any(), any(), any());
+
+        assertThatThrownBy(() -> askSize(exact, "1 kg")).isInstanceOf(BusinessRuleException.class)
+                .extracting("code").isEqualTo("catalog.variant-request-blocked");
+    }
+
+    @Test
+    void tooManyWaitingSizeRequestsAreLimitedButNeverForever() {
+        Product exact = live("Tilda Basmati Rice 5kg", "Tilda", RICE);
+        index(exact);
+        when(requests.search(any())).thenReturn(new ChangeRequestRepository.Page(List.of(), 20, 0, 1));
+
+        assertThatThrownBy(() -> askSize(exact, "1 kg")).isInstanceOf(BusinessRuleException.class)
+                .extracting("code").isEqualTo("catalog.match-rate-limited");
+    }
+
+    @Test
+    void aPageThatVariesByColourSendsTheSellerToAddItAsNew() {
+        Variant red = new Variant(UUID.randomUUID(), new Atin("AT00009001"), "SKU-9", null, true, Map.of("Color", "Red"), 899,
+                "USD", 5);
+        Product page = new Product(UUID.randomUUID(), new Atin("AT00009000"), new ListingOwner(ListingOwnerKind.SELLER, "org_a"),
+                RICE, null, "grocery", "Tilda Basmati Rice 5kg", Map.of("brand", "Tilda"),
+                List.of(new ProductImage("https://cdn.example.com/9.jpg", 1200, 1200, 1000, "image/jpeg", "")), "Color",
+                List.of(red), ProductStatus.LIVE, null, NOW, NOW, 0);
+        index(page);
+
+        assertThatThrownBy(() -> askSize(page, "1 kg")).isInstanceOf(BusinessRuleException.class)
+                .extracting("code").isEqualTo("catalog.variant-theme-unsupported");
+    }
+
+    @Test
+    void theCandidateCarriesWhatConditionsItsCategoryAllows() {
+        Product rice = live("Tilda Basmati Rice 5kg", "Tilda", RICE);
+        index(rice);
+        doReturn(new Eligibility(rice.variants().getFirst().atin().value(), rice.atin().value(), true, List.of(),
+                List.of(ItemCondition.NEW, ItemCondition.USED_GOOD), "org_a")).when(eligibility).evaluate(any(), any(), any());
+
+        assertThat(search("tilda basmati rice 5kg", RICE).candidates().getFirst().allowedConditions())
+                .containsExactly(ItemCondition.NEW, ItemCondition.USED_GOOD);
     }
 }

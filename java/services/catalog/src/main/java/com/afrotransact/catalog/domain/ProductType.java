@@ -37,8 +37,17 @@ public record ProductType(String code, String label, List<AttributeDefinition> a
         return traits.sizingTrait();
     }
 
+    /**
+     * The theme of this name. Every type also knows the built-in {@link VariationTheme#SIZE} (one dimension, any value): it is
+     * what a page without variations gets when a seller's different size is approved (SizeVariantRules), so the page can be
+     * edited and read like any other whatever its product type's own themes are.
+     */
     public Optional<VariationTheme> theme(String name) {
-        return themes.stream().filter(t -> t.name().equals(name)).findFirst();
+        Optional<VariationTheme> own = themes.stream().filter(t -> t.name().equals(name)).findFirst();
+        if (own.isEmpty() && VariationTheme.SIZE.name().equals(name)) {
+            return Optional.of(VariationTheme.SIZE);
+        }
+        return own;
     }
 
     /**
