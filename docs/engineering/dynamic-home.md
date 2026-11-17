@@ -242,6 +242,60 @@ Not built or not verified here: S415 on real Meilisearch and Elasticsearch (the 
 "Book again", a freshness age (search hits carry no listing date, so `maxAgeDays` is inactive), per-variant weights, and
 everything in the browser (S427 analytics, S428 budgets, S429 e2e).
 
+## Part 2b. Filling short rails (no dead area)
+
+A product rail with fewer cards than fit the row (seven on a wide screen, `domain.RailFillTarget`) must not leave a hollow
+white area beside it. The gateway fills it, with the rail, in the same `GET /v1/home` response (and the same
+`GET /v1/home/recently-viewed` response): one request, nothing added after load.
+
+### Owner view (plain language)
+
+When a row is short, the empty space is used in this order, and the first one that has something wins:
+
+1. **More products** that fit the row: the same department, nearer sellers first, popular and in stock, with a real photo.
+   Only rows whose title stays true get this (a generic row, "Top in {department}", Groceries; a Deals row only with real
+   deals). "Delivered by Friday", "Near you", seller and community spotlights, "Based on your orders" and "Recently
+   viewed" are never topped up with other products, because the title would be wrong.
+2. **A Sponsored tile**: first a paid "Rail fill" placement staff or an advertiser bought (targeted by department, ZIP prefix and
+   state, scheduled, reviewed like every paid creative), then promoted products from the sellers' sponsored-products
+   auction for that department. Always labelled "Sponsored" with the advertiser's name; only products in stock with a real
+   photo; an advert without an advertiser is never shown.
+3. **A staff editorial tile** (a "Rail fill" placement with no advertiser): a promo or editorial card, not labelled as an ad.
+4. **Nothing eligible**: no placeholder. The row narrows to its own width, left-aligned, and the section wraps its cards.
+
+Never in a fill: a product already on the page, a product the shopper has in the cart or recently viewed (the existing
+exclusions), a sold-out product, a photo-less product, an icon or an emoji. A seasonal tile follows the owner rule: Christmas,
+Easter, Thanksgiving, Detty December, back to school; no other festival content.
+
+### Engineering
+
+| Piece | Where |
+|---|---|
+| Slot `rail_fill` (catalogue row, payload schema; creates no placement) | `java/services/content/.../db/migration/V22__rail_fill_slot.sql`, `SlotKey.RAIL_FILL`, `RailFillSlotSchemaTest` |
+| Contract | `contracts/openapi/gateway-bff.yaml` (`RailFill`, `Rail.fill`, recently-viewed `fill`), `content.yaml` (`RailFillPayload`) |
+| Priority order (pure) | `go/services/gateway-bff/internal/domain/rail_fill.go` (`PickRailFill`), mirrored for the mock BFF and tests in `web/packages/api-client/src/rail-fill.ts` |
+| Resolution (placements, relaxed pool, auction, caps) | `go/services/gateway-bff/internal/app/site_rail_fill.go`; hooked after the page body is assembled in `Home` and `composeV2` |
+| Staff editor | gateway `staff_placement_ads.go` (slot choice "Rail fill tile", fields, validation) in Marketing, Placements and ads |
+| Storefront | `components/home/RailFillTile.tsx`, `RailFill.module.css`, `RailCarousel` (`fill` slot), `RailSection`, `RecentlyViewed` |
+| Demo tiles | `tools/seed` (`dataset.py`, two entries with slot `rail_fill`), local and dev seeds only; `tools/seed/tests` asserts no migration creates one |
+
+Rules and limits:
+
+- Resolved after ordering, so "a product is on the page once" holds: relaxed products and tile products are excluded from, and
+  added to, the page's used set. At most 4 rails per page are filled and at most 2 auctions run per page (each records ad impressions).
+- Crawlers (deterministic page) and staff previews never run the auction (it would count impressions); they still get paid and editorial
+  placements. A tie between placements of equal priority rotates with the visit seed; the deterministic page keeps the first.
+- Sponsored accounting reuses the existing mechanism: a placement tile reports to `POST /v1/home/ad-events` with its placement id
+  (impression at half visible, click on its link; `maxPerSession` applies); auction products report `POST /v1/search/clicks` with
+  the search id and the product's ad token. The "at most 1 sponsored module per 3 organic" cap counts page modules; a fill tile
+  lives inside a rail and does not count against it, but is capped by the 4 rails per page.
+- Layout: the tile is the last `li` of the rail's track; the track becomes a flex row where cards keep their width and the tile takes
+  the rest (at least two cards wide), matching the cards' height. It is in the first HTML (no skeleton, no layout shift). On
+  a phone it is simply the last item of the swipe. Without a fill, `data-short` makes the section `fit-content` (left-aligned).
+- Width: the page stays capped at `--at-page-max` (1500 px) and centred; at 1600 px and wider the flat hero's text starts at
+  the rails' left edge (the arrows sit in the free margin). Below that the hero keeps its inset for the arrows.
+- Metrics: none new (the module registry's fixed label sets must not grow); the staff preview's page JSON carries `rail.fill`.
+
 ## Part 3. Frontend and staff console
 
 Built on the contract commit `331ddfb06` (storefront, staff console, `@afrotransact/api-client`). The storefront draws the page from
