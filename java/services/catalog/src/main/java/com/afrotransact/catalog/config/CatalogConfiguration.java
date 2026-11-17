@@ -132,9 +132,10 @@ class CatalogConfiguration {
                                     @Value("${at.catalog.matching.recall:30}") int recall,
                                     @Value("${at.catalog.matching.min-query-length:3}") int minQueryLength,
                                     @Value("${at.catalog.matching.searches-per-hour:600}") int searchesPerHour,
-                                    @Value("${at.catalog.matching.none-decisions-per-day:30}") int noneDecisionsPerDay) {
+                                    @Value("${at.catalog.matching.none-decisions-per-day:30}") int noneDecisionsPerDay,
+                                    @Value("${at.catalog.matching.open-size-requests:20}") int openSizeRequests) {
         return new MatchThresholds(showMin, likelyMin, maxCandidates, recall, minQueryLength, searchesPerHour,
-                noneDecisionsPerDay);
+                noneDecisionsPerDay, openSizeRequests);
     }
 
     /** S381-S387: the configured starting values of the thresholds staff edit; the stored copy wins. */

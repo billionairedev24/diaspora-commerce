@@ -1,9 +1,11 @@
 package com.afrotransact.catalog.application;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.afrotransact.catalog.domain.ItemCondition;
 import com.afrotransact.catalog.domain.matching.CandidateRanker.Kind;
 
 /**
@@ -19,6 +21,19 @@ public interface CandidateMatchService {
 
     /** Records the seller's choice (and checks it): the page they sell, or "None of these". */
     DecisionResult decide(DecisionCommand command);
+
+    /**
+     * The seller sells a different size, weight or pack of a page that was shown: asks for their size to be added as one more
+     * variant of the page (its own ATIN, checked by catalogue staff like any new variant), so nobody has to create a
+     * duplicate page. The page is never changed by this call. A size the page already has is answered with that variant
+     * (sell it); the same request twice is the same answer (no second request).
+     *
+     * @throws com.afrotransact.platform.web.error.BusinessRuleException {@code catalog.match-choice-not-shown},
+     *         {@code catalog.variant-size-invalid}, {@code catalog.variant-page-size-unknown},
+     *         {@code catalog.variant-theme-unsupported}, {@code catalog.variant-request-blocked},
+     *         {@code catalog.match-rate-limited} (too many waiting requests)
+     */
+    SizeRequestResult requestSize(SizeRequestCommand command);
 
     /**
      * The match step of a bulk upload for one row, for an organisation, with no permission check (the upload did it) and
@@ -51,14 +66,17 @@ public interface CandidateMatchService {
      * @param sizeLabel  the page's size in words ("5 kg"), asked as one tap: null when the page has none
      * @param atin       the variant when the page has exactly one; else the seller picks from {@code variants}
      * @param canOffer   false with {@code blockers} when the organisation may not sell it
+     * @param allowedConditions what the page's category allows (listing rules, D9): NEW alone where condition is not asked
      */
     record Candidate(String parentAtin, String atin, String title, String brand, CandidateImage image, String category,
                      String sizeLabel, List<CandidateVariant> variants, Kind kind, boolean likely, boolean canOffer,
-                     List<Blocker> blockers) {
+                     List<Blocker> blockers, List<ItemCondition> allowedConditions) {
 
         public Candidate {
             variants = variants == null ? List.of() : List.copyOf(variants);
             blockers = blockers == null ? List.of() : List.copyOf(blockers);
+            allowedConditions = allowedConditions == null || allowedConditions.isEmpty() ? List.of(ItemCondition.NEW)
+                    : List.copyOf(allowedConditions);
         }
     }
 
@@ -102,6 +120,40 @@ public interface CandidateMatchService {
                           boolean possibleDuplicateQueued) {
 
         public DecisionResult {
+            blockers = blockers == null ? List.of() : List.copyOf(blockers);
+        }
+    }
+
+    /**
+     * @param query      the same name the candidates were searched with
+     * @param categoryId the same category chip
+     * @param atin       the page or one of its variants, as shown
+     * @param size       the seller's size or weight, nothing but the size: "1 kg", "500 ml", "6 pack"
+     * @param note       optional words for the reviewer
+     */
+    record SizeRequestCommand(String query, UUID categoryId, String atin, String size, String note, String sellerOrgId) {
+    }
+
+    enum SizeRequestOutcome {
+        /** Filed: staff check it, usually within the review time. */
+        REQUESTED,
+        /** The seller already has a waiting request for this size on the page: nothing new was filed. */
+        ALREADY_REQUESTED,
+        /** The page (or one of its variants) already has this size: sell that variant. */
+        ALREADY_ON_PAGE
+    }
+
+    /**
+     * @param size         the size in the canonical spelling ("1 kg")
+     * @param requestId    the request waiting for staff (REQUESTED, ALREADY_REQUESTED); null for ALREADY_ON_PAGE
+     * @param existingAtin ALREADY_ON_PAGE: the variant that has the size
+     * @param reviewDueAt  when staff are due to answer (REQUESTED)
+     * @param canOffer     ALREADY_ON_PAGE: whether the organisation may sell that variant now, with {@code blockers}
+     */
+    record SizeRequestResult(SizeRequestOutcome outcome, String size, UUID requestId, String existingAtin,
+                             Instant reviewDueAt, boolean canOffer, List<Blocker> blockers) {
+
+        public SizeRequestResult {
             blockers = blockers == null ? List.of() : List.copyOf(blockers);
         }
     }

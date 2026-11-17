@@ -17,8 +17,12 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import com.afrotransact.catalog.domain.Atin;
+import com.afrotransact.catalog.domain.BusinessDays;
 import com.afrotransact.catalog.domain.CategoryNode;
+import com.afrotransact.catalog.domain.ChangeRequestStatus;
+import com.afrotransact.catalog.domain.ChangeRequestType;
 import com.afrotransact.catalog.domain.Product;
+import com.afrotransact.catalog.domain.ProductChangeRequest;
 import com.afrotransact.catalog.domain.ProductImage;
 import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.Variant;
@@ -30,8 +34,10 @@ import com.afrotransact.catalog.domain.matching.MatchThresholds;
 import com.afrotransact.catalog.domain.matching.NameTokens;
 import com.afrotransact.catalog.domain.matching.PackSize;
 import com.afrotransact.catalog.domain.matching.RealPhoto;
+import com.afrotransact.catalog.domain.matching.SizeVariantRules;
 import com.afrotransact.catalog.port.CandidateRecall;
 import com.afrotransact.catalog.port.CandidateRecall.RecallUnavailable;
+import com.afrotransact.catalog.port.ChangeRequestRepository;
 import com.afrotransact.catalog.port.CategoryRepository;
 import com.afrotransact.catalog.port.MatchDecisionRepository;
 import com.afrotransact.catalog.port.MatchDecisionRepository.Decision;
@@ -41,9 +47,11 @@ import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.ActorResolver;
 import com.afrotransact.platform.security.PrincipalType;
 import com.afrotransact.platform.web.error.BusinessRuleException;
+import com.afrotransact.platform.web.error.ConflictException;
 import com.afrotransact.platform.web.error.ForbiddenActionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -68,12 +76,15 @@ class CandidateMatchServiceImpl implements CandidateMatchService {
     private final MatchThresholds thresholds;
     private final ActorResolver actors;
     private final MatchMetrics metrics;
+    private final ChangeRequestRepository requests;
+    private final ChangeRequestEvents requestEvents;
     private final Clock clock;
 
     CandidateMatchServiceImpl(CandidateRecall recall, ProductRepository products, CategoryRepository categories,
                               OfferEligibilityService eligibility, CatalogSettingsService settings,
                               MatchDecisionRepository decisions, SearchRateLimiter limiter, MatchThresholds thresholds,
-                              ActorResolver actors, MatchMetrics metrics, Clock clock) {
+                              ActorResolver actors, MatchMetrics metrics, ChangeRequestRepository requests,
+                              ChangeRequestEvents requestEvents, Clock clock) {
         this.recall = recall;
         this.products = products;
         this.categories = categories;
@@ -84,6 +95,8 @@ class CandidateMatchServiceImpl implements CandidateMatchService {
         this.thresholds = thresholds;
         this.actors = actors;
         this.metrics = metrics;
+        this.requests = requests;
+        this.requestEvents = requestEvents;
         this.clock = clock;
     }
 
@@ -158,13 +171,87 @@ class CandidateMatchServiceImpl implements CandidateMatchService {
         }
         if (sizeLabel(chosen.page()) != null && !cmd.sizeConfirmed()) {
             throw new BusinessRuleException("catalog.match-size-unconfirmed",
-                    "Tell us the size is the same as on this page, or choose None of these.");
+                    "Tell us the size is the same as on this page, or ask to add your own size to it.");
         }
         OfferEligibilityService.Eligibility e = eligibility.evaluate(chosen.page(), variant, org);
         UUID id = UUID.randomUUID();
         decisions.insert(new Decision(id, org, Choice.SELL_EXISTING.name(), name, cmd.categoryId(), variant.atin().value(),
                 shown, null, NONE_STATE, now));
         return new DecisionResult(id, Choice.SELL_EXISTING, variant.atin().value(), e.canOffer(), e.blockers(), false);
+    }
+
+    @Override
+    @Transactional
+    public SizeRequestResult requestSize(SizeRequestCommand cmd) {
+        Actor actor = actors.current();
+        String org = organisation(cmd.sellerOrgId());
+        Found found = find(clean(cmd.query()), null, cmd.categoryId());
+        String wanted = cmd.atin() == null ? "" : cmd.atin().strip().toUpperCase(Locale.ROOT);
+        Product page = found.ranked().stream().limit(thresholds.maxCandidates()).map(Ranked::page)
+                .filter(p -> p.atin().value().equals(wanted)
+                        || p.variants().stream().anyMatch(v -> v.atin().value().equals(wanted)))
+                .findFirst().orElseThrow(() -> new BusinessRuleException("catalog.match-choice-not-shown",
+                        "That product was not in the list. Search again and choose from the list."));
+        Variant first = page.variants().getFirst();
+        OfferEligibilityService.Eligibility e = eligibility.evaluate(page, first, org);
+        if (!e.canOffer()) {
+            throw new BusinessRuleException("catalog.variant-request-blocked", e.blockers().isEmpty()
+                    ? "You cannot sell on this page yet." : e.blockers().getFirst().message());
+        }
+        SizeVariantRules.Outcome outcome = SizeVariantRules.decide(cmd.size(), pageSizeText(page), page.variationTheme(),
+                page.variants().stream().map(v -> new SizeVariantRules.PageVariant(v.atin().value(), v.options())).toList());
+        switch (outcome.kind()) {
+            case SIZE_INVALID -> throw new BusinessRuleException("catalog.variant-size-invalid",
+                    "Type the size with its unit, like 1 kg, 500 ml or 6 pack.");
+            case PAGE_SIZE_UNKNOWN -> throw new BusinessRuleException("catalog.variant-page-size-unknown",
+                    "This page does not state a size, so we cannot tell what is different. Choose This is my product, or "
+                            + "add it as a new product.");
+            case THEME_UNSUPPORTED -> throw new BusinessRuleException("catalog.variant-theme-unsupported",
+                    "This page has other options, like colour, so your size cannot be added to it here. Add it as a new "
+                            + "product instead.");
+            case ALREADY_ON_PAGE -> {
+                Variant existing = page.variants().stream().filter(v -> v.atin().value().equals(outcome.existingAtin()))
+                        .findFirst().orElse(first);
+                OfferEligibilityService.Eligibility ex = eligibility.evaluate(page, existing, org);
+                return new SizeRequestResult(SizeRequestOutcome.ALREADY_ON_PAGE, outcome.label(), null,
+                        existing.atin().value(), null, ex.canOffer(), ex.blockers());
+            }
+            default -> {
+            }
+        }
+        Optional<ProductChangeRequest> waiting = requests.findByProduct(page.id(), org).stream()
+                .filter(r -> r.type() == ChangeRequestType.NEW_VARIANT && r.open() && outcome.key().equals(r.field()))
+                .findFirst();
+        if (waiting.isPresent()) {
+            return new SizeRequestResult(SizeRequestOutcome.ALREADY_REQUESTED, outcome.label(), waiting.get().id(), null,
+                    waiting.get().slaDueAt(), false, List.of());
+        }
+        long open = requests.search(new ChangeRequestRepository.Query(ChangeRequestStatus.PENDING,
+                ChangeRequestType.NEW_VARIANT, false, org, false, 0, 1)).total();
+        if (open >= thresholds.openSizeRequests()) {
+            throw new BusinessRuleException("catalog.match-rate-limited", "You have many sizes waiting for review. We will "
+                    + "answer them first; you can also withdraw one you do not need.");
+        }
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("source", PageVariantServiceImpl.SELLER_SIZE);
+        payload.put("options", Map.of(outcome.dimension(), outcome.label()));
+        if (outcome.pageLabel() != null) {
+            payload.put("existingOptions", Map.of(outcome.dimension(), outcome.pageLabel()));
+        }
+        Instant now = clock.instant();
+        ProductChangeRequest filed = ProductChangeRequest.filed(page.id(), page.atin().value(), null, null,
+                ChangeRequestType.NEW_VARIANT, outcome.key(), payload, blankToNull(cmd.note()), org, actor.subject(), now,
+                BusinessDays.add(now, settings.current().reviewSlaBusinessDays()));
+        ProductChangeRequest saved;
+        try {
+            saved = requests.insert(filed);
+        } catch (DuplicateKeyException ex) {
+            throw new ConflictException("catalog.change-request-exists",
+                    "You already have a request waiting for this size. We will tell you when it is decided.");
+        }
+        requestEvents.created(saved, page, now);
+        return new SizeRequestResult(SizeRequestOutcome.REQUESTED, outcome.label(), saved.id(), null, saved.slaDueAt(),
+                false, List.of());
     }
 
     @Override
@@ -313,7 +400,17 @@ class CandidateMatchServiceImpl implements CandidateMatchService {
         return new Candidate(p.atin().value(), p.variants().size() == 1 ? first.atin().value() : null, p.title(),
                 p.attributes().get(BrandKeys.NAME), new CandidateImage(image.url(), image.width(), image.height()),
                 node == null ? null : node.path(), sizeLabel(p), variants, r.score().kind(),
-                r.score().score() >= thresholds.likelyMin(), e.canOffer(), e.blockers());
+                r.score().score() >= thresholds.likelyMin(), e.canOffer(), e.blockers(), e.allowedConditions());
+    }
+
+    /** The size the page states in its own words (size attribute, else the title); empty when it states none. */
+    private static String pageSizeText(Product p) {
+        String text = sizeText(p);
+        return text != null ? text : p.title();
+    }
+
+    private static String blankToNull(String s) {
+        return s == null || s.isBlank() ? null : s.strip();
     }
 
     private Category suggest(List<Ranked> top) {

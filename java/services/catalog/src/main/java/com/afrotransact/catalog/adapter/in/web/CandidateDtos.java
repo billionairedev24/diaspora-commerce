@@ -1,5 +1,6 @@
 package com.afrotransact.catalog.adapter.in.web;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -14,6 +15,9 @@ import com.afrotransact.catalog.application.CandidateMatchService.Category;
 import com.afrotransact.catalog.application.CandidateMatchService.Choice;
 import com.afrotransact.catalog.application.CandidateMatchService.DecisionCommand;
 import com.afrotransact.catalog.application.CandidateMatchService.DecisionResult;
+import com.afrotransact.catalog.application.CandidateMatchService.SizeRequestCommand;
+import com.afrotransact.catalog.application.CandidateMatchService.SizeRequestResult;
+import com.afrotransact.catalog.domain.ItemCondition;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -76,12 +80,15 @@ final class CandidateDtos {
                     + "size are equal (exact). SIMILAR: a suggestion by name (fuzzy). Both need the seller's click; a "
                     + "page that states a size also needs the size confirmed.") String kind,
             @Schema(description = "High enough to say 'likely your product'") boolean likely,
-            boolean canOffer, List<BlockerDto> blockers) {
+            boolean canOffer, List<BlockerDto> blockers,
+            @Schema(description = "What the page's category allows (listing rules D9): NEW alone where condition is not "
+                    + "asked, so the form hides the condition field and the server uses NEW") List<ItemCondition> allowedConditions) {
 
         static CandidateDto of(Candidate c) {
             return new CandidateDto(c.parentAtin(), c.atin(), c.title(), c.brand(), CandidateImageDto.of(c.image()),
                     c.category(), c.sizeLabel(), c.variants().stream().map(CandidateVariantDto::of).toList(),
-                    c.kind().name(), c.likely(), c.canOffer(), c.blockers().stream().map(BlockerDto::of).toList());
+                    c.kind().name(), c.likely(), c.canOffer(), c.blockers().stream().map(BlockerDto::of).toList(),
+                    c.allowedConditions());
         }
     }
 
@@ -124,6 +131,37 @@ final class CandidateDtos {
         static DecisionResponse of(DecisionResult r) {
             return new DecisionResponse(r.decisionId(), r.choice().name(), r.atin(), r.canOffer(),
                     r.blockers().stream().map(BlockerDto::of).toList(), r.possibleDuplicateQueued());
+        }
+    }
+
+    @Schema(name = "SizeRequestInput", description = "The seller sells a different size, weight or pack of a page that was "
+            + "shown: send the same query and category the list was searched with")
+    record SizeRequestRequest(
+            @NotBlank @Size(max = 200) String query, UUID categoryId,
+            @NotBlank @Schema(description = "The page ATIN, or one of its variant ATINs, as shown") String atin,
+            @NotBlank @Size(max = 40) @Schema(example = "1 kg", description = "Nothing but the size: 1 kg, 500 ml, 6 pack")
+            String size,
+            @Size(max = 500) String note,
+            @Schema(description = "Service and staff tokens only") String sellerOrgId) {
+
+        SizeRequestCommand toCommand() {
+            return new SizeRequestCommand(query, categoryId, atin, size, note, sellerOrgId);
+        }
+    }
+
+    @Schema(name = "SizeRequestResult")
+    record SizeRequestResponse(
+            @Schema(allowableValues = {"REQUESTED", "ALREADY_REQUESTED", "ALREADY_ON_PAGE"}) String outcome,
+            @Schema(description = "The size in the canonical spelling, for example 1 kg") String size,
+            @Schema(description = "The request waiting for staff (REQUESTED, ALREADY_REQUESTED)") UUID requestId,
+            @Schema(description = "ALREADY_ON_PAGE: the variant that already has the size; sell it") String existingAtin,
+            @Schema(description = "When staff are due to answer") Instant reviewDueAt,
+            @Schema(description = "ALREADY_ON_PAGE: whether the organisation may sell that variant now") boolean canOffer,
+            List<BlockerDto> blockers) {
+
+        static SizeRequestResponse of(SizeRequestResult r) {
+            return new SizeRequestResponse(r.outcome().name(), r.size(), r.requestId(), r.existingAtin(), r.reviewDueAt(),
+                    r.canOffer(), r.blockers().stream().map(BlockerDto::of).toList());
         }
     }
 }
