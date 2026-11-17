@@ -363,9 +363,9 @@ channels:
     description: 'Accounts, one-time codes, phone verification, access changes, organisation invitations, sign-in lockouts,
       push devices and notification preferences from identity-service. Key = user id (role key for role-permission changes,
       ip:<address> for IP lockouts, organisation id for identity.invitation.created / revoked). Headers event-id, event-type,
-      occurred-at. Consumers: notifications-service (identity.verification.requested, identity.invitation.created), seller-service
-      (organisation role changes, identity.role.granted / revoked with orgId), audit/trust-ops (access changes), BFF caches
-      (role and permission changes).'
+      occurred-at. Consumers: notifications-service (identity.verification.requested, identity.invitation.created, identity.staff-invitation.created),
+      seller-service (organisation role changes, identity.role.granted / revoked with orgId), audit/trust-ops (access changes),
+      BFF caches (role and permission changes).'
     messages:
       identityUserRegistered:
         $ref: '#/components/messages/identityUserRegistered'
@@ -397,6 +397,8 @@ channels:
         $ref: '#/components/messages/identityUserPhoneVerified'
       identityInvitationCreated:
         $ref: '#/components/messages/identityInvitationCreated'
+      identityStaffInvitationCreated:
+        $ref: '#/components/messages/identityStaffInvitationCreated'
       identityInvitationRevoked:
         $ref: '#/components/messages/identityInvitationRevoked'
       identityInvitationAccepted:
@@ -474,8 +476,8 @@ channels:
         $ref: '#/components/messages/mcpToolInvoked'
   notificationsIdentityEvents:
     address: at.identity.events
-    description: identity → one-time codes and organisation invitations (payload recipient, never resolved through identity),
-      the welcome email, and contact changes that drop the user's cached contact lookup.
+    description: identity → one-time codes and organisation and staff invitations (payload recipient, never resolved through
+      identity), the welcome email, and contact changes that drop the user's cached contact lookup.
     messages:
       notificationsIdentityVerificationRequested:
         $ref: '#/components/messages/identityVerificationRequested'
@@ -483,6 +485,8 @@ channels:
         $ref: '#/components/messages/identityUserRegistered'
       notificationsIdentityInvitationCreated:
         $ref: '#/components/messages/identityInvitationCreated'
+      notificationsIdentityStaffInvitationCreated:
+        $ref: '#/components/messages/identityStaffInvitationCreated'
       notificationsIdentityUserPhoneVerified:
         $ref: '#/components/messages/identityUserPhoneVerified'
       notificationsIdentityNotificationPreferencesUpdated:
@@ -2063,6 +2067,17 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/IdentityInvitationCreated'
+    identityStaffInvitationCreated:
+      name: identity.staff-invitation.created
+      title: A staff invitation was issued or re-issued (key = invitation id)
+      description: 'The invitee has no account yet: notifications-service emails recipient.email (template account.staff_invitation)
+        a link to choose their password and open the staff console. acceptUrl carries the single-use token in its URL fragment
+        (valid expiresInHours, 72 by default; identity stores only its SHA-256); there is no separate token field. Security-style
+        message, resolved through nothing. Re-sending sets resent true and the earlier link stops working. Never log the payload.'
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/IdentityStaffInvitationCreated'
     identityInvitationRevoked:
       name: identity.invitation.revoked
       title: An open invitation was withdrawn or replaced by a new one (key = organisation id)
@@ -7426,6 +7441,82 @@ components:
             id:
               type: 'null'
               description: The invitee may not have an account
+            email:
+              type: string
+              format: email
+            phone:
+              type: 'null'
+        transactional:
+          type: boolean
+          const: true
+    IdentityStaffInvitationCreated:
+      type: object
+      description: Follows the notifications-service payload convention (recipient block).
+      required:
+      - invitationId
+      - email
+      - firstName
+      - lastName
+      - roleKey
+      - roleName
+      - acceptUrl
+      - expiresAt
+      - expiresInHours
+      - resent
+      - invitedBy
+      - recipient
+      - transactional
+      properties:
+        invitationId:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        firstName:
+          type: string
+        lastName:
+          type: string
+        roleKey:
+          type: string
+          examples:
+          - platform.customer_support
+        roleName:
+          type: string
+          examples:
+          - Customer Support
+        acceptUrl:
+          type: string
+          format: uri
+          examples:
+          - https://admin.afrotransact.com/invite#token=…
+        expiresAt:
+          type: string
+          format: date-time
+        expiresInHours:
+          type: integer
+          examples:
+          - 72
+        resent:
+          type: boolean
+          description: True when an existing invitation was re-sent with a new link
+        invitedBy:
+          type: string
+          description: User id of the inviter
+          or a client id: null
+        inviterName:
+          type: string
+          description: Inviter display name (invitedBy when unknown)
+          examples:
+          - Ifeoma Okafor
+        recipient:
+          type: object
+          required:
+          - email
+          properties:
+            id:
+              type: 'null'
+              description: The invitee has no account yet
             email:
               type: string
               format: email
@@ -13321,8 +13412,10 @@ operations:
       for purpose PASSWORD_RESET (the payload''s channel: email, or sms to a verified phone); identity.password-reset.federated
       → identity.password_reset.federated (email: sign in with the linked provider); identity.password.changed → identity.password_changed
       (email); identity.invitation.created → org.invitation (email to recipient.email only, never resolved through identity:
-      the invitee may have no account); identity.user.registered → account.welcome (email; not for STAFF); identity.user.phone-verified
-      and identity.notification-preferences.updated send nothing and drop the user''s cached contact lookup.'
+      the invitee may have no account); identity.staff-invitation.created → account.staff_invitation (email to recipient.email
+      only, the link carries the single-use token in its fragment); identity.user.registered → account.welcome (email; not
+      for STAFF); identity.user.phone-verified and identity.notification-preferences.updated send nothing and drop the user''s
+      cached contact lookup.'
   consumeNotificationsOrderEvents:
     action: receive
     channel:
