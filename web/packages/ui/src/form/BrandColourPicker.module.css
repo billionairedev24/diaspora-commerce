@@ -1,0 +1,90 @@
+.root { display: flex; flex-direction: column; gap: var(--at-space-2); min-width: 0; border: 0; margin: 0; padding: 0; }
+.legend { padding: 0; font-size: var(--at-text-sm); font-weight: var(--at-weight-semibold); color: var(--at-color-text); }
+.optional { font-weight: var(--at-weight-regular); color: var(--at-color-text-muted); }
+.help { margin: 0; font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
+
+/* Two columns at 360px, more as the width allows. Logical properties only: the same layout mirrors in Arabic. */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 9.5rem), 1fr)); gap: var(--at-space-2); margin: 0; padding: 0; }
+
+.option { position: relative; display: block; min-width: 0; }
+.input { position: absolute; inset-inline-start: 0; top: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.input:disabled { cursor: not-allowed; }
+.chip {
+  display: flex;
+  align-items: center;
+  gap: var(--at-space-2);
+  min-height: var(--at-size-touch);
+  padding: var(--at-space-1) var(--at-space-3);
+  border: 1px solid var(--at-color-border-strong);
+  border-radius: var(--at-radius-md);
+  background: var(--at-color-surface);
+  color: var(--at-color-text);
+  font-size: var(--at-text-sm);
+  font-weight: var(--at-weight-semibold);
+  min-width: 0;
+}
+.name { min-width: 0; overflow-wrap: anywhere; }
+.swatch {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--at-radius-pill);
+  border: 1px solid var(--at-color-border-strong);
+}
+.swatchDefault { background: var(--at-color-action-primary); }
+.swatchCustom { background: conic-gradient(var(--at-red-500), var(--at-gold-500), var(--at-green-500), var(--at-blue-500, var(--at-green-700)), var(--at-red-500)); }
+.tick { width: 14px; height: 14px; }
+.input:checked + .chip { border-color: var(--at-color-text); box-shadow: inset 0 0 0 1px var(--at-color-text); background: var(--at-color-surface-muted); }
+.input:focus-visible + .chip { outline: var(--at-focus-ring); outline-offset: 2px; }
+.input:disabled + .chip { opacity: 0.6; }
+@media (hover: hover) {
+  .input:not(:disabled):not(:checked):hover + .chip { background: var(--at-color-surface-hover); }
+}
+
+.custom { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--at-space-3); }
+.pickerWrap { display: flex; flex-direction: column; gap: var(--at-space-1); }
+.small { font-size: var(--at-text-xs); font-weight: var(--at-weight-semibold); color: var(--at-color-text); }
+.native {
+  width: var(--at-size-touch);
+  height: var(--at-size-touch);
+  padding: 2px;
+  border: 1px solid var(--at-color-border-strong);
+  border-radius: var(--at-radius-sm);
+  background: var(--at-color-surface);
+  cursor: pointer;
+}
+.native:focus-visible, .hex:focus-visible { outline: var(--at-focus-ring); outline-offset: 2px; }
+.native:disabled { cursor: not-allowed; opacity: 0.6; }
+.hexWrap { display: flex; flex-direction: column; gap: var(--at-space-1); min-width: 0; flex: 1 1 8rem; max-width: 14rem; }
+.hex {
+  height: var(--at-size-control);
+  min-width: 0;
+  padding: 0 var(--at-space-3);
+  border: 1px solid var(--at-color-border-strong);
+  border-radius: var(--at-radius-sm);
+  background: var(--at-color-surface);
+  color: var(--at-color-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--at-text-base);
+  text-align: start;
+}
+.hex[aria-invalid='true'] { border-color: var(--at-color-danger); }
+.error { margin: 0; font-size: var(--at-text-xs); color: var(--at-color-danger); }
+
+.previewRow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--at-space-3); }
+.previewLabel { font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
+.previewButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--at-size-control);
+  padding: 0 var(--at-space-5);
+  border-radius: var(--at-radius-pill);
+  font-size: var(--at-text-sm);
+  font-weight: var(--at-weight-semibold);
+  /* A real colour mix, so the edge stays visible on a white page even for a pale colour. */
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 25%, transparent);
+}
+.previewState { font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
