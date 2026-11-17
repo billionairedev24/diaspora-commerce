@@ -15,5 +15,5 @@ export function HandoffLink(props: Props) {
   if (!isHandoffHref(target)) return <Link {...props} />;
   const { prefetch, replace, scroll, ...anchor } = props;
   void [prefetch, replace, scroll];
-  return <a {...anchor} href={target} />;
+  return <a {...anchor} href={target}>{props.children}</a>;
 }

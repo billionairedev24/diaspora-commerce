@@ -1,7 +1,7 @@
 import { markTrialUsed } from '@afrotransact/api-client/mocks';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { CartView } from '@/components/cart/CartView';
 import { CheckoutView } from '@/components/checkout/CheckoutView';

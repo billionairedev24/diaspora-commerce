@@ -17,7 +17,6 @@ import {
   Megaphone,
   Package,
   Path,
-  Truck,
   Percent,
   Receipt,
   Scales,
@@ -25,6 +24,7 @@ import {
   SquaresFour,
   Stack,
   Storefront,
+  Truck,
   UsersThree
 } from '@phosphor-icons/react/ssr';
 
