@@ -248,7 +248,8 @@ export interface paths {
          * Product cards for the products this browser viewed last
          * @description The storefront remembers viewed ATINs in the browser (nothing is stored server side) and asks for their cards here.
          *     Order is kept (most recent first); a product is listed once (variant ATINs collapse to their product, at most 12 cards); unknown, unavailable, out-of-stock, held-for-tax and photo-less products are dropped. The
-         *     storefront hides the rail when `items` is empty.
+         *     storefront hides the rail when `items` is empty. A short rail also carries `fill` (a Sponsored or editorial tile; see
+         *     `RailFill`); this rail is never topped up with products the shopper did not open.
          */
         get: operations["getRecentlyViewed"];
         put?: never;
@@ -4358,6 +4359,33 @@ export interface components {
             title: string;
             href: string;
             items: components["schemas"]["ProductSummary"][];
+            fill?: components["schemas"]["RailFill"];
+        };
+        /**
+         * @description The one tile that fills the columns a short rail leaves empty, resolved by the gateway together with the rail (no second
+         *     request). Order of preference: more relevant eligible products (appended to `items`, never here), then a Sponsored tile
+         *     (a paid `rail_fill` placement, then the sponsored-products auction), then a staff editorial `rail_fill` placement.
+         *     When nothing qualifies the field is absent and the storefront narrows the rail: no placeholder, no empty box.
+         *     A tile with `sponsored: true` always names its advertiser and is labelled "Sponsored". `imageUrl` is present only when
+         *     it is a real photograph; `products` are in stock with a real photo. Impressions and clicks use the existing ad
+         *     mechanism: `POST /v1/home/ad-events` with `id` for a placement tile, `POST /v1/search/clicks` with `searchId` and the
+         *     product's `sponsor.adToken` for auction products.
+         */
+        RailFill: {
+            /** @enum {string} */
+            kind: "placement" | "sponsored-products";
+            /** @description Placement id (kind placement); counted through /v1/home/ad-events. */
+            id?: string;
+            sponsored: boolean;
+            advertiser?: string;
+            title: string;
+            body?: string;
+            cta?: string;
+            href: string;
+            imageUrl?: string | null;
+            products?: components["schemas"]["ProductSummary"][];
+            searchId?: string;
+            maxPerSession?: number;
         };
         /** @description Label per locale. `en` is always present; a missing locale falls back to `en`, never to a key. */
         LocaleLabels: {
@@ -7282,6 +7310,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         items: components["schemas"]["ProductSummary"][];
+                        fill?: components["schemas"]["RailFill"];
                     };
                 };
             };
