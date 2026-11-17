@@ -47,6 +47,15 @@ spec:
         description: '{{ $value }} messages were dead-lettered in the last 30 minutes. Java services: <topic>.dlq; Go indexer / authz-sync: at.indexer.dlq.events, at.authz-sync.dlq.events.'
         runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/KafkaDeadLetterMessages.md
         dashboard: /d/at-kafka-consumer-lag
+    - alert: NotificationsEventsFailed
+      expr: |
+        sum by (env, reason) (increase(notifications_events_failed_total[30m])) > 0
+      labels:
+        severity: ticket
+      annotations:
+        summary: Notifications consumer set aside events ({{ $labels.reason }})
+        description: '{{ $value }} events were dead-lettered in the last 30 minutes (failed_event table). upstream_client_error is usually a service token without users:read.'
+        runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/NotificationsEventsFailed.md
     - alert: KafkaDeadLetterWriteFailing
       expr: |
         sum by (env, job, consumer, topic) (increase(events_dead_letter_failures_total[10m])) > 0

@@ -45,6 +45,7 @@ One page per alert (below), plus operational procedures. Every alert's `runbook_
 | [KafkaConsumerLagHigh](KafkaConsumerLagHigh.md) | ticket |
 | [KafkaDeadLetterMessages](KafkaDeadLetterMessages.md) | ticket |
 | [KafkaDeadLetterWriteFailing](KafkaDeadLetterWriteFailing.md) | page |
+| [NotificationsEventsFailed](NotificationsEventsFailed.md) | ticket |
 | [NotificationDeliveryBudgetBurn](NotificationDeliveryBudgetBurn.md) | page / ticket |
 | [OtelCollectorExportFailures](OtelCollectorExportFailures.md) | ticket |
 | [OutboxBacklogGrowing](OutboxBacklogGrowing.md) | ticket |
