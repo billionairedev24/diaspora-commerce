@@ -40,7 +40,7 @@ var blockedReasons = map[string]string{
 	blockedPermission:         "No permission",
 	blockedDeliveryPermission: "You need the delivery permission",
 	blockedSeller:             "Only the seller does this step",
-	blockedSellerUpdates:      "Old seller-shipped order: use Override status",
+	blockedSellerUpdates:      "Updated by the seller: use Override status",
 	blockedPickupOrder:        "Not available for pickup orders",
 	blockedSequence:           "Earlier steps come first",
 	blockedState:              "Not available from here",
@@ -66,6 +66,8 @@ func deliveryLabel(method string) string {
 	switch strings.ToUpper(method) {
 	case "AFROTRANSACT_DELIVERY":
 		return "AfroTransact Delivery"
+	case "SELLER_SELF_SHIPS":
+		return "Shipped by the seller"
 	case "SELLER_SHIPS":
 		return "Seller shipped (retired)"
 	case "PICKUP":
@@ -195,7 +197,7 @@ func shipmentTransitionsFor(s jobj, status string, caps shipmentCaps) []domain.S
 		}
 		blocked := ""
 		switch {
-		case mode == domain.ModeLegacySellerShipped && sellerFulfilled && step != "CANCELLED":
+		case (mode == domain.ModeLegacySellerShipped || mode == domain.ModeSellerShips) && sellerFulfilled && step != "CANCELLED":
 			blocked = blockedSellerUpdates
 		case mode == domain.ModePickup && (step == "PICKED_UP" || step == "IN_TRANSIT" || step == "OUT_FOR_DELIVERY" || step == "DELIVERY_FAILED"):
 			blocked = blockedPickupOrder

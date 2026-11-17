@@ -224,6 +224,9 @@ func deliveryProblem(p *port.UpstreamProblem) *domain.Problem {
 	case "orders.fulfilment-unavailable":
 		code, title, detail = domain.CodeFulfilmentUnavailable, "Not available to buy",
 			"A seller doesn't offer delivery or pickup for some items yet. Remove them, or choose pickup if it is offered."
+	case "orders.self-shipping-unavailable":
+		code, title, detail = domain.CodeSelfShippingUnavailable, "Shipping by the seller isn't available",
+			"The seller can't ship this package themselves. Reload the page and choose another option."
 	case "orders.delivery-address-not-located":
 		code, title, detail = domain.CodeDeliveryAddressNotLocated, "Address not found",
 			"We couldn't locate this address for AfroTransact Delivery. Check the address or choose another one."

@@ -185,7 +185,7 @@ func CanBuyLabel(fulfilment, deliveryMethod, status, tracking string) bool {
 	if fulfilment != ShipsFromSeller || tracking != "" {
 		return false
 	}
-	if dm := strings.ToUpper(deliveryMethod); dm == "PICKUP" || dm == "AFROTRANSACT_DELIVERY" || dm == "SELLER_SHIPS" { // SELLER_SHIPS: retired
+	if dm := strings.ToUpper(deliveryMethod); dm == "PICKUP" || dm == "AFROTRANSACT_DELIVERY" || dm == "SELLER_SHIPS" || dm == "SELLER_SELF_SHIPS" { // SELLER_SHIPS: retired history; SELLER_SELF_SHIPS: no label to buy
 		return false
 	}
 	return slices.Contains(labelStatuses, status)
@@ -258,18 +258,21 @@ type SellerShipment struct {
 	Status      string `json:"status"`
 	StatusLabel string `json:"statusLabel"`
 	Fulfilment  string `json:"fulfilment"`
-	// FulfilmentMode is legacy_seller_shipped (history), afrotransact_delivery (from the seller's location),
-	// fulfilled_by_afrotransact, pickup or preorder_run.
-	FulfilmentMode string               `json:"fulfilmentMode"`
-	Perishable     bool                 `json:"perishable"`
-	Lines          []SellerShipmentLine `json:"lines"`
-	ItemsMinor     int64                `json:"itemsMinor"`
-	ShippingMinor  int64                `json:"shippingMinor"`
-	TotalMinor     int64                `json:"totalMinor"`
-	Carrier        *string              `json:"carrier"`
-	TrackingNumber *string              `json:"trackingNumber"`
-	NextActions    []string             `json:"nextActions"`
-	CanBuyLabel    bool                 `json:"canBuyLabel"`
+	// FulfilmentMode is seller_ships (the seller's own shipping, only behind the staff switch), legacy_seller_shipped (history),
+	// afrotransact_delivery (from the seller's location), fulfilled_by_afrotransact, pickup or preorder_run.
+	FulfilmentMode string `json:"fulfilmentMode"`
+	// NeedsShipDetails: the next step is "Mark shipped" and the seller ships it themselves, so it needs a tracking number or
+	// handover details (there is no label to buy). Only ever true while the seller's own shipping exists (staff switch).
+	NeedsShipDetails bool                 `json:"needsShipDetails"`
+	Perishable       bool                 `json:"perishable"`
+	Lines            []SellerShipmentLine `json:"lines"`
+	ItemsMinor       int64                `json:"itemsMinor"`
+	ShippingMinor    int64                `json:"shippingMinor"`
+	TotalMinor       int64                `json:"totalMinor"`
+	Carrier          *string              `json:"carrier"`
+	TrackingNumber   *string              `json:"trackingNumber"`
+	NextActions      []string             `json:"nextActions"`
+	CanBuyLabel      bool                 `json:"canBuyLabel"`
 	// HasLabel: a label was bought for this shipment and can be downloaded again.
 	HasLabel bool `json:"hasLabel"`
 	// SuggestedParcel is the package size and weight the products were listed with (nil when unknown).
@@ -1548,4 +1551,28 @@ type SellerTaxStateTotals struct {
 	TaxCollectedMinor int64 `json:"taxCollectedMinor"`
 	TaxRefundedMinor  int64 `json:"taxRefundedMinor"`
 	NetTaxMinor       int64 `json:"netTaxMinor"`
+}
+
+// SellerSelfShipping is a seller's own shipping setting (orders): one flat charge per order package, set once, never per product.
+// Available is the staff switch (off by default): while it is false nothing about self-shipping is shown or accepted anywhere.
+type SellerSelfShipping struct {
+	Available   bool   `json:"available"`
+	Enabled     bool   `json:"enabled"`
+	ChargeMinor int64  `json:"chargeMinor"`
+	Currency    string `json:"currency"`
+	Version     int64  `json:"version"`
+}
+
+// SellerSelfShippingInput is the seller's own change: opt in and the flat charge (minor units, 0 to 10000).
+type SellerSelfShippingInput struct {
+	Enabled     bool  `json:"enabled"`
+	ChargeMinor int64 `json:"chargeMinor"`
+}
+
+// Validate applies orders' ceiling so the form gets a field error before a round trip.
+func (in SellerSelfShippingInput) Validate() error {
+	if in.ChargeMinor < 0 || in.ChargeMinor > 10_000 {
+		return ValidationProblem(map[string]string{"chargeMinor": "Enter a shipping charge between $0.00 and $100.00"})
+	}
+	return nil
 }

@@ -187,10 +187,12 @@ func (s *checkoutPaymentServiceImpl) summary(ctx context.Context, c *domain.Call
 		s.d.ShippingSettings.Ensure(ctx)
 	}
 	s.priceLocalDelivery(ctx, &sum, addr)
+	selfShip := s.selfShippingCharges(ctx, &sum)
 	if s.d.Delivery == nil || addr == nil || len(addr.PostalCode) < 5 {
 		for i := range sum.Packages {
 			if len(sum.Packages[i].Preorder) == 0 {
 				sum.Packages[i].PickupUnavailableReason = domain.PickupWhyNeedsAddress
+				addSellerShipsOption(&sum.Packages[i], selfShip)
 			}
 		}
 		// No delivery facts to add (no pickup points or dates), but the tax estimate is still made (or its absence
@@ -229,6 +231,7 @@ func (s *checkoutPaymentServiceImpl) summary(ctx context.Context, c *domain.Call
 		}
 		points := pickupPointsFor(*p, platformPoints, own, addr, zip)
 		addPickupOption(p, points)
+		addSellerShipsOption(p, selfShip)
 		p.PickupUnavailableReason = pickupReason(*p, platformPoints, own, addr, zip, lookupFailed)
 		if len(points) == 0 && !isFC && len(p.Preorder) == 0 {
 			// Why a seller's package shows no pickup: the seller has not turned on "customers can pick up here" in Seller
@@ -264,6 +267,42 @@ func (s *checkoutPaymentServiceImpl) summary(ctx context.Context, c *domain.Call
 	recalcCheckoutTotal(&sum)
 	s.issueTaxQuote(c, &sum, addr, packageDelivery)
 	return sum, nil
+}
+
+// selfShippingCharges is the flat per-order charge of each seller in the cart that ships itself, read from orders. It is empty
+// (so nothing is offered) unless the staff switch is on, which it is not by default (docs/engineering/seller-self-shipping-options.md),
+// and when orders cannot answer: the option is never guessed.
+func (s *checkoutPaymentServiceImpl) selfShippingCharges(ctx context.Context, sum *domain.CheckoutSummary) map[string]int64 {
+	settings, ok := s.shippingSettings()
+	if s.d.SelfShipping == nil || !ok || !settings.SellerSelfShippingEnabled {
+		return nil
+	}
+	var orgs []string
+	for _, p := range sum.Packages {
+		if p.Fulfilment == domain.ShipsFromSeller && len(p.Preorder) == 0 && p.Seller.ID != "" {
+			orgs = append(orgs, p.Seller.ID)
+		}
+	}
+	if len(orgs) == 0 {
+		return nil
+	}
+	out, err := s.d.SelfShipping.Offered(ctx, firstNonEmpty(sum.Currency, domain.Currency), orgs)
+	if err != nil {
+		s.d.log().WarnContext(ctx, "self-shipping charges unavailable; not offering the seller's own shipping", "error", err)
+		return nil
+	}
+	return out
+}
+
+// addSellerShipsOption adds "Shipped by the seller" to a seller's own package at the seller's one flat charge (never per item),
+// only for a seller that opted in while the staff switch is on. It is the seller's shipping and never says AfroTransact delivers.
+func addSellerShipsOption(p *domain.CheckoutPackage, charges map[string]int64) {
+	charge, ok := charges[p.Seller.ID]
+	if !ok || p.Fulfilment != domain.ShipsFromSeller || len(p.Preorder) > 0 || hasOption(*p, domain.OptionSellerShips) {
+		return
+	}
+	p.DeliveryOptions = append(p.DeliveryOptions, domain.DeliveryOption{Key: domain.OptionSellerShips, Label: domain.LabelSellerShips,
+		FeeMinor: charge, Free: charge == 0})
 }
 
 // outsideDeliveryArea is true when the address is outside every active DELIVERY zone (geo), so the shopper must ask for a

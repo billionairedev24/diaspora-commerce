@@ -66,9 +66,14 @@ func TestSellerFbaMirrorsInventoryForTheActiveOrg(t *testing.T) {
 	}
 	created := b.do("POST", "/v1/seller/fba/inbound", map[string]any{"ownerOrg": "org_someone_else", "nodeId": "ATL-FC",
 		"lines": []map[string]any{{"atin": "AT00000042", "qty": 12, "casePack": 6, "lotNo": "B-77", "expDate": "2027-09-01"}}})
-	mustStatus(t, created, 201)
+	// Sending stock to AfroTransact is retired: AfroTransact keeps no seller stock, so creating or changing a plan is refused (410)
+	// before inventory is called; reading what exists still works.
+	mustStatus(t, created, 410)
+	if created.json(t)["code"] != "FBA_INBOUND_RETIRED" {
+		t.Fatalf("code = %v", created.json(t)["code"])
+	}
 	mustStatus(t, b.do("GET", "/v1/seller/fba/inbound/7d4a3c2e-0000-4000-8000-000000000001", nil), 200)
-	mustStatus(t, b.do("POST", "/v1/seller/fba/inbound/7d4a3c2e-0000-4000-8000-000000000001/ship", nil), 200)
+	mustStatus(t, b.do("POST", "/v1/seller/fba/inbound/7d4a3c2e-0000-4000-8000-000000000001/ship", nil), 410)
 	labels := b.do("GET", "/v1/seller/fba/inbound/7d4a3c2e-0000-4000-8000-000000000001/labels?kind=BOX&format=PDF", nil)
 	mustStatus(t, labels, 200)
 	if ct := labels.header.Get("Content-Type"); ct != "application/pdf" {
@@ -80,7 +85,7 @@ func TestSellerFbaMirrorsInventoryForTheActiveOrg(t *testing.T) {
 	mustStatus(t, b.do("GET", "/v1/seller/fba/receipts", nil), 404)
 	mustStatus(t, b.do("POST", "/v1/seller/fba/inbound/x/receipts", map[string]any{}), 404)
 	for _, op := range []string{"getSellerFbaInbound", "postSellerFbaInbound", "getSellerFbaInboundById", "postSellerFbaInboundShip",
-		"getSellerFbaInboundLabels", "getSellerFbaLots"} {
+		"getSellerFbaInboundLabels", "getSellerFbaLots"} { // the mutating ones are validated as the 410 the contract documents
 		if validated[op] == 0 {
 			t.Errorf("%s was not exercised", op)
 		}
@@ -94,12 +99,12 @@ func exerciseSellerFba(t *testing.T, b *browser) {
 	mustStatus(t, b.do("GET", "/v1/seller/fba/nodes", nil), 200)
 	mustStatus(t, b.do("GET", "/v1/seller/fba/inventory", nil), 200)
 	mustStatus(t, b.do("GET", "/v1/seller/fba/inbound", nil), 200)
-	mustStatus(t, b.do("POST", "/v1/seller/fba/inbound", map[string]any{"lines": []map[string]any{{"atin": "AT00000042", "qty": 12}}}), 201)
+	mustStatus(t, b.do("POST", "/v1/seller/fba/inbound", map[string]any{"lines": []map[string]any{{"atin": "AT00000042", "qty": 12}}}), 410)
 	mustStatus(t, b.do("GET", plan, nil), 200)
-	mustStatus(t, b.do("PUT", plan, map[string]any{"lines": []map[string]any{{"atin": "AT00000042", "qty": 18, "casePack": 6}}}), 200)
-	mustStatus(t, b.do("PUT", plan+"/tracking", map[string]any{"carrier": "ups", "trackingNumber": "1Z999AA10123456784"}), 200)
-	mustStatus(t, b.do("POST", plan+"/ship", nil), 200)
-	mustStatus(t, b.do("POST", plan+"/cancel", nil), 200)
+	mustStatus(t, b.do("PUT", plan, map[string]any{"lines": []map[string]any{{"atin": "AT00000042", "qty": 18, "casePack": 6}}}), 410)
+	mustStatus(t, b.do("PUT", plan+"/tracking", map[string]any{"carrier": "ups", "trackingNumber": "1Z999AA10123456784"}), 410)
+	mustStatus(t, b.do("POST", plan+"/ship", nil), 410)
+	mustStatus(t, b.do("POST", plan+"/cancel", nil), 410)
 	mustStatus(t, b.do("GET", plan+"/labels?kind=UNIT", nil), 200)
 	mustStatus(t, b.do("GET", "/v1/seller/fba/lots", nil), 200)
 	mustStatus(t, b.do("GET", "/v1/seller/fba/lots/markdown", nil), 200)

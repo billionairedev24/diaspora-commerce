@@ -56,11 +56,11 @@ func TestEstimator(t *testing.T) {
 		t.Fatalf("%+v", opts)
 	}
 	opts := e.Options(domain.AfroTransactDelivery, 5000)
-	if len(opts) != 1 || opts[0].Key != "afrotransact_delivery" || opts[0].FeeMinor != 599 || opts[0].Free || opts[0].Label != "Delivery" {
+	if len(opts) != 1 || opts[0].Key != "afrotransact_delivery" || opts[0].FeeMinor != 599 || opts[0].Free || opts[0].Label != "Delivered by AfroTransact" {
 		t.Fatalf("%+v", opts)
 	}
 	opts = e.Options(domain.FulfilledByAfroTransact, 100)
-	if len(opts) != 1 || opts[0].Key != "afrotransact_delivery" || opts[0].Label != "Delivery" || opts[0].FeeMinor != 599 {
+	if len(opts) != 1 || opts[0].Key != "afrotransact_delivery" || opts[0].Label != "Delivered by AfroTransact" || opts[0].FeeMinor != 599 {
 		t.Fatalf("%+v", opts)
 	}
 	if n := e.Nudge(domain.ShipsFromSeller, 2500); n != nil {

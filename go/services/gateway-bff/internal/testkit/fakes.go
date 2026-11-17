@@ -107,6 +107,9 @@ type Options struct {
 	// SellerNoPageAddress makes the seller's and the provider's business page have no address yet (it is made when the payout
 	// account is set up), the state in which the store page preview must still work.
 	SellerNoPageAddress bool
+	// SellerSelfShipping turns on the staff switch for sellers who ship themselves in the fake orders service (off by default,
+	// like the platform default): off, the seller's setting says not available and a change is refused with 409.
+	SellerSelfShipping bool
 }
 
 // Upstreams is one httptest server playing every upstream the BFF calls.
@@ -135,6 +138,9 @@ type Upstreams struct {
 	// the last list or upload.
 	LastSizeChartBody  map[string]any
 	LastSizeChartQuery url.Values
+	// selfShipEnabled and selfShipCharge are the seller's own shipping setting in the fake orders service.
+	selfShipEnabled bool
+	selfShipCharge  int64
 	// FailInventory makes inventory answer 503.
 	FailInventory bool
 	opts          Options

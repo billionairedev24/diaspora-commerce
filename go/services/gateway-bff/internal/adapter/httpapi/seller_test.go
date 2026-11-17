@@ -135,6 +135,11 @@ func TestSellerContractConformance(t *testing.T) {
 	mustStatus(t, b.do("GET", "/v1/seller/orders?status=SHIPPED_NOPE", nil), 422)
 	mustStatus(t, b.do("GET", "/v1/seller/orders/AT-2026-000123", nil), 200)
 	mustStatus(t, b.do("GET", "/v1/seller/orders/AT-0000", nil), 404)
+	// Seller self-shipping: the staff switch is off by default, so the seller's setting says not available and a change is refused.
+	if v := b.do("GET", "/v1/seller/self-shipping", nil).json(t); v["available"] != false || v["enabled"] != false {
+		t.Fatalf("switch off by default: %v", v)
+	}
+	mustStatus(t, b.do("PUT", "/v1/seller/self-shipping", map[string]any{"enabled": true, "chargeMinor": 500}), 409)
 	mustStatus(t, b.do("POST", orderPath+"/status", map[string]any{"status": "DELIVERED", "handoverCode": "12"}), 422) // a code, when given, has 4 digits
 	mustStatus(t, b.do("POST", orderPath+"/status", map[string]any{"status": "DELIVERED"}), 409)                       // no code: orders decides (placed → delivered is not a step)
 	mustStatus(t, b.do("POST", orderPath+"/status", map[string]any{"status": "PACKED"}), 409)
@@ -783,7 +788,8 @@ func TestSellerContractConformance(t *testing.T) {
 		"assignRole", "removeMember", "revokeInvitation", "lookupInvitation", "acceptInvitation", "getCalendar", "listBookingRequests", "actOnBooking", "getWorkingHours", "saveWorkingHours", "listServices", "createService",
 		"updateService", "getCancellationPolicy", "saveCancellationPolicy", "getEarnings",
 		"saveOnboardingOwners", "createSellerStripeSession", "saveOnboardingPlan", "saveOnboardingCompliance", "getOnboardingPlans", "createOnboardingStripeSession",
-		"listSellerReviews", "replyToSellerReview", "reportSellerReview", "refreshOnboardingStripe", "submitOnboarding", "requestOnboardingUpload", "completeOnboardingUpload"} {
+		"listSellerReviews", "replyToSellerReview", "reportSellerReview", "refreshOnboardingStripe", "submitOnboarding", "requestOnboardingUpload", "completeOnboardingUpload",
+		"getSelfShipping", "setSelfShipping"} {
 		if validated[op] == 0 {
 			t.Errorf("operation %s was not validated", op)
 		}
@@ -996,4 +1002,20 @@ func TestStorePagePreviewWorksBeforeThePageHasAnAddress(t *testing.T) {
 			t.Fatalf("%s publishing needs the address: %v", org.kind, sp)
 		}
 	}
+}
+
+// With the staff switch on (it is off by default) a seller sets one flat shipping charge per order; the server still refuses a
+// charge outside $0 to $100, a missing field is refused too, and the sheet of a self-shipped order asks how it left.
+func TestSellerSelfShippingWithTheSwitchOn(t *testing.T) {
+	_, b := sellerSetup(t, testkit.Options{SellerPending: true, SellerSelfShipping: true})
+	if v := b.do("GET", "/v1/seller/self-shipping", nil).json(t); v["available"] != true || v["enabled"] != false || v["chargeMinor"] != float64(0) {
+		t.Fatalf("on, not yet set: %v", v)
+	}
+	r := b.do("PUT", "/v1/seller/self-shipping", map[string]any{"enabled": true, "chargeMinor": 750})
+	mustStatus(t, r, 200)
+	if v := r.json(t); v["enabled"] != true || v["chargeMinor"] != float64(750) {
+		t.Fatalf("saved: %v", v)
+	}
+	mustStatus(t, b.do("PUT", "/v1/seller/self-shipping", map[string]any{"enabled": true, "chargeMinor": 10001}), 422)
+	mustStatus(t, b.do("PUT", "/v1/seller/self-shipping", map[string]any{"enabled": true, "chargeMinor": -1}), 422)
 }

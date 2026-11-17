@@ -17,21 +17,29 @@ type DeliveryPolicy struct {
 
 // Delivery option keys. Orders accepts exactly these (plus carrier only while the staff switch is on).
 const (
-	OptionDelivery      = "afrotransact_delivery"
-	OptionPickup        = "pickup"
-	OptionCarrier       = "carrier"
+	OptionDelivery = "afrotransact_delivery"
+	OptionPickup   = "pickup"
+	OptionCarrier  = "carrier"
+	// OptionSellerShips is the seller's own shipping at the seller's own flat charge. It exists only while the staff switch
+	// (ShippingSettings.SellerSelfShippingEnabled) is on, which is off by default; the checkout summary adds it to a seller's
+	// package only when the seller opted in, and orders refuses it otherwise.
+	OptionSellerShips   = "seller_ships"
 	OptionQuoteRequired = "quote_required"
 )
 
 // Shopper-facing option labels (launch shipping, listing rules section 3). No carrier is ever named.
 const (
-	LabelDelivery               = "Delivery"
-	LabelDeliveryByAfroTransact = LabelDelivery
-	LabelStoreDelivery          = LabelDelivery
-	LabelPickupPoint            = "Pickup"
-	LabelStorePickup            = "Pickup"
-	LabelSellerShipping         = "Standard shipping from the seller"
-	LabelQuoteRequired          = "Too far for standard delivery. Ask us for a quote"
+	LabelDelivery = "Delivery"
+	// The two things a shopper can choose (owner decision): the customer collects ("Pick up"), or AfroTransact collects from the
+	// seller and delivers ("Delivered by AfroTransact"). Every delivered option here truly is AfroTransact-delivered.
+	LabelDeliveryByAfroTransact = "Delivered by AfroTransact"
+	LabelStoreDelivery          = LabelDeliveryByAfroTransact
+	LabelPickupPoint            = "Pick up"
+	LabelStorePickup            = LabelPickupPoint
+	// LabelSellerShips is the seller's own shipping (staff switch, off by default). It never says AfroTransact delivers.
+	LabelSellerShips    = "Shipped by the seller"
+	LabelSellerShipping = LabelSellerShips
+	LabelQuoteRequired  = "Too far for standard delivery. Ask us for a quote"
 	// LabelFeeUnknown replaces a fee that cannot be read right now: never $0.
 	LabelFeeUnknown = "Delivery fee shown at checkout"
 )
@@ -47,6 +55,9 @@ type ShippingSettings struct {
 	FlatFeeMinor                 int64
 	FreeAboveMinor               *int64 // nil = never free
 	SellerCarrierShippingEnabled bool
+	// SellerSelfShippingEnabled is the staff switch for sellers who ship themselves and charge their own flat per-order
+	// shipping (off by default, and off in uat and prod until the multi-product shipping-fee problem is solved).
+	SellerSelfShippingEnabled bool
 }
 
 // DeliveryFee is the delivery charge of one package whose items cost itemsMinor.
@@ -164,7 +175,7 @@ func (e *estimatorImpl) Promise(fulfilment string) DeliveryPromise {
 	if e.sellerCarrier(fulfilment) {
 		return DeliveryPromise{Prefix: LabelDelivery, Basis: ArrivalNone, Reason: ArrivalNoOrigin, Free: false, FeeMinor: e.shipping()}
 	}
-	out := DeliveryPromise{Prefix: deliveryLabel(fulfilment), Basis: ArrivalNone, Reason: ArrivalNoOrigin}
+	out := DeliveryPromise{Prefix: LabelDelivery, Basis: ArrivalNone, Reason: ArrivalNoOrigin}
 	if s := e.settings.Load(); s != nil {
 		// One flat fee (free above the optional threshold, which a single item cannot know): the page shows the flat fee.
 		out.FeeMinor, out.Free = s.FlatFeeMinor, s.FlatFeeMinor == 0

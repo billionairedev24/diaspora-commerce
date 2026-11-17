@@ -54,6 +54,7 @@ func shopperServices(cfg config.Config, client func(string, config.Upstream) htt
 			sc.serviceTokens),
 		LocalDelivery: upstreams.NewLocalDelivery(client("seller", up.Seller), client("geo", up.Geo), sc.payments, sc.serviceTokens),
 		Offers:        sc.offers,
+		SelfShipping:  upstreams.NewSelfShipping(sc.orders),
 		ProofLinks:    sc.proofLinks,
 		Coupons:       upstreams.NewCheckoutCoupons(client("offers", up.Offers)),
 		Credit:        upstreams.NewCredit(sc.payments),

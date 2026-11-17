@@ -9,11 +9,14 @@ import "strings"
 // ModeLegacySellerShipped, read-only history.
 const (
 	ModeLegacySellerShipped = "legacy_seller_shipped"
-	ModeSellerStore         = "afrotransact_delivery"
-	ModeFulfilled           = "fulfilled_by_afrotransact"
-	ModePickup              = "pickup"
-	ModePreorderRun         = "preorder_run"
-	deliveryMethodATD       = "AFROTRANSACT_DELIVERY"
+	// ModeSellerShips is the seller shipping themselves at their own flat charge: only while the staff switch is on (off by
+	// default). The seller moves it; no AfroTransact queue, proof or delivery claim.
+	ModeSellerShips   = "seller_ships"
+	ModeSellerStore   = "afrotransact_delivery"
+	ModeFulfilled     = "fulfilled_by_afrotransact"
+	ModePickup        = "pickup"
+	ModePreorderRun   = "preorder_run"
+	deliveryMethodATD = "AFROTRANSACT_DELIVERY"
 )
 
 // FulfilmentModeOf mirrors orders' Shipment.fulfilmentMode(): a seller-packed shipment sent to AfroTransact Delivery without
@@ -26,6 +29,8 @@ func FulfilmentModeOf(fulfilmentType, deliveryMethod string, hasLocalDelivery bo
 		return ModePreorderRun
 	case dm == "PICKUP":
 		return ModePickup
+	case dm == "SELLER_SELF_SHIPS":
+		return ModeSellerShips
 	case dm == "SELLER_SHIPS" || dm == "CARRIER":
 		return ModeLegacySellerShipped
 	case ft == "FBA_AFROTRANSACT" || ft == "RETAIL_1P":

@@ -9233,10 +9233,12 @@ components:
                 enum:
                 - CARRIER
                 - SELLER_SHIPS
+                - SELLER_SELF_SHIPS
                 - AFROTRANSACT_DELIVERY
                 - PICKUP
-                description: 'CARRIER and SELLER_SHIPS are legacy (self-shipping is retired): old shipments only, never produced
-                  for a new order'
+                description: 'CARRIER and SELLER_SHIPS are legacy history: old shipments only, never produced for a new order.
+                  SELLER_SELF_SHIPS is the seller shipping themselves at their own flat charge, produced only while the staff
+                  switch is on (off by default)'
               serviceLevel:
                 type:
                 - string
@@ -9545,10 +9547,12 @@ components:
           enum:
           - CARRIER
           - SELLER_SHIPS
+          - SELLER_SELF_SHIPS
           - AFROTRANSACT_DELIVERY
           - PICKUP
-          description: 'CARRIER and SELLER_SHIPS are legacy (self-shipping is retired): old shipments only, never produced
-            for a new order'
+          description: 'CARRIER and SELLER_SHIPS are legacy history: old shipments only, never produced for a new order. SELLER_SELF_SHIPS
+            is the seller shipping themselves at their own flat charge, produced only while the staff switch is on (off by
+            default)'
         from:
           $ref: '#/components/schemas/OrdersShipmentStatus'
         to:
