@@ -2228,6 +2228,15 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Demo tiles only in the local seed, never in a migration
 - Verified in a browser at 1280, 1920 and 390 px, hero aligned with the rails at ultra-wide
 - Vitest, Go and Java unit tests, docs and staff guide, same change on main, develop and release-1","E25","","High","5","home storefront gateway content staff-console ads","staff-console","In Review"
+"S528","Story","Seller product match works in every stack and never depends on the search index","Sellers typing a product name in Seller Center > Add a product saw ""We can't search right now"" for products that exist (Ground Egusi, Kuli Kuli). Catalog asked http://localhost:8201 because it never read SEARCH_URL (the monolith serves search under /modules/search, clusters at http://search). Catalog now reads SEARCH_URL and, when the search index is down, wrong or empty, matches live pages in its own database (same eligibility and ranking), so sellers add price and stock instead of creating duplicates. searchUnavailable only when both fail; WARN with the cause class and catalog_candidates_fallback_total{reason}. make seed waits for the index and says make reindex-search when it stays empty.","- Catalog recall URL is SEARCH_URL (monolith /modules/search, cluster http://search), no more fixed localhost:8201
+- Search down, 5xx, 404 or empty index: candidates come from the catalogue database (live, real photo, hidden orgs excluded), ground egusi finds Ground Egusi (Melon Seeds)
+- searchUnavailable true only when search and database both fail, response shape unchanged
+- WARN with the cause class (no query text) and catalog_candidates_fallback_total{reason=search_error
+- search_empty
+- both_failed}
+- make seed waits for the index and prints make reindex-search when it stays empty; runbook and docs updated
+- Java unit tests (service, NameTokens, HttpCandidateRecall edge), seeder test, vitest for the states, same change on main, develop and release-1
+- Verified against a running monolith with Meilisearch and the seeded catalogue (owner, after make reindex-search)","E24","","Highest","3","seller-center matching catalog search resilience","seller-center","In Review"
 "E37","Epic","Release 1 consolidation","Release 1 ships two deployables (afrotransact-core for Java, afrotransact-go for Go) with every service kept as a module. ADR 0011, docs/engineering/release-1-architecture.md. Branch release-1 only.","","","Release 1 consolidation","Highest","","release-1 platform","platform","To Do"
 "S600","Story","Release 1 Phase 0: ADR, architecture inventory and sync script","ADR 0011, docs/engineering/release-1-architecture.md (inventory of Java and Go services, call graph, collisions, grouping, risks, rollback, success criteria) and tools/release/sync-main.sh.","- ADR and architecture doc merged on release-1
 - sync-main.sh --check runs and refuses a branch that does not track release-1
