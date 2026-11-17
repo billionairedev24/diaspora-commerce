@@ -14,6 +14,7 @@ import { useSeller } from '@/lib/session';
 import { type ProductFormStart } from '../form-model';
 import { barcodeReady, blockerKey, digitsOf, MAX_BARCODE_DIGITS, SEARCH_DEBOUNCE_MS } from './match-model';
 import { MatchCard } from './MatchCard';
+import { TakeBackReport } from './TakeBackReport';
 
 interface Props {
   /** The seller says yes to a matched page: the price-and-stock form. */
@@ -125,6 +126,7 @@ function Result({ match, digits, onUse, onSell, onCreate }: ResultProps) {
           {match.createBlockers.map((b) => (
             <span key={b.code} className="block">{blockerKey(b.code) ? t(blockerKey(b.code) ?? 'sc.match.blocker.exists') : b.message}</span>
           ))}
+          {match.createBlockers.some((b) => b.code === 'catalog.wrong-match-open') ? <TakeBackReport /> : null}
         </Notice>
       )}
     </div>

@@ -86,10 +86,10 @@ const KINDS: [string, string, string[]][] = [
   ['BBY', 'baby-bottles', [fieldId.description, fieldId.labelPhoto, fieldId.brand, attr('net_weight'), attr('servings'), attr('shelf'), attr('age'.concat('_grade')), GTIN, PKG]],
   ['BEA', 'skincare-cosmetics', [fieldId.description, fieldId.labelPhoto, fieldId.dangerous, fieldId.brand, attr('net_weight'), attr('ingredients'), attr('shelf'), GTIN, PKG]],
   ['HLT', 'dietary-supplements', [fieldId.description, fieldId.labelPhoto, fieldId.dangerous, fieldId.brand, attr('net_weight'), attr('servings'), attr('shelf'), GTIN, PKG]],
-  ['FSH', 'adult-clothing-footwear', [fieldId.description, fieldId.brand, attr('material'), attr('age_grade'), GTIN, PKG]],
+  ['FSH', 'childrens-clothing', [fieldId.description, fieldId.brand, attr('material'), attr('age_grade'), GTIN, PKG]],
   ['JWL', 'jewelry-accessories', [fieldId.description, fieldId.brand, attr('material'), GTIN, PKG]],
   ['ELC', 'phones', [fieldId.description, fieldId.dangerous, fieldId.brand, attr('model'), GTIN, PKG]],
-  ['HOM', 'bedding-linens', [fieldId.description, fieldId.dangerous, fieldId.brand, attr('material'), attr('model'), GTIN, PKG]],
+  ['HOM', 'furniture-small-appliances', [fieldId.description, fieldId.dangerous, fieldId.brand, attr('material'), attr('model'), GTIN, PKG]],
   ['KID', 'toys-games', [fieldId.description, fieldId.dangerous, fieldId.brand, attr('age_grade'), GTIN, PKG]],
   ['PET', 'pet-food', [fieldId.description, fieldId.labelPhoto, fieldId.brand, attr('net_weight'), attr('shelf'), GTIN, PKG]],
   ['BOK', 'printed-books', [fieldId.description, GTIN, PKG]],
@@ -152,7 +152,7 @@ describe('product form follows the listing rules: specific rules', () => {
     expect(validateForm(exempt, typeOf(), { rules: electronics })[GTIN]?.key).toBe('sc.pf.err.gtinMissing');
     expect(toProductDraft(exempt, typeOf(), null, electronics).variants[0]).toMatchObject({ gtin: '', gtinExempt: false });
 
-    const general = rulesOf('bedding-linens');
+    const general = rulesOf('furniture-small-appliances');
     const g = { ...complete(general), noGtin: true, single: { ...complete(general).single, gtin: '' } };
     expect(validateForm(g, typeOf(), { rules: general })[GTIN]).toBeUndefined();
     expect(toProductDraft(g, typeOf(), null, general).variants[0]?.gtinExempt).toBe(true);
@@ -167,7 +167,7 @@ describe('product form follows the listing rules: specific rules', () => {
   });
 
   it('a "required or exemption" field is answered or excused with a reason, and the reason is sent', () => {
-    const rules = rulesOf('bedding-linens');
+    const rules = rulesOf('furniture-small-appliances');
     const s = complete(rules);
     const noMaterial = { ...s, attrs: { ...s.attrs, material: '' } };
     expect(validateForm(noMaterial, typeOf(), { rules })[attr('material')]?.key).toBe('sc.pf.err.requiredOrReason');
@@ -225,7 +225,7 @@ describe('product form follows the listing rules: specific rules', () => {
     expect(sectionsFor(sized(), rulesOf('adult-clothing-footwear'))).not.toContain('sizeGuide');
     const dress = PRODUCT_TYPES.dress as ProductTypeSchema;
     expect(sectionsFor(dress, rulesOf('adult-clothing-footwear'))).toContain('sizeGuide');
-    expect(sectionsFor(dress, rulesOf('bedding-linens'))).not.toContain('sizeGuide');
+    expect(sectionsFor(dress, rulesOf('furniture-small-appliances'))).not.toContain('sizeGuide');
   });
 
   it('the rules own the questions product types used to ask on their own: those are not asked twice', () => {

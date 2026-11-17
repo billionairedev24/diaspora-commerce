@@ -18,11 +18,23 @@ import { CategoryChip } from './CategoryChip';
 import { ChangeRequestsList } from './ChangeRequestsList';
 import { SEARCH_DEBOUNCE_MS, searchTextOf } from './match-model';
 
+/** What the seller had typed and chosen, kept by the flow so going back from a later step finds the search as it was. */
+export interface SearchMemo {
+  text: string;
+  category: CategoryLeaf | null;
+}
+export const EMPTY_SEARCH: SearchMemo = { text: '', category: null };
+
 interface Props {
   /** The seller confirmed a page: the price-and-stock form. */
   onSell: (match: CatalogMatch, atin: string) => void;
   /** "Not here, add it as new" (or no page for a barcode): the full form, started with what was typed. */
   onCreate: (start: ProductFormStart) => void;
+  /** The search as the seller left it, and how to keep it. */
+  memo?: SearchMemo;
+  onMemo?: (memo: SearchMemo) => void;
+  /** Set when the seller came back from a draft of a new product: it is kept, and the seller is told so. */
+  draftKept?: boolean;
 }
 
 /**
@@ -31,18 +43,23 @@ interface Props {
  * The category is a suggested chip the seller may change, never a required first step. A seller with a barcode may use it as an exact
  * shortcut. Nothing here shows an id or another seller.
  */
-export function SearchStep({ onSell, onCreate }: Props) {
+export function SearchStep({ onSell, onCreate, memo = EMPTY_SEARCH, onMemo, draftKept = false }: Props) {
   const t = useT();
   const { orgId } = useSeller();
   const api = sellerApi();
-  const [text, setText] = useState('');
-  const [typed, setTyped] = useState('');
-  const [chosen, setChosen] = useState<CategoryLeaf | null>(null);
+  const [text, setText] = useState(memo.text);
+  const [typed, setTyped] = useState(memo.text);
+  const [chosen, setChosen] = useState<CategoryLeaf | null>(memo.category);
   const [barcode, setBarcode] = useState(false);
   useEffect(() => {
     const h = window.setTimeout(() => setTyped(text), SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(h);
   }, [text]);
+  useEffect(() => {
+    onMemo?.({ text, category: chosen });
+    // The memo only follows what the seller typed and chose; the callback is the flow's setter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text, chosen]);
   const query = searchTextOf(typed);
   const categoryId = chosen?.id;
   const tree = useQuery(sellerQueries.categories(api, orgId));
@@ -66,6 +83,7 @@ export function SearchStep({ onSell, onCreate }: Props) {
     <>
       <PageHeader title={t('sc.match.title')} description={t('sc.match.lead')} />
       <div className="flex max-w-3xl flex-col gap-6" data-tour="add-product-step">
+        {draftKept ? <p className="m-0 text-sm" data-testid="draft-kept">{t('sc.match.draftKept')}</p> : null}
         <TextField
           id="match-search"
           data-tour="search-input"
@@ -87,7 +105,7 @@ export function SearchStep({ onSell, onCreate }: Props) {
             <section className="flex flex-col gap-4" aria-label={t('sc.match.search.results')}>
               <h2 className="m-0 text-lg font-semibold">{t('sc.match.search.results')}</h2>
               <ul className="m-0 flex list-none flex-col gap-4 p-0">
-                {data.candidates.map((c) => <CandidateCard key={c.parentAtin} candidate={c} query={query ?? ''} categoryId={categoryId} onSell={onSell} />)}
+                {data.candidates.map((c) => <CandidateCard key={c.parentAtin} candidate={c} query={query ?? ''} categoryId={categoryId} onSell={onSell} onNew={addNew} />)}
               </ul>
             </section>
           ) : null}
@@ -102,7 +120,7 @@ export function SearchStep({ onSell, onCreate }: Props) {
           <div><TextLinkButton aria-expanded={barcode} onClick={() => setBarcode((b) => !b)}>{barcode ? t('sc.match.byName') : t('sc.match.haveBarcode')}</TextLinkButton></div>
           {barcode ? <BarcodeShortcut onSell={onSell} onCreate={onCreate} /> : null}
         </div>
-        <ChangeRequestsList />
+        <ChangeRequestsList onSell={onSell} />
       </div>
     </>
   );

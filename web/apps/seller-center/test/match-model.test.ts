@@ -1,6 +1,7 @@
+import { type ChangeRequest } from '@afrotransact/api-client';
 import { describe, expect, it } from 'vitest';
 
-import { barcodeReady, blockerKey, candidateAsMatch, digitsOf, emptyOffer, type OfferForm, offerProblems, searchTextOf, serverOfferField, sizeToConfirm, toOfferInput } from '@/components/listings/add/match-model';
+import { asksCondition, barcodeReady, blockerKey, candidateAsMatch, changeAsMatch, conditionsAllowed, digitsOf, emptyOffer, type OfferForm, offerProblems, readyToSell, requestedSize, searchTextOf, serverOfferField, sizeNeedsNewProduct, sizeProblemKey, sizeToConfirm, toOfferInput } from '@/components/listings/add/match-model';
 import { withStart } from '@/components/listings/form-model';
 import { emptyForm } from '@/components/listings/form-model';
 import { CATALOG_FILES } from '@/i18n/catalogs';
@@ -75,8 +76,8 @@ describe('the offer-only form', () => {
   const form = (over: Partial<OfferForm> = {}): OfferForm => ({ ...emptyOffer(), price: '12.50', qty: '8', ...over });
 
   it('has no photo, title or attribute field in what it sends', () => {
-    const input = toOfferInput('ATSHEAV001', form({ listPrice: '15', shipping: '4.99', sku: ' SHEA-8 ' }));
-    expect(input).toEqual({ atin: 'ATSHEAV001', priceMinor: 1250, listPriceMinor: 1500, shippingMinor: 499, fulfilment: 'SELLER', condition: 'NEW', handlingDays: 2, quantity: 8, sellerSku: 'SHEA-8' });
+    const input = toOfferInput('ATSHEAV001', form({ listPrice: '15', shipping: '4.99' }));
+    expect(input).toEqual({ atin: 'ATSHEAV001', priceMinor: 1250, listPriceMinor: 1500, shippingMinor: 499, fulfilment: 'SELLER', condition: 'NEW', handlingDays: 2, quantity: 8 });
     for (const content of ['title', 'images', 'attributes', 'brand', 'category', 'gtin', 'description', 'productType']) expect(input).not.toHaveProperty(content);
   });
 
@@ -127,5 +128,55 @@ describe('the matching words in the five locales', () => {
 
   it('shows the tax hold in the words the brief gave', () => {
     expect(EN_MESSAGES['sc.match.offer.held.title']).toBe('We are checking the tax details for this item.');
+  });
+});
+
+describe('what a category allows is the server’s answer, not a list in the screen', () => {
+  it('asks for the condition only when the page’s category allows more than New', () => {
+    expect(asksCondition({})).toBe(false);
+    expect(asksCondition({ allowedConditions: [] })).toBe(false);
+    expect(asksCondition({ allowedConditions: ['NEW'] })).toBe(false);
+    expect(asksCondition({ allowedConditions: ['NEW', 'RENEWED', 'USED_GOOD'] })).toBe(true);
+    expect(conditionsAllowed({})).toEqual(['NEW']);
+    expect(conditionsAllowed({ allowedConditions: ['NEW', 'USED_GOOD'] })).toEqual(['NEW', 'USED_GOOD']);
+  });
+
+  it('carries the allowed conditions from the candidate to the price-and-stock form', () => {
+    const c = { parentAtin: 'ATLAPTOP01', title: 'Laptop', variants: [{ atin: 'ATLAPTOPV1', options: {} }], kind: 'SIMILAR' as const, likely: false, canOffer: true, blockers: [], allowedConditions: ['NEW' as const, 'USED_GOOD' as const] };
+    expect(candidateAsMatch(c, 'ATLAPTOPV1').allowedConditions).toEqual(['NEW', 'USED_GOOD']);
+  });
+});
+
+describe('a different size', () => {
+  const asked = (over: Partial<ChangeRequest> = {}): ChangeRequest => ({ id: 'r1', atin: 'ATSHEA0001', title: 'Raw Shea Butter', type: 'NEW_VARIANT', status: 'APPLIED', requestedAt: '2026-11-17T10:00:00Z',
+    payload: { source: 'SELLER_SIZE', options: { Size: '16 oz' } }, resultAtin: 'ATVAR00001', ...over });
+
+  it('reads the size a request asked for, and is ready to sell only once staff applied it and the variant exists', () => {
+    expect(requestedSize(asked())).toBe('16 oz');
+    expect(requestedSize(asked({ payload: null }))).toBeUndefined();
+    expect(readyToSell(asked())).toBe(true);
+    expect(readyToSell(asked({ status: 'PENDING', resultAtin: null }))).toBe(false);
+    expect(readyToSell(asked({ resultAtin: null }))).toBe(false);
+    expect(readyToSell(asked({ type: 'TITLE' }))).toBe(false);
+  });
+
+  it('opens the price-and-stock form on the new variant with its size, and asks nothing about the condition', () => {
+    const m = changeAsMatch(asked());
+    expect(m).toMatchObject({ atin: 'ATVAR00001', parentAtin: 'ATSHEA0001', title: 'Raw Shea Butter', variantOptions: { Size: '16 oz' }, canOffer: true });
+    expect(m.variants).toEqual([{ atin: 'ATVAR00001', options: { Size: '16 oz' } }]);
+    expect(asksCondition(m)).toBe(false);
+  });
+
+  it('says why a size was refused in the seller’s words, and sends them to add the product as new only when the page cannot take a size', () => {
+    for (const code of ['SIZE_INVALID', 'SIZE_PAGE_UNKNOWN', 'SIZE_NOT_ADDABLE', 'SIZE_REQUEST_BLOCKED', 'RATE_LIMITED', 'CHOICE_NOT_SHOWN']) expect(sizeProblemKey(code), code).toBeTruthy();
+    expect(sizeProblemKey('SOMETHING_ELSE')).toBeUndefined();
+    expect(sizeNeedsNewProduct('SIZE_NOT_ADDABLE')).toBe(true);
+    expect(sizeNeedsNewProduct('SIZE_PAGE_UNKNOWN')).toBe(true);
+    expect(sizeNeedsNewProduct('SIZE_INVALID')).toBe(false);
+  });
+
+  it('has no SKU in what an existing product sends', () => {
+    expect(toOfferInput('ATSHEAV001', { ...emptyOffer(), price: '9', qty: '1' })).not.toHaveProperty('sellerSku');
+    expect(Object.keys(emptyOffer())).not.toContain('sku');
   });
 });

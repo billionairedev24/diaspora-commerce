@@ -1,13 +1,14 @@
 import { File as NodeFile } from 'node:buffer';
 
 import { type CategoryNode, type ProductDraft } from '@afrotransact/api-client';
-import { approveMockPage, CATEGORY_TREE, getSellerDb, gtinWith, MOCK_GTIN, resetSellerDb, SELLER_ORG } from '@afrotransact/api-client/mocks/seller';
+import { approveMockPage, CATEGORY_TREE, decideMockChange, getSellerDb, gtinWith, MOCK_GTIN, resetSellerDb, SELLER_ORG } from '@afrotransact/api-client/mocks/seller';
 import { MOCK_FOOD_ORG } from '@afrotransact/api-client/mocks/seller';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { AddProductFlow } from '@/components/listings/add/AddProductFlow';
+import { TakeBackReport } from '@/components/listings/add/TakeBackReport';
 
 import { bffCalls, mockApi } from './mock-api';
 import { renderScreen } from './render';
@@ -95,13 +96,100 @@ describe('Add a product starts with one search box, the barcode is an optional s
     expect(bffCalls.filter((c) => c.includes('/candidates/decisions'))).toHaveLength(1);
   });
 
-  it('says a different size is not the product and goes on without selling it', async () => {
+  it('does not block a seller whose size is different: it asks for their size to be added to the page, and the card can be left at every step', async () => {
     await renderScreen(<AddProductFlow />);
     const user = await typeName('raw shea butter 16oz');
     await user.click(await screen.findByRole('button', { name: 'This is my product' }, LOOKUP));
     await user.click(screen.getByRole('button', { name: 'No, a different size' }));
-    expect(screen.getByTestId('size-differs')).toHaveTextContent('Then this is not your product');
+    const form = screen.getByTestId('size-differs');
+    expect(within(form).getByText('Your size is different')).toBeInTheDocument();
     expect(bffCalls.some((c) => c.includes('/candidates/decisions'))).toBe(false);
+    // Back to the size question: nothing was lost and nothing is disabled.
+    await user.click(within(form).getByRole('button', { name: 'It is the same size after all' }));
+    expect(screen.getByTestId('size-question')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Yes, same size' })).toBeEnabled();
+    // Not this product: the card is back to its first state and the seller can choose again.
+    await user.click(screen.getByRole('button', { name: 'Not this product' }));
+    expect(screen.getByTestId('candidate')).toHaveAttribute('data-step', 'start');
+    expect(screen.getByRole('button', { name: 'This is my product' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Not here, add it as new' })).toBeEnabled();
+  });
+
+  it('sends the seller’s own size for review, once, and says what happens next', async () => {
+    await renderScreen(<AddProductFlow />);
+    const user = await typeName('raw shea butter 16oz');
+    await user.click(await screen.findByRole('button', { name: 'This is my product' }, LOOKUP));
+    await user.click(screen.getByRole('button', { name: 'No, a different size' }));
+    const form = screen.getByTestId('size-differs');
+    await user.type(within(form).getByLabelText('Your size or weight'), 'a big jar');
+    await user.click(within(form).getByRole('button', { name: 'Ask to add my size' }));
+    expect(await within(form).findByText('Type the size with its unit, like 1 kg, 500 ml or 6 pack.')).toBeInTheDocument();
+    await user.clear(within(form).getByLabelText('Your size or weight'));
+    await user.type(within(form).getByLabelText('Your size or weight'), '16 oz');
+    await user.click(within(form).getByRole('button', { name: 'Ask to add my size' }));
+    const answer = await screen.findByTestId('size-answer');
+    expect(answer).toHaveAttribute('data-outcome', 'REQUESTED');
+    expect(within(answer).getByText('We sent your size for review')).toBeInTheDocument();
+    expect(bffCalls.filter((c) => c.includes('/candidates/size-requests'))).toHaveLength(2);
+    // It reads as Waiting in the list below, and the seller can take it back.
+    const list = await screen.findByTestId('change-requests', undefined, LOOKUP);
+    expect(within(list).getByText('Waiting')).toBeInTheDocument();
+    expect(within(list).getByText('Size: 16 oz')).toBeInTheDocument();
+    // The answer can be changed, and asking again for the same size is one request.
+    await user.click(within(answer).getByRole('button', { name: 'Change my answer' }));
+    await user.click(within(screen.getByTestId('size-differs')).getByRole('button', { name: 'Ask to add my size' }));
+    expect(await screen.findByText('You already asked for this size. We will tell you when it is decided.')).toBeInTheDocument();
+    expect(within(await screen.findByTestId('change-requests')).getAllByText('Waiting')).toHaveLength(1);
+  });
+
+  it('sells the page’s own variant when the typed size is one the page already has', async () => {
+    await renderScreen(<AddProductFlow />);
+    const user = await typeName('raw shea butter 16oz');
+    await user.click(await screen.findByRole('button', { name: 'This is my product' }, LOOKUP));
+    await user.click(screen.getByRole('button', { name: 'No, a different size' }));
+    await user.type(screen.getByLabelText('Your size or weight'), '8oz');
+    await user.click(screen.getByRole('button', { name: 'Ask to add my size' }));
+    const answer = await screen.findByTestId('size-answer');
+    expect(answer).toHaveAttribute('data-outcome', 'ALREADY_ON_PAGE');
+    expect(within(answer).getByText('This page already has 8 oz.')).toBeInTheDocument();
+    await user.click(within(answer).getByRole('button', { name: 'Sell 8 oz' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Sell this product' })).toBeInTheDocument();
+    expect(bffCalls.filter((c) => c.includes('/size-requests'))).toHaveLength(1);
+  });
+
+  it('adds the price and stock to the size once staff have applied it', async () => {
+    await renderScreen(<AddProductFlow />);
+    const user = await typeName('raw shea butter 16oz');
+    await user.click(await screen.findByRole('button', { name: 'This is my product' }, LOOKUP));
+    await user.click(screen.getByRole('button', { name: 'No, a different size' }));
+    await user.type(screen.getByLabelText('Your size or weight'), '16 oz');
+    await user.click(screen.getByRole('button', { name: 'Ask to add my size' }));
+    await screen.findByTestId('size-answer');
+    const id = getSellerDb().matching?.requests[0]?.id ?? '';
+    decideMockChange(getSellerDb(), id, true, 'Checked the size', new Date('2026-10-12T09:00:00Z'));
+    await user.click(screen.getByRole('button', { name: 'Not this product' }));
+    // The list is read again the next time the step is shown.
+    await user.click(screen.getByRole('button', { name: 'Not here, add it as new' }));
+    await user.click(await screen.findByRole('button', { name: 'Search again' }));
+    const list = await screen.findByTestId('change-requests', undefined, LOOKUP);
+    await user.click(await within(list).findByRole('button', { name: 'Add your price and stock' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Sell this product' })).toBeInTheDocument();
+    expect(screen.getByText(/Size: 16 oz/)).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Price (USD)'), '21');
+    await user.type(screen.getByLabelText('Quantity'), '6');
+    await user.click(screen.getByRole('button', { name: 'Start selling this product' }));
+    expect(await screen.findByTestId('offer-result')).toHaveAttribute('data-status', 'ACTIVE');
+  });
+
+  it('sends a page that varies by something else to “add it as a new product”, never to a dead end', async () => {
+    await renderScreen(<AddProductFlow />);
+    const user = await typeName('linen kaftan 1kg');
+    await user.click(await screen.findByRole('button', { name: 'This is my product' }, LOOKUP));
+    expect(screen.queryByTestId('size-question')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Not this product' }));
+    expect(screen.getByRole('button', { name: 'This is my product' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Not here, add it as new' }));
+    expect(await screen.findByRole('form', { name: 'Product' })).toBeInTheDocument();
   });
 
   it('waits for 3 letters, and says when nothing was found or the search is unavailable, never guessing', async () => {
@@ -165,7 +253,10 @@ describe('Add a product starts with one search box, the barcode is an optional s
     await user.click(await screen.findByRole('button', { name: 'Yes, sell this' }, LOOKUP));
     expect(await screen.findByRole('heading', { level: 1, name: 'Sell this product' })).toBeInTheDocument();
     const form = within(screen.getByRole('form', { name: 'Sell this product' }));
-    for (const label of ['Price (USD)', 'Compare-at price', 'Condition', 'Quantity', 'Ships from', 'SKU']) expect(form.getByLabelText(new RegExp(label.replace(/[()]/g, '\\$&')))).toBeInTheDocument();
+    for (const label of ['Price (USD)', 'Compare-at price', 'Quantity', 'Ships from']) expect(form.getByLabelText(new RegExp(label.replace(/[()]/g, '\\$&')))).toBeInTheDocument();
+    // A body butter is never sold used, so Condition is not asked; the page already has its own code, so no SKU is asked either.
+    for (const gone of ['Condition', 'SKU']) expect(form.queryByLabelText(gone)).not.toBeInTheDocument();
+    expect(form.getByTestId('catalog-code')).toHaveTextContent('ATSHEAV001');
     expect(form.getByText('Who ships it?')).toBeInTheDocument();
     expect(form.getByRole('radio', { name: 'I ship it' })).toBeChecked();
     for (const gone of ['Product title', 'Category', 'Description', 'Brand']) expect(screen.queryByLabelText(gone)).not.toBeInTheDocument();
@@ -212,11 +303,13 @@ describe('Add a product starts with one search box, the barcode is an optional s
     expect(within(done).getByText(/You do not need to do anything unless we ask you for a document/)).toBeInTheDocument();
   });
 
-  it('asks for the condition note when the item is not new, and sends the fulfilment fields of the way chosen', async () => {
+  it('asks for the condition only where the category allows used items, and then asks for the note when it is not new', async () => {
     await renderScreen(<AddProductFlow />);
-    const user = await typeBarcode(MOCK_GTIN.live);
-    await user.click(await screen.findByRole('button', { name: 'Yes, sell this' }, LOOKUP));
+    const user = await typeName('lagos book laptop');
+    await user.click(await screen.findByRole('button', { name: 'This is my product' }, LOOKUP));
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
     await screen.findByRole('heading', { level: 1, name: 'Sell this product' });
+    expect(screen.getByLabelText('Condition')).toHaveValue('NEW');
     await user.selectOptions(screen.getByLabelText('Condition'), 'USED_GOOD');
     expect(screen.getByLabelText('Describe the condition')).toBeInTheDocument();
     await user.click(screen.getByRole('radio', { name: 'Fulfilled by AfroTransact (FBA)' }));
@@ -224,6 +317,21 @@ describe('Add a product starts with one search box, the barcode is an optional s
     expect(screen.getByText('Package size and weight')).toBeInTheDocument();
     await user.click(screen.getByRole('radio', { name: 'I ship it' }));
     expect(screen.getByLabelText('Quantity')).toBeInTheDocument();
+  });
+
+  it('never shows the condition for groceries and beauty, and sells them as new without sending a SKU', async () => {
+    await renderScreen(<AddProductFlow />);
+    const user = await typeBarcode(MOCK_GTIN.live);
+    await user.click(await screen.findByRole('button', { name: 'Yes, sell this' }, LOOKUP));
+    await screen.findByRole('heading', { level: 1, name: 'Sell this product' });
+    expect(screen.queryByLabelText('Condition')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Describe the condition')).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText('Price (USD)'), '9');
+    await user.type(screen.getByLabelText('Quantity'), '3');
+    await user.click(screen.getByRole('button', { name: 'Start selling this product' }));
+    await screen.findByTestId('offer-result');
+    const sent = getSellerDb().matching?.offers.find((o) => o.orgId === SELLER_ORG);
+    expect(sent).toMatchObject({ atin: 'ATSHEAV001', condition: 'NEW' });
   });
 
   it('answers a barcode that does not look right with the fix, and a store number with the plain message', async () => {
@@ -281,6 +389,42 @@ describe('Add a product starts with one search box, the barcode is an optional s
     await user.click(screen.getByRole('button', { name: 'No, this is not my product' }));
     await user.click(await screen.findByRole('button', { name: 'Send' }));
     expect(await screen.findByText('You already sent this. We will tell you when we have looked at it.')).toBeInTheDocument();
+  });
+
+  it('lets the seller go back to the search from a saved draft, and keeps the draft', async () => {
+    const saved = await mockApi().createProductDraft({ title: 'Zobo leaves, dried', payload: { title: 'Zobo leaves, dried' } });
+    nav.search = new URLSearchParams(`draft=${saved.id}`);
+    await renderScreen(<AddProductFlow />);
+    expect(await screen.findByRole('form', { name: 'Product' }, LOOKUP)).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Search again' }));
+    expect(nav.replace).toHaveBeenCalledWith('/listings/new', { scroll: false });
+    expect(await screen.findByLabelText('What are you selling?')).toBeInTheDocument();
+    expect(screen.getByTestId('draft-kept')).toHaveTextContent('saved as a draft');
+    expect(screen.queryByRole('form', { name: 'Product' })).not.toBeInTheDocument();
+  });
+
+  it('keeps what was typed when the seller goes back from the new product form to the search', async () => {
+    await renderScreen(<AddProductFlow />);
+    const user = await typeName('raw shea butter 8oz');
+    await screen.findByTestId('candidate', undefined, LOOKUP);
+    await user.click(screen.getByRole('button', { name: 'Not here, add it as new' }));
+    await user.click(await screen.findByRole('button', { name: 'Search again' }));
+    expect(await screen.findByLabelText('What are you selling?')).toHaveValue('raw shea butter 8oz');
+    expect(await screen.findByTestId('candidate', undefined, LOOKUP)).toBeInTheDocument();
+    // A different candidate can be chosen, or the name changed: nothing was locked by the earlier answer.
+    expect(screen.getByRole('button', { name: 'This is my product' })).toBeEnabled();
+  });
+
+  it('lets the seller take back a wrong-product report that stops a new page with the same barcode', async () => {
+    const api = mockApi();
+    const found = await api.matching.match({ gtin: MOCK_GTIN.live });
+    await api.matching.fileChangeRequest(found.atin ?? '', { type: 'WRONG_MATCH', payload: { variantAtin: found.atin } });
+    await renderScreen(<TakeBackReport />);
+    expect(await screen.findByTestId('take-back')).toHaveTextContent('Made a mistake? Take back your report');
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Take back my report' }));
+    await waitFor(() => expect(screen.queryByTestId('take-back')).not.toBeInTheDocument());
+    expect(getSellerDb().matching?.requests.map((r) => r.status)).toEqual(['WITHDRAWN']);
   });
 
   it('withdraws a request that is still waiting', async () => {
