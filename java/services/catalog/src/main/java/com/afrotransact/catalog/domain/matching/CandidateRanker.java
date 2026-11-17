@@ -27,6 +27,7 @@ public final class CandidateRanker {
     private static final double SAME_BRANCH = 5;
     private static final double OTHER_DEPARTMENT = 15;
     private static final double HIDDEN_PART_NUMBER = 15;
+    private static final double ALL_TYPED_WORDS_FOUND = 0.85;
     private static final int MIN_PART_NUMBER_KEY = 4;
     private static final String PATH_SEPARATOR = "›";
 
@@ -171,6 +172,11 @@ public final class CandidateRanker {
         long queryHits = query.stream().filter(w -> page.stream().anyMatch(x -> ProductNames.sameWord(w, x))).count();
         long pageHits = page.stream().filter(w -> query.stream().anyMatch(x -> ProductNames.sameWord(w, x))).count();
         double coverage = 0.65 * queryHits / query.size() + 0.35 * pageHits / page.size();
+        if (queryHits == query.size()) {
+            // Everything the seller typed is on the page: "egusi" for "Ground Egusi (Melon Seeds)". A short name is a part of
+            // the page's longer one, so it must stay above the show threshold (still below "likely": the seller confirms).
+            coverage = Math.max(coverage, ALL_TYPED_WORDS_FOUND);
+        }
         return query.equals(page) ? 1.0 : Math.min(coverage, 0.99);
     }
 }
