@@ -95,7 +95,7 @@ class BusinessBrandingServiceImplTest {
     @Test
     void aBadColourOrALogoThatIsNotHttpsIsRefusedWithFieldErrors() {
         anApprovedBusiness();
-        assertThatThrownBy(() -> service.update("org_1", new BusinessSection.Branding(null, "green", "http://x/y.png")))
+        assertThatThrownBy(() -> service.update("org_1", new BusinessSection.Branding(null, "green", "http://insecure.example/y.png")))
                 .isInstanceOfSatisfying(SellerRuleViolation.class, e -> {
                     assertThat(e.code()).isEqualTo("seller.invalid-branding");
                     assertThat(e.fieldErrors()).containsKeys("brandColor", "logoUrl");

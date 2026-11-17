@@ -574,17 +574,17 @@ public class DefaultApplicationRules implements ApplicationRules {
         if (description != null && description.length() > MAX_PAGE_DESCRIPTION) {
             e.put("branding.description", "At most " + MAX_PAGE_DESCRIPTION + " characters");
         }
-        String color = trim(in.brandColor());
-        if (color != null && !color.matches("^#[0-9a-fA-F]{6}$")) {
-            e.put("branding.brandColor", "Use a colour like #1a7f4b");
+        String color = BrandingRules.normaliseColour(in.brandColor());
+        if (color == null && trim(in.brandColor()) != null) {
+            e.put("branding.brandColor", BrandingRules.COLOUR_MESSAGE);
         }
         String logo = trim(in.logoUrl());
-        if (logo != null && !logo.matches("^https://\\S+$")) {
-            e.put("branding.logoUrl", "Upload your logo again");
+        if (logo != null && !LogoUrlRules.accepts(logo)) {
+            e.put("branding.logoUrl", BrandingRules.LOGO_MESSAGE);
         }
         if (description == null && color == null && logo == null) {
             return null;
         }
-        return new BusinessSection.Branding(description, color == null ? null : color.toLowerCase(Locale.ROOT), logo);
+        return new BusinessSection.Branding(description, color, logo);
     }
 }
