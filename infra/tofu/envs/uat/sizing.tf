@@ -1,30 +1,37 @@
 # uat sizing and cost levers (the only file that differs between envs/dev, uat and prod).
-#   - prod-like topology at a smaller size: 2 zones, single NAT, HA off (turn on before load tests)
-#   - Serverless v2 0.5-16 ACU / mid Cloud SQL & Flexible tiers, Valkey medium
-#   - spot pool carries most workloads; on-demand floor of 2 nodes
-#   - Elastic hot + frozen, Confluent Standard single-zone
-#   - KYC retention 30 days (governance mode, unlocked) so test evidence can be cleaned up
-# NOTE: not part of the $200/month production budget. Keep this environment destroyed (local stack + CI previews cover
-# development) and apply it only for a short, deliberate test; docs/engineering/cloud-cost.md.
+# UAT is the DRY RUN of prod (docs/runbooks/release-1-go-live.md): the SAME lean OVH shape, differing only in values below (own project,
+# own Layerbase, monthly_budget, deletion_protection off so the project can be torn down after the dry run, KYC retention short).
+# LEAN profile on OVHcloud: the whole platform on ONE node, one replica of everything, one project network, one zone.
+# It is sized for the 21-service launch set (docs/engineering/cloud-cost.md has the memory table and the scale-up path):
+#   - OVH Managed Kubernetes, FREE control plane (plan "free", single zone), ONE b3-16 node (4 vCPU / 16 GB) billed MONTHLY
+#     (node_size = "lean" and deletion_protection = true in modules/ovh/cluster), no autoscaler, no spot pool
+#   - egress "none": no vRack gateway, no load balancer, no public ingress: traffic comes in through Cloudflare Tunnel
+#     (cloudflared pod, outbound connection only). The Kubernetes API is public on the free plan and restricted by admin_cidrs
+#   - Postgres is external (Layerbase Virginia, same metro as OVH US East): managed_data = false creates none here;
+#     Valkey and Meilisearch run in the cluster (infra/k8s/platform/lean)
+#   - Kafka and Temporal run in the cluster; Elastic Cloud, Confluent and Temporal Cloud are off
+#   - uat: deletion protection off and KYC retention 30 days (test evidence); prod keeps both on
+# Scale up by flipping these back: zone_count 3 (needs the paid "standard" control plane) + min_nodes 3, a second node pool, or a
+# managed database (managed_data = true, OVH Managed PostgreSQL).
 locals {
   environment = "uat"
   sizing = {
-    zone_count          = 2
-    egress              = "single"
-    node_size           = "small"
-    min_nodes           = 2
-    max_nodes           = 4
-    spot_max_nodes      = 10
+    zone_count          = 1
+    egress              = "none"
+    node_size           = "lean"
+    min_nodes           = 1
+    max_nodes           = 1
+    spot_max_nodes      = 0
     private_endpoint    = false
-    db_size             = "medium"
-    db_storage_gb       = 64
+    db_size             = "small"
+    db_storage_gb       = 32
     backup_days         = 7
-    cache_size          = "medium"
+    cache_size          = "small"
     ha                  = false
-    saas_profile        = "medium"
+    saas_profile        = "small"
     kyc_retention_days  = 30
-    monthly_budget      = 1500 # USD, cloud spend only (modules/<cloud>/budget); alerts at 50/80/100% actual, 100% forecast
-    managed_data        = true # Terraform creates Postgres + Valkey; false = external (Layerbase), see prod
-    deletion_protection = true
+    monthly_budget      = 200 # USD (the OVH credit of the dry run); was 150 for prod. PLACEHOLDER, UNVERIFIED: OVH cloud spend only (node, block storage, object storage); set it to ~1.2x the OVH quote. Alerts at 50/80/100% actual
+    managed_data        = false
+    deletion_protection = false # uat is torn down after the dry run; prod keeps true
   }
 }
