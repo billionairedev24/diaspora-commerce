@@ -1,0 +1,55 @@
+# Builds and pushes the backup tools image (infra/ops/backup-tools/Dockerfile: postgres client + rclone + age + curl, non-root) used by
+# the pg-backup and r2-backup CronJobs. Trivy fails the build on CRITICAL and HIGH. The image is public-safe (no secrets, only packages);
+# set the GHCR package to public once, or copy the pull secret "ghcr" into namespace ops (docs/runbooks/read-only-root-first-boot.md).
+# Tags: the version below (what the CronJobs pin) and the commit sha. Bump VERSION here AND in the two CronJob manifests together.
+name: backup-tools-image
+
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  VERSION: "1.0.0"
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Image name
+        id: meta
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}/backup-tools" >> "$GITHUB_OUTPUT"
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: infra/ops/backup-tools
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ env.VERSION }}
+            ${{ steps.meta.outputs.image }}:${{ github.sha }}
+          provenance: mode=max
+      - name: Trivy image scan (CRITICAL and HIGH fail)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          trivy-config: trivy.yaml
+          image-ref: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Digest
+        run: echo "backup-tools ${VERSION} digest ${{ steps.build.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"

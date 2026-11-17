@@ -1,8 +1,8 @@
 #!/bin/sh
 # Nightly logical backup of every service database on the external PostgreSQL server (Layerbase) to a Backblaze B2 bucket (an
 # S3-compatible API, reached with rclone; a vendor other than Layerbase, OVH and Cloudflare), encrypted with age so the cluster only
-# ever holds the PUBLIC key. Runs in the CronJob pg-backup (postgres:17-alpine; apk adds rclone, age and curl, so the cluster needs
-# outbound HTTPS to the Alpine mirrors). Cloudflare R2 is deliberately NOT used for backups (independence from the Cloudflare account).
+# ever holds the PUBLIC key. Runs in the CronJob pg-backup (the backup-tools image: postgres 17 client, rclone, age and curl baked in, non-root,
+# read-only root, SKIP_APK=1; infra/ops/backup-tools/Dockerfile). Cloudflare R2 is deliberately NOT used for backups (independence from the Cloudflare account).
 #
 # Per database: pg_dump -Fc -> check it (pg_restore --list) -> age -> rclone copyto <remote>/postgres/<db>/<stamp>.dump.age.
 # A failed database does not stop the others; the job exits 1 if ANY failed, so the alert fires. Retention (RETENTION_DAYS, default 14)
