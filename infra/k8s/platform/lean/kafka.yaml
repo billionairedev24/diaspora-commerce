@@ -32,12 +32,29 @@ spec:
     metadata:
       labels: {app.kubernetes.io/name: kafka}
     spec:
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
+        runAsGroup: 1000
         fsGroup: 1000
         seccompProfile: {type: RuntimeDefault}
       terminationGracePeriodSeconds: 60
+      # The image's run script renders /opt/kafka/config (server.properties, log4j) from the KAFKA_* variables at start. With a
+      # read-only root that directory must be a writable volume, so a copy of the image's own defaults is made into it first.
+      initContainers:
+        - name: config-seed
+          image: apache/kafka:4.1.0
+          command: ["/bin/sh", "-ec", "cp -R /opt/kafka/config/. /seed/"]
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {memory: 64Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: config, mountPath: /seed}
       containers:
         - name: kafka
           image: apache/kafka:4.1.0
@@ -70,9 +87,18 @@ spec:
             limits: {memory: 896Mi}
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true   # KSV-0014. Writable paths = the mounts below (docs/runbooks/read-only-root-first-boot.md)
             capabilities: {drop: [ALL]}
           volumeMounts:
-            - {name: data, mountPath: /var/lib/kafka/data}
+            - {name: data, mountPath: /var/lib/kafka/data}      # KRaft log dir: partitions, meta.properties, __cluster_metadata
+            - {name: config, mountPath: /opt/kafka/config}      # rendered server.properties / log4j (seeded by config-seed)
+            - {name: logs, mountPath: /opt/kafka/logs}          # kafka-run-class.sh LOG_DIR (default $KAFKA_HOME/logs)
+            - {name: logs, mountPath: /usr/logs}                # RISK: older image layouts log here; harmless if unused
+            - {name: tmp, mountPath: /tmp}                      # JVM hsperfdata, kafka-storage temp files
+      volumes:
+        - {name: config, emptyDir: {sizeLimit: 16Mi}}
+        - {name: logs, emptyDir: {sizeLimit: 256Mi}}
+        - {name: tmp, emptyDir: {sizeLimit: 256Mi}}
   volumeClaimTemplates:
     - metadata:
         name: data
@@ -124,9 +150,12 @@ spec:
       labels: {app.kubernetes.io/name: kafka-dlq-topics}
     spec:
       restartPolicy: OnFailure
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: create
@@ -159,4 +188,11 @@ spec:
             limits: {memory: 384Mi}
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true   # KSV-0014: kafka-topics.sh only needs a log dir and /tmp
             capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: logs, mountPath: /opt/kafka/logs}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: logs, emptyDir: {sizeLimit: 64Mi}}
+        - {name: tmp, emptyDir: {sizeLimit: 64Mi}}

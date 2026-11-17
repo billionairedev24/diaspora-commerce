@@ -34,6 +34,7 @@ spec:
         runAsNonRoot: true
         runAsUser: 100        # clamav
         runAsGroup: 101
+        fsGroup: 101
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: clamav
@@ -56,6 +57,7 @@ spec:
             limits: {memory: 1792Mi}
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true   # KSV-0014. Writable paths = the four mounts below (docs/runbooks/read-only-root-first-boot.md)
             capabilities: {drop: [ALL]}
           volumeMounts:
             - {name: db, mountPath: /var/lib/clamav}

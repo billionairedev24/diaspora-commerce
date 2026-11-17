@@ -26,9 +26,11 @@ spec:
     metadata:
       labels: {app.kubernetes.io/name: valkey}
     spec:
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 999
+        runAsGroup: 999
         fsGroup: 999
         seccompProfile: {type: RuntimeDefault}
       containers:
@@ -49,9 +51,13 @@ spec:
             limits: {memory: 256Mi}
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true   # KSV-0014. Writable: /data (AOF, --dir /data) and /tmp
             capabilities: {drop: [ALL]}
           volumeMounts:
             - {name: data, mountPath: /data}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: tmp, emptyDir: {sizeLimit: 64Mi}}
   volumeClaimTemplates:
     - metadata:
         name: data
