@@ -48,9 +48,13 @@ CACHE=$(mktemp -d); trap 'rm -rf "$CACHE"' EXIT # one lookup per image:tag keeps
 re='^FROM[[:space:]]+([^[:space:]@]+)(@sha256:[0-9a-f]{64})?([[:space:]].*)?$'
 while IFS= read -r file; do
   tmp=$(mktemp)
+  declare -A stages=() # build stage names declared so far in this file: `FROM <stage>` needs no digest
   while IFS= read -r line; do
     if [[ "$line" =~ $re ]]; then
       ref="${BASH_REMATCH[1]}"; pinned="${BASH_REMATCH[2]}"; rest="${BASH_REMATCH[3]:-}"
+      if [[ "$rest" =~ [[:space:]][Aa][Ss][[:space:]]+([^[:space:]]+) ]]; then alias_="${BASH_REMATCH[1]}"; else alias_=""; fi
+      if [ -n "${stages[$ref]:-}" ]; then printf '%s\n' "$line" >>"$tmp"; [ -z "$alias_" ] || stages[$alias_]=1; continue; fi
+      [ -z "$alias_" ] || stages[$alias_]=1
       case "$ref" in scratch|\$*|*'${'*) printf '%s\n' "$line" >>"$tmp"; continue ;; esac
       if [ "$mode" = check ]; then
         if [ -z "$pinned" ]; then echo "unpinned: $file: $ref" >&2; status=1; fi
@@ -68,5 +72,5 @@ while IFS= read -r file; do
   done <"$file"
   if [ "$mode" != check ]; then cat "$tmp" >"$file"; fi
   rm -f "$tmp"
-done < <(find java go/services -maxdepth 2 -name Dockerfile | sort)
+done < <({ find java go/services -maxdepth 2 -name Dockerfile; ls go/Dockerfile.* 2>/dev/null; } | sort)
 exit $status
