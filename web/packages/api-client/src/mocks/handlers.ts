@@ -38,6 +38,7 @@ import {
   moveToCart,
   productDetail,
   recentlyViewed,
+  recentlyViewedFill,
   removeLine,
   removeSaved,
   saveForLater,
@@ -151,7 +152,9 @@ export const handlers = [
   })),
   http.get('*/v1/home/recently-viewed', route((ctx) => {
     const atins = (new URL(ctx.request.url).searchParams.get('atins') ?? '').split(',').filter(Boolean);
-    return json({ items: recentlyViewed(atins, sessionLocation(ctx.session), ctx.now) });
+    const loc = sessionLocation(ctx.session);
+    const items = recentlyViewed(atins, loc, ctx.now);
+    return json({ items, fill: recentlyViewedFill(items, loc, ctx.now) ?? undefined });
   })),
   /* Paid home modules: impressions and clicks are counted per placement (nothing identifies the shopper). */
   http.post('*/v1/home/ad-events', route(async (ctx) => {

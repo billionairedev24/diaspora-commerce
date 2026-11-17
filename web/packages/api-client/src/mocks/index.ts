@@ -11,7 +11,8 @@ export { catalogueOf, composeDynamicHome, DEFAULT_SEED, defaultHomeSettings, fix
 export { completePhrases, levenshtein, matchScore, PHRASES, SYNONYMS, words } from './matching';
 export { markTrialUsed, MOCK_DECLINED_CARD, MOCK_MEMBERSHIP_TIERS } from './membership';
 export { handleMockRequest } from './runtime';
-export { activeHero, buildCart, eligibleForHome, home, productDetail, recentlyViewed, search, suggest } from './service';
+export { activeHero, buildCart, eligibleForHome, home, productDetail, recentlyViewed, recentlyViewedFill, search, suggest } from './service';
+export { applyMockRailFills, mockRailFillPlacements } from './rail-fill-mock';
 export { endMockSession, MOCK_SESSION_COOKIE, MOCK_SESSION_DEFAULTS, resetMockSession, setMockSessionPolicy, startMockSession } from './session';
 export { deliveryFee, getShippingSettings, type MockShippingSettings, resetShippingSettings, setShippingSettings } from './shipping-settings';
 export { MOCK_STRIPE_KEY_COOKIE } from './shopper';

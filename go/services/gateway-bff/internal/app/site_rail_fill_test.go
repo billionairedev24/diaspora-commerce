@@ -94,3 +94,26 @@ func TestRecentlyViewedIsNeverToppedUpWithOtherProductsButGetsATile(t *testing.T
 		t.Fatalf("nothing viewed: no rail and no tile")
 	}
 }
+
+func TestOnlyRailsThatKeepTheirMeaningAreToppedUpWithProducts(t *testing.T) {
+	rail := func(typ string, relaxable bool) domain.HomeBlock {
+		return domain.HomeBlock{Type: typ, Rail: &domain.Rail{Relaxable: relaxable}}
+	}
+	cases := []struct {
+		name         string
+		b            domain.HomeBlock
+		ok, dealOnly bool
+	}{
+		{"generic content rail", rail(domain.BlockRail, true), true, false},
+		{"delivery-promise or near-you rail", rail(domain.BlockRail, false), false, false},
+		{"deals keep to real deals", rail(domain.BlockDeals, false), true, true},
+		{"based on orders", rail(domain.BlockBasedOnOrders, false), false, false},
+		{"seller spotlight", rail(domain.BlockSeller, false), false, false},
+		{"groceries module", domain.HomeBlock{Type: domain.BlockRail, Module: domain.ModGroceries, Rail: &domain.Rail{}}, true, false},
+	}
+	for _, c := range cases {
+		if ok, deals := relaxMode(c.b); ok != c.ok || deals != c.dealOnly {
+			t.Errorf("%s: relax=%v dealsOnly=%v", c.name, ok, deals)
+		}
+	}
+}

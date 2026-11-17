@@ -49,11 +49,32 @@ export const BannerSchema = z.object({
 });
 export type Banner = z.infer<typeof BannerSchema>;
 
-export const RailSchema = z.object({ id: z.string(), title: z.string(), href: z.string(), items: z.array(ProductSummarySchema) });
+/**
+ * The one tile that fills the columns a short rail leaves empty (resolved by the gateway with the rail). `sponsored` tiles always
+ * name their advertiser and are labelled "Sponsored". `imageUrl` is present only when it is a real photograph, `products` are in
+ * stock with a real photo.
+ */
+export const RailFillSchema = z.object({
+  kind: z.enum(['placement', 'sponsored-products']),
+  id: z.string().optional(),
+  sponsored: z.boolean(),
+  advertiser: z.string().optional(),
+  title: z.string(),
+  body: z.string().optional(),
+  cta: z.string().optional(),
+  href: z.string(),
+  imageUrl: z.string().nullish(),
+  products: z.array(ProductSummarySchema).max(3).optional(),
+  searchId: z.string().optional(),
+  maxPerSession: z.number().optional()
+});
+export type RailFill = z.infer<typeof RailFillSchema>;
+
+export const RailSchema = z.object({ id: z.string(), title: z.string(), href: z.string(), items: z.array(ProductSummarySchema), fill: RailFillSchema.optional() });
 export type Rail = z.infer<typeof RailSchema>;
 
-/** GET /v1/home/recently-viewed: cards for the ATINs the browser remembers, eligible ones only. */
-export const RecentlyViewedSchema = z.object({ items: z.array(ProductSummarySchema) });
+/** GET /v1/home/recently-viewed: cards for the ATINs the browser remembers, eligible ones only, and the tile that fills a short row. */
+export const RecentlyViewedSchema = z.object({ items: z.array(ProductSummarySchema), fill: RailFillSchema.optional() });
 export type RecentlyViewed = z.infer<typeof RecentlyViewedSchema>;
 
 export const PlacementsSchema = z.object({

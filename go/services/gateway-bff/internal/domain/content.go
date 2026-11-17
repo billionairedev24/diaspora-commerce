@@ -68,6 +68,9 @@ type Rail struct {
 	// Fill is the one tile that fills the columns a short rail leaves empty (absent when the rail is full, or nothing
 	// eligible exists: then the storefront narrows the rail instead of leaving a hollow area).
 	Fill *RailFill `json:"fill,omitempty"`
+	// Relaxable says the rail's promise survives topping it up with other products of its department (a generic or
+	// department rail does; a "delivered by Friday" or "near you" rail does not). Never serialised.
+	Relaxable bool `json:"-"`
 }
 
 // Home is the home page.

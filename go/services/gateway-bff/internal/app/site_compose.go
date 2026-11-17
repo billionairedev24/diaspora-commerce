@@ -256,7 +256,8 @@ func (s *siteServiceImpl) resolveEntry(ctx context.Context, c *domain.Caller, lo
 			return resolved{}
 		}
 		return resolved{min: firstPositive(e.rail.MinItems, MinRailItems), block: &domain.HomeBlock{ID: e.id, Type: domain.BlockRail,
-			Rail: &domain.Rail{ID: e.id, Title: s.railTitle(e.rail.Title, loc, items, now), Href: e.rail.Href, Items: items}}}
+			Rail: &domain.Rail{ID: e.id, Title: s.railTitle(e.rail.Title, loc, items, now), Href: e.rail.Href, Items: items,
+				Relaxable: relaxableSource(e.rail.Source.Kind)}}}
 	case "display_banner":
 		b := e.banner
 		return resolved{block: &domain.HomeBlock{ID: e.id, Type: domain.BlockBanner, Sponsored: true, Advertiser: b.Advertiser, Title: b.Title, Sub: b.Sub,
