@@ -796,6 +796,18 @@ HOME_MODULES = [
      "payload": {"type": "membership-promo", "title": "AfroTransact Plus: free delivery and early access to festival stock",
                  "sub": "Members get free delivery on every order. Gift cards are available for every occasion.",
                  "cta": "See membership and gift cards", "href": "/membership", "tone": "ink"}},
+    # Rail fill tiles (slot rail_fill): they take the empty columns of a short product row. Demo content only, from this
+    # seed, never from a migration. The paid one (an advertiser) is always labelled Sponsored; the editorial one is staff content.
+    {"slot": "rail_fill", "name": "Rail fill: Kingston Kitchen (paid)", "priority": 34,
+     "payload": {"advertiser": "Kingston Kitchen", "headline": "Jerk season is every season",
+                 "text": "Blue Mountain jerk paste, wings and sides in one order.", "cta": "Shop Kingston Kitchen",
+                 "href": "/s?q=Kingston+Kitchen", "departments": ["Groceries & Food"], "maxPerSession": 5},
+     "image": ("rail-fill-kingston", ["jerk chicken grill", "jamaican jerk", "caribbean barbecue"]),
+     "skus_from": ["jerk-paste", "jamaican-curry"]},
+    {"slot": "rail_fill", "name": "Rail fill: back to school (editorial)", "priority": 33,
+     "payload": {"headline": "Back to school lunchboxes", "text": "Snacks and staples kids actually finish.",
+                 "cta": "See the picks", "href": "/s?q=snacks"},
+     "image": ("rail-fill-school", ["school lunchbox snacks", "packed lunch", "back to school lunch"])},
 ]
 
 CATEGORY_BANNERS = [
