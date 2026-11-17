@@ -1,11 +1,22 @@
-# Everything Argo CD manages for uat: AppProjects (afrotransact-uat, platform-uat) and the three
-# ApplicationSets pointed at envs/uat/platform-values.yaml. Synced by bootstrap/root-uat.yaml (app of apps).
+# Everything Argo CD manages for UAT on its own OVH cluster (release-1): AppProjects (afrotransact-uat, platform-uat) and the
+# three LEAN ApplicationSets (the same ones prod uses) pointed at envs/uat/platform-values.yaml. Synced by bootstrap/root-uat.yaml.
+#
+# UAT is the lean OVH shape (one b3-* node, Layerbase Postgres + Valkey, Cloudflare Tunnel, no load balancer, no cert-manager, no
+# in-cluster Prometheus/Loki/Tempo, Grafana Cloud optional) with the UAT PROFILE (uat) and TEST-MODE third parties. What differs from prod:
+#   1. names: Applications <component>-uat, projects afrotransact-uat / platform-uat, namespace afrotransact-uat
+#   2. platform-values.yaml: hosts uat. / seller-uat. / admin-uat. / api-uat. / auth-uat. / media-uat. (infra/cloudflare/hosts.json),
+#      argocd.env uat, MANUAL sync during the first soak (flip autoSync once stable)
+#   3. the two deployables read values-uat.yaml (env: uat -> SPRING_PROFILES_ACTIVE=uat / APP_ENV=uat, API docs on, Stripe test keys accepted)
+#   4. the 21 old per-service Applications read values-prod.yaml (the uat chart values assume Argo Rollouts and External Secrets,
+#      which the lean platform does not install); every one of them is scaled to 0 by cutover.services (they are the rollback path only)
+#   5. edge: overlays/uat (prod's edge on the uat hosts and namespace)
+#   6. secrets: PROFILE=uat infra/ovh-vps/secrets.sh (APP_ENV=uat, Stripe TEST keys, own databases, own buckets)
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 nameSuffix: -uat
 resources:
   - ../../projects
-  - ../../applicationsets
+  - ../../applicationsets/lean
 components:
   - ../../release-branch    # release-1 only: generators read the release-1 branch
   - ../../launch-set          # only the launch-set services get an Application (launch-set/kustomization.yaml)
@@ -15,3 +26,20 @@ patches:
       - op: replace
         path: /spec/generators/0/matrix/generators/0/git/files/0/path
         value: infra/argocd/envs/uat/platform-values.yaml
+  - target: {kind: ApplicationSet, name: services}
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/sources/0/helm/valueFiles
+        value:
+          - values.yaml
+          - values-prod.yaml
+          - '$values/infra/argocd/envs/uat/platform-values.yaml'
+  - target: {kind: ApplicationSet, name: platform-charts}
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/sources/0/helm/valueFiles
+        value:
+          - '$values/infra/k8s/platform/values/{{ .component }}.yaml'
+          - '$values/infra/k8s/platform/envs/prod/{{ .component }}.yaml'
+          - '$values/infra/k8s/platform/envs/uat/{{ .component }}.yaml'
+          - '$values/infra/k8s/platform/clouds/{{ .cloud }}/{{ .component }}.yaml'

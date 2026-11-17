@@ -1,17 +1,8 @@
-# OTel gateway — uat: share of fast, successful traces kept (errors and > 500 ms are always kept).
-replicaCount: 2
+# OTel gateway - uat: prod's values (envs/prod) plus the environment tag on every trace, metric and log, so the one Grafana Cloud
+# stack can tell the uat from production (docs/runbooks/observability-grafana-cloud.md). Alloy's `env` label comes from the
+# Secret key CLUSTER_ENV (GRAFANA_ENV=uat in secrets.local.env), not from this file.
 config:
   processors:
     resource/env:
       attributes:
         - {key: deployment.environment, value: uat, action: insert}
-    tail_sampling:
-      policies:
-        - {name: keep-errors, type: status_code, status_code: {status_codes: [ERROR]}}
-        - {name: keep-slow, type: latency, latency: {threshold_ms: 500}}
-        - {name: baseline, type: probabilistic, probabilistic: {sampling_percentage: 50}}
-  service:
-    pipelines:
-      traces: {processors: [memory_limiter, resource/env, tail_sampling, batch]}
-      metrics: {processors: [memory_limiter, resource/env, batch]}
-      logs: {processors: [memory_limiter, resource/env, batch]}

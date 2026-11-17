@@ -24,6 +24,6 @@ extraEnv:
   RETURN_CENTRE_STATE: "TX"
   SIGNING_KEY_ID: "identity-uat-1"
   TAX_PROVIDER: "RULES"
-  TEMPORAL_NAMESPACE: "afrotransact-uat"
-  TEMPORAL_TARGET: "afrotransact-uat.tmprl.cloud:7233"
+  TEMPORAL_NAMESPACE: "afrotransact"
+  TEMPORAL_TARGET: "temporal.temporal.svc.cluster.local:7233"
   # END module-env

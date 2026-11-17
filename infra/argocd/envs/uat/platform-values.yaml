@@ -1,12 +1,11 @@
-# Environment-wide values for uat.
-#  1. Merged LAST into every service chart by the services ApplicationSet (so it wins over values-uat.yaml):
-#     cloud, workload identity, secret store and image registry are decided here, once per environment.
-#  2. Read by the ApplicationSets (git files generator): the "argocd" block and "cloud" (which picks
-#     infra/k8s/platform/secret-stores/<cloud> and infra/k8s/platform/clouds/<cloud>/*).
-# The at-service chart ignores the "argocd" block.
-#
-# cloud: none renders on kind / any local cluster (no identity annotations, Fake secret store).
-cloud: none
+# Environment-wide values for UAT on OVH (release-1): OVHcloud Managed Kubernetes (one node, US East) + Layerbase PostgreSQL and Valkey,
+# web apps on Cloudflare Workers, Cloudflare Tunnel edge, FLAT single-label hosts under the zone (infra/cloudflare/hosts.json).
+# A lean overlay of prod (envs/uat/kustomization.yaml lists every difference): the deployables run the UAT profile (values-uat.yaml).
+#  1. Merged LAST into every chart by the ApplicationSets (cloud, secret store and image registry are decided here, once per environment).
+#  2. Read by the ApplicationSets (git files generator): the "argocd" block and "cloud".
+# Hosts are generated (HOSTS block below) from infra/cloudflare/hosts.json: `python3 tools/ci/env_hosts.py sync`.
+# Which modules run is the cutover block at the bottom, mirrored in infra/argocd/launch-set/release-1.yaml (check: make launch-set-check).
+cloud: ovh
 
 image:
   registry: ghcr.io/billionairedev24/diaspora-commerce
@@ -26,57 +25,70 @@ global:
   mediaHost: media-uat.afrotransact.com
   # HOSTS END
 
+# Secrets: SOPS/age files applied by infra/ops/secrets/apply.sh create the Secret <service>-secrets in afrotransact-prod, and
+# the pods read it with envFrom. `plain: true` = no ExternalSecret is rendered (no External Secrets Operator in the lean
+# platform). Optional OKMS + External Secrets path (not verified against a live account): remove `plain`, add the
+# external-secrets chart and the secret-store element (applicationsets/lean/platform-manifests.yaml).
 secrets:
   enabled: true
-  keySeparator: "/"               # AWS Secrets Manager path; "-" on GCP and Azure (see examples below)
-  store: platform-secrets          # ClusterSecretStore from infra/k8s/platform/secret-stores/<cloud>
+  plain: true
+  keySeparator: "/"               # OKMS paths allow "/"
+  store: platform-secrets          # only used on the optional OKMS path
+
+# F11 Postgres TLS: false = DB_URL carries sslmode=require (encrypted, server not verified). When Layerbase gives its CA: run
+# infra/ovh-vps/secrets.sh with EXTERNAL_PG_SSLMODE=verify-full and EXTERNAL_PG_CA_FILE (creates the Secret pg-ca and the URLs),
+# then set enabled: true so every service mounts it at /etc/pg-ca (docs/runbooks/postgres-tls.md). Order matters: Secret first.
+postgresCA:
+  enabled: false
+  secretName: pg-ca
+  mountPath: /etc/pg-ca
+
+# F13 default-deny egress: OFF until uat has run with it (docs/runbooks/network-policies.md, rollout plan). Then set enabled: true and
+# fill postgres.cidrs with the Layerbase addresses (empty = port 5432 to any public IP, still never private ranges or metadata).
+networkPolicy:
+  egress:
+    enabled: false
+    postgres: {cidrs: [], inCluster: false}
+
+# GHCR packages are private: read-only token (read:packages), created by infra/ops/secrets/apply.sh as the pull Secret "ghcr".
+imagePullSecrets:
+  - name: ghcr
 
 # workloadIdentity: set the env-wide default identity in the cloud block below. platform-values is merged last, so a
 # service that needs its own least-privilege identity sets it here with care (or the key is left unset here and each
-# service sets workloadIdentity in its values-uat.yaml).
-
-# F13 default-deny egress (docs/runbooks/network-policies.md). uat is the first environment to enforce it; dev, trial and prod
-# follow after a clean uat soak. postgres.cidrs: the managed database's addresses (empty = port 5432 to any public IP).
-networkPolicy:
-  egress:
-    enabled: true
-    postgres: {cidrs: [], inCluster: true}
+# service sets workloadIdentity in its values-prod.yaml).
 
 argocd:
   env: uat
   destinationServer: https://kubernetes.default.svc
   targetRevision: release-1             # release-1 branch (ADR 0011); a release tag for prod once a release is cut
-  autoSync: true                  # automated sync with prune + selfHeal (Rollouts canary + analysis gate traffic)
-  prune: true
-  selfHeal: true
+  autoSync: false                  # MANUAL sync for the first soak (go-live night): flip to true (and prune/selfHeal) once stable. No Rollouts on the lean footprint
+  prune: false
+  selfHeal: false
 
 # ---------------------------------------------------------------------------------------------- AWS (EKS)
 # cloud: aws
 # image:
 #   registry: 111122223333.dkr.ecr.us-east-1.amazonaws.com/afrotransact
 # workloadIdentity:
-#   aws: {roleArn: "arn:aws:iam::111122223333:role/afrotransact-uat-services"}   # IRSA / Pod Identity
+#   aws: {roleArn: "arn:aws:iam::111122223333:role/afrotransact-prod-services"}   # IRSA / Pod Identity
 # ---------------------------------------------------------------------------------------------- GCP (GKE)
 # cloud: gcp
 # image:
-#   registry: us-central1-docker.pkg.dev/afrotransact-uat/afrotransact
+#   registry: us-central1-docker.pkg.dev/afrotransact-prod/afrotransact
 # workloadIdentity:
-#   gcp: {serviceAccount: "afrotransact-uat-services@afrotransact-uat.iam.gserviceaccount.com"}
+#   gcp: {serviceAccount: "afrotransact-prod-services@afrotransact-prod.iam.gserviceaccount.com"}
 # secrets: {enabled: true, store: platform-secrets, keySeparator: "-"}   # Secret Manager names allow [A-Za-z0-9_-] only
 # ---------------------------------------------------------------------------------------------- Azure (AKS)
 # cloud: azure
 # image:
-#   registry: afrotransactuat.azurecr.io
+#   registry: afrotransactprod.azurecr.io
 # workloadIdentity:
 #   azure: {clientId: "00000000-0000-0000-0000-000000000000"}                     # user-assigned identity
 # secrets: {enabled: true, store: platform-secrets, keySeparator: "-"}   # Key Vault names allow [A-Za-z0-9-] only
-# ---------------------------------------------------------------------------------------------- OVHcloud (MKS)
-# cloud: ovh
-# image:
-#   registry: abcdef.gra7.container-registry.ovh.net/library       # tofu output registry_url
-# workloadIdentity: {}                                            # none on OVH (and no OVH object storage: media/KYC on R2)
-# secrets: {enabled: true, store: platform-secrets, keySeparator: "/"}   # Secret Manager (OKMS) paths allow "/"
-
+# ---------------------------------------------------------------------------------------------- OVHcloud (MKS)  [ACTIVE ABOVE]
+# image.registry stays GHCR (no OVH Harbor: saves the registry fee and the mirror step); there is no workload identity on
+# OVH (`workloadIdentity: {}`), there is no OVH object storage (media and KYC on Cloudflare R2, backups on Backblaze B2), so no S3 keys.
 
 # Release 1 cutover (ADR 0011, docs/runbooks/release-1-deploy.md). service -> the deployable that now runs its module:
 # afrotransact-core (Java) or afrotransact-go (Go). One edit moves a module AND rolls it back:
@@ -85,4 +97,25 @@ argocd:
 #     route to the deployable's pods.
 # Remove the entry to roll back. Mirrored in infra/argocd/launch-set/release-1.yaml; check_launch_set.py fails on a mismatch.
 cutover:
-  services: {}
+  services:
+    identity: afrotransact-core
+    catalog: afrotransact-core
+    offers: afrotransact-core
+    inventory: afrotransact-core
+    orders: afrotransact-core
+    payments: afrotransact-core
+    seller: afrotransact-core
+    fulfilment: afrotransact-core
+    bookings: afrotransact-core
+    trust-ops: afrotransact-core
+    tax-returns: afrotransact-core
+    content: afrotransact-core
+    ai-gateway: afrotransact-core
+    mcp-server: afrotransact-core
+    gateway-bff: afrotransact-go
+    cart: afrotransact-go
+    search: afrotransact-go
+    indexer: afrotransact-go
+    geo: afrotransact-go
+    media: afrotransact-go
+    notifications: afrotransact-go

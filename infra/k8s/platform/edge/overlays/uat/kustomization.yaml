@@ -1,6 +1,20 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-# Edge for uat: the shared base plus this environment's public routes and tunnel token.
+# Edge for uat on OVH (release-1): prod's edge (the shared base plus prod's routes: Tunnel, no load balancer, no open port, cert-manager
+# pieces removed) moved to the uat namespace and the uat hostnames. Only api-uat.<zone> and auth-uat.<zone> are routed: no mcp, no grafana
+# (Grafana lives in Grafana Cloud). Hostnames come from infra/cloudflare/hosts.json (`python3 tools/ci/env_hosts.py check` proves they match).
+# The tunnel token is the Secret "cloudflared" in namespace ingress (infra/ops/secrets/apply.sh, PROFILE=uat).
 resources:
-  - ../../base
-  - routes.yaml
+  - ../prod
+patches:
+  - target: {kind: HTTPRoute, name: api}
+    patch: |-
+      - {op: replace, path: /spec/hostnames, value: [api-uat.afrotransact.com]}
+      - {op: replace, path: /metadata/namespace, value: afrotransact-uat}
+  - target: {kind: HTTPRoute, name: auth}
+    patch: |-
+      - {op: replace, path: /spec/hostnames, value: [auth-uat.afrotransact.com]}
+      - {op: replace, path: /metadata/namespace, value: afrotransact-uat}
+  - target: {kind: HTTPRouteFilter, name: deny-operational-paths}
+    patch: |-
+      - {op: replace, path: /metadata/namespace, value: afrotransact-uat}

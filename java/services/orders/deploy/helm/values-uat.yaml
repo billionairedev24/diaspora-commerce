@@ -15,13 +15,12 @@ telemetry:
   sampling: "0.5"
 tolerations:
   - {key: afrotransact.com/spot, operator: Exists, effect: NoSchedule}
-# Temporal Cloud: one namespace per environment (<namespace>.<account>); mTLS cert/key come from the secret store
-# (TEMPORAL_TLS_CERT / TEMPORAL_TLS_KEY). Override TEMPORAL_TARGET / TEMPORAL_NAMESPACE with the account suffix in
-# infra/argocd/envs/uat/platform-values.yaml if it differs.
+# UAT runs the SELF-HOSTED Temporal of the lean platform (infra/k8s/platform/lean/temporal.yaml, namespace "afrotransact", state in
+# Layerbase): no Temporal Cloud, no mTLS, no `temporal-cloud` profile (a deployable cannot switch a profile for one module anyway).
+# Temporal Cloud instead: SPRING_PROFILES_ACTIVE "uat,temporal-cloud", TEMPORAL_TARGET <ns>.<account>.tmprl.cloud:7233 and the mTLS secrets.
 extraEnv:
-  SPRING_PROFILES_ACTIVE: "uat,temporal-cloud"
   RETAIL_ORG_ID: org_afrotransact_retail
   ORDERS_ZONE: America/Chicago
-  TEMPORAL_NAMESPACE: afrotransact-uat
-  TEMPORAL_TARGET: afrotransact-uat.tmprl.cloud:7233
+  TEMPORAL_NAMESPACE: afrotransact
+  TEMPORAL_TARGET: temporal.temporal.svc.cluster.local:7233
   CHECKOUT_PAYMENT_TIMEOUT: 15m

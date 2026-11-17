@@ -1,5 +1,5 @@
-# UAT / staging: production-like, anonymised data, API reference pages on for testers. Temporal Cloud with mTLS: the
-# chart sets SPRING_PROFILES_ACTIVE=uat,temporal-cloud for orders (deploy/helm/values-uat.yaml).
+# UAT / staging: production-like, API reference pages on for testers. Temporal: the self-hosted server of the lean platform by default
+# (TEMPORAL_TARGET / TEMPORAL_NAMESPACE from the chart, no TLS); add the `temporal-cloud` profile for Temporal Cloud mTLS.
 spring:
   datasource:
     hikari:

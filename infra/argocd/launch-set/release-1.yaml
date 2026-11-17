@@ -54,12 +54,15 @@ enabled:
   dev:
     afrotransact-core: []     # first batch: catalog, tax-returns (the spike modules) once core's first image is pinned in values-dev.yaml
     afrotransact-go: []
+  # uat: the WHOLE launch set moves at once (owner decision 2026-11-17, UAT go-live on OVH; docs/runbooks/release-1-go-live.md). Nothing ran there before,
+  # so there is no standalone traffic to protect. The old per-service Applications stay, scaled to 0 (rollback path).
   uat:
-    afrotransact-core: []
-    afrotransact-go: []
+    afrotransact-core: [identity, catalog, offers, inventory, orders, payments, seller, fulfilment, bookings, trust-ops, tax-returns, content, ai-gateway, mcp-server]
+    afrotransact-go: [gateway-bff, cart, search, indexer, geo, media, notifications]
+  # prod: the same whole launch set as uat (UAT is the dry run of prod: they differ only by values). Nothing ran in prod before, so no batches.
   prod:
-    afrotransact-core: []
-    afrotransact-go: []
+    afrotransact-core: [identity, catalog, offers, inventory, orders, payments, seller, fulfilment, bookings, trust-ops, tax-returns, content, ai-gateway, mcp-server]
+    afrotransact-go: [gateway-bff, cart, search, indexer, geo, media, notifications]
   trial:
     afrotransact-core: []
     afrotransact-go: []

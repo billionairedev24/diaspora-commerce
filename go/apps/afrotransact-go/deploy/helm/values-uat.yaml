@@ -11,3 +11,6 @@ monitoring:
 telemetry:
   otlpEndpoint: otel-collector.observability:4318
   sampling: "0.25"
+extraEnv:
+  # UAT searches with the in-cluster Meilisearch (infra/k8s/platform/lean/data/meilisearch.yaml), like prod: no Elasticsearch on the lean platform.
+  SEARCH_PROVIDER: "meilisearch"

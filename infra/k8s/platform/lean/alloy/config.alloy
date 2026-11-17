@@ -179,32 +179,7 @@ prometheus.scrape "deployable_pods" {
 // scraped through its annotations above). It is NOT Alloy's built-in prometheus.exporter.kafka: that one makes Alloy fail its initial
 // load when the broker is unreachable, so a Kafka outage plus an Alloy restart would blind ALL monitoring.
 
-// Valkey: INFO counters through the Redis exporter built into Alloy (it connects lazily: redis_up = 0 when Valkey is down).
-prometheus.exporter.redis "valkey" {
-	redis_addr     = "valkey.data.svc.cluster.local:6379"
-	redis_password = sys.env("VALKEY_PASSWORD")
-}
-
-discovery.relabel "valkey" {
-	targets = prometheus.exporter.redis.valkey.targets
-
-	rule {
-		target_label = "service"
-		replacement  = "valkey"
-	}
-
-	rule {
-		target_label = "job"
-		replacement  = "valkey"
-	}
-}
-
-prometheus.scrape "valkey" {
-	targets         = discovery.relabel.valkey.output
-	forward_to      = [prometheus.relabel.guard.receiver]
-	scrape_interval = "60s"
-	sample_limit    = 4000
-}
+// Valkey: managed on Layerbase, no pod to scrape here (its metrics are in the Layerbase panel). The in-cluster scrape was removed with the pod.
 
 // Meilisearch: /metrics needs MEILI_EXPERIMENTAL_ENABLE_METRICS=true (set in lean/data/meilisearch.yaml) and a bearer key.
 discovery.relabel "meilisearch" {

@@ -15,7 +15,10 @@ set -euo pipefail
 plain=false
 if [[ "${1:-}" == "--plain" ]]; then plain=true; shift; fi
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-dir="${1:-$root/prod}"
+# ENV=uat|prod (default prod): the namespace afrotransact-$ENV, the default DIR $root/$ENV and the mandatory-key list follow it. UAT is the dry run of prod.
+ENV="${ENV:-prod}"
+case "$ENV" in uat|prod) ;; *) echo "error: ENV must be uat or prod" >&2; exit 1 ;; esac
+dir="${1:-$root/$ENV}"
 [[ -d "$dir" ]] || { echo "error: $dir is not a directory" >&2; exit 1; }
 command -v kubectl >/dev/null || { echo "error: kubectl not found" >&2; exit 1; }
 $plain || command -v sops >/dev/null || { echo "error: sops not found (https://github.com/getsops/sops)" >&2; exit 1; }
@@ -29,28 +32,30 @@ fi
 
 # Namespaces: service namespace carries part-of=afrotransact; platform namespaces carry afrotransact-platform. Argo CD later
 # adopts them (managedNamespaceMetadata / the namespaces component), labels are identical.
-for n in afrotransact-prod; do
-  kubectl get ns "$n" >/dev/null 2>&1 || kubectl create ns "$n"
-  kubectl label ns "$n" app.kubernetes.io/part-of=afrotransact afrotransact.com/env=prod --overwrite
-done
+n="afrotransact-$ENV"
+kubectl get ns "$n" >/dev/null 2>&1 || kubectl create ns "$n"
+kubectl label ns "$n" app.kubernetes.io/part-of=afrotransact "afrotransact.com/env=$ENV" --overwrite
 for n in data kafka temporal ops observability ingress; do
   kubectl get ns "$n" >/dev/null 2>&1 || kubectl create ns "$n"
   kubectl label ns "$n" app.kubernetes.io/part-of=afrotransact-platform --overwrite
 done
 
 # Keys that must not be empty in production (an empty value starts the pod and fails later, at the worst moment).
-MANDATORY='afrotransact-prod/payments-secrets:STRIPE_SECRET_KEY,STRIPE_WEBHOOK_SECRET
-afrotransact-prod/seller-secrets:STRIPE_SECRET_KEY,STRIPE_CONNECT_WEBHOOK_SECRET
-afrotransact-prod/gateway-bff-secrets:STRIPE_PUBLISHABLE_KEY,SESSION_SIGNING_KEY,OIDC_CLIENT_SECRET
-afrotransact-prod/notifications-secrets:RESEND_API_KEY,RESEND_WEBHOOK_SECRET,UNSUBSCRIBE_SIGNING_KEY
-afrotransact-prod/media-secrets:R2_ACCOUNT_ID,R2_ACCESS_KEY_ID,R2_SECRET_ACCESS_KEY,R2_PRIVATE_ACCESS_KEY_ID,R2_PRIVATE_SECRET_ACCESS_KEY,LINK_SIGNING_KEY
-afrotransact-prod/identity-secrets:SIGNING_KEY_PEM,IDENTITY_DATA_KEY,BOOTSTRAP_ADMIN_PASSWORD
-afrotransact-prod/ai-gateway-secrets:OPENROUTER_API_KEY
+MANDATORY='@NS@/afrotransact-core-secrets:CORE_DB_URL,REDIS_URL,SIGNING_KEY_PEM,IDENTITY_DATA_KEY,BOOTSTRAP_ADMIN_PASSWORD,STRIPE_SECRET_KEY,STRIPE_WEBHOOK_SECRET,STRIPE_CONNECT_WEBHOOK_SECRET,OPENROUTER_API_KEY,HANDOVER_CODE_KEY,PAY_LINK_KEY
+@NS@/afrotransact-go-secrets:REDIS_URL,STRIPE_PUBLISHABLE_KEY,SESSION_SIGNING_KEY,OIDC_CLIENT_SECRET,RESEND_API_KEY,RESEND_WEBHOOK_SECRET,R2_ACCOUNT_ID,R2_ACCESS_KEY_ID,R2_SECRET_ACCESS_KEY,R2_PRIVATE_ACCESS_KEY_ID,R2_PRIVATE_SECRET_ACCESS_KEY,LINK_SIGNING_KEY
+@NS@/payments-secrets:STRIPE_SECRET_KEY,STRIPE_WEBHOOK_SECRET
+@NS@/seller-secrets:STRIPE_SECRET_KEY,STRIPE_CONNECT_WEBHOOK_SECRET
+@NS@/gateway-bff-secrets:STRIPE_PUBLISHABLE_KEY,SESSION_SIGNING_KEY,OIDC_CLIENT_SECRET
+@NS@/notifications-secrets:RESEND_API_KEY,RESEND_WEBHOOK_SECRET,UNSUBSCRIBE_SIGNING_KEY
+@NS@/media-secrets:R2_ACCOUNT_ID,R2_ACCESS_KEY_ID,R2_SECRET_ACCESS_KEY,R2_PRIVATE_ACCESS_KEY_ID,R2_PRIVATE_SECRET_ACCESS_KEY,LINK_SIGNING_KEY
+@NS@/identity-secrets:SIGNING_KEY_PEM,IDENTITY_DATA_KEY,BOOTSTRAP_ADMIN_PASSWORD
+@NS@/ai-gateway-secrets:OPENROUTER_API_KEY
 ingress/cloudflared:token
 observability/grafana-cloud-alloy:CLUSTER_ENV,GRAFANA_PROM_URL,GRAFANA_PROM_USER,GRAFANA_LOKI_URL,GRAFANA_LOKI_USER,GRAFANA_TOKEN
 ops/pg-backup:AGE_RECIPIENT,B2_KEY_ID,B2_APPLICATION_KEY,B2_BUCKET,B2_ENDPOINT
 ops/r2-backup:AGE_RECIPIENT,B2_KEY_ID,B2_APPLICATION_KEY,B2_BUCKET,B2_ENDPOINT,R2_ACCOUNT_ID,R2_MEDIA_BUCKET,R2_KYC_BUCKET,R2_MEDIA_KEY_ID,R2_MEDIA_SECRET,R2_KYC_KEY_ID,R2_KYC_SECRET'
 
+MANDATORY="${MANDATORY//@NS@/afrotransact-$ENV}"
 check_mandatory() { # check_mandatory < decrypted-yaml ; prints the problems, exit 1 when any
   MANDATORY="$MANDATORY" python3 -c '
 import base64, os, sys, yaml
@@ -82,4 +87,4 @@ for f in "${files[@]}"; do
   echo "applied $(basename "$f")"
 done
 ((fail == 0)) || { echo "some Secrets were NOT applied (see above)" >&2; exit 1; }
-echo "done. Restart workloads that read a changed Secret: kubectl -n afrotransact-prod rollout restart deploy/<service>"
+echo "done. Restart workloads that read a changed Secret: kubectl -n afrotransact-$ENV rollout restart deploy/<service>"

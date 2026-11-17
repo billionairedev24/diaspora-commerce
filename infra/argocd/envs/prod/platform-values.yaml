@@ -100,4 +100,25 @@ argocd:
 #     route to the deployable's pods.
 # Remove the entry to roll back. Mirrored in infra/argocd/launch-set/release-1.yaml; check_launch_set.py fails on a mismatch.
 cutover:
-  services: {}
+  services:
+    identity: afrotransact-core
+    catalog: afrotransact-core
+    offers: afrotransact-core
+    inventory: afrotransact-core
+    orders: afrotransact-core
+    payments: afrotransact-core
+    seller: afrotransact-core
+    fulfilment: afrotransact-core
+    bookings: afrotransact-core
+    trust-ops: afrotransact-core
+    tax-returns: afrotransact-core
+    content: afrotransact-core
+    ai-gateway: afrotransact-core
+    mcp-server: afrotransact-core
+    gateway-bff: afrotransact-go
+    cart: afrotransact-go
+    search: afrotransact-go
+    indexer: afrotransact-go
+    geo: afrotransact-go
+    media: afrotransact-go
+    notifications: afrotransact-go

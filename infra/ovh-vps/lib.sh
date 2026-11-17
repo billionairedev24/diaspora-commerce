@@ -9,9 +9,11 @@ STATE_DIR="${STATE_DIR:-/var/lib/afrotransact}"
 # prod is used by infra/ops/secrets to RENDER the production Secrets on an operator's machine; the single-server deploy.sh
 # stays a test path (docs/runbooks/ovh-vps.md) and is not how production is deployed (docs/runbooks/ovh-production.md).
 PROFILE="${PROFILE:-dev}"
-case "$PROFILE" in dev|prod) ;; *) echo "error: PROFILE must be dev or prod" >&2; exit 1 ;; esac
+# PROFILE=uat (release-1, UAT on OVH): the launch set like prod, APP_ENV=uat, namespace afrotransact-uat, no OpenFGA, Stripe TEST keys.
+case "$PROFILE" in dev|prod|uat) ;; *) echo "error: PROFILE must be dev, uat or prod" >&2; exit 1 ;; esac
+PROD_LIKE=false; [[ "$PROFILE" == prod || "$PROFILE" == uat ]] && PROD_LIKE=true
 NS="${NS:-afrotransact-$PROFILE}"
-SERVICES_CONF="${SERVICES_CONF:-$( [[ "$PROFILE" == prod ]] && echo "$HERE/services.launch.conf" || echo "$HERE/services.conf" )}"
+SERVICES_CONF="${SERVICES_CONF:-$( [[ "$PROD_LIKE" == true ]] && echo "$HERE/services.launch.conf" || echo "$HERE/services.conf" )}"
 export KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
 
 log() { printf '\033[1m==> %s\033[0m\n' "$*"; }

@@ -48,9 +48,11 @@ if [[ "$DB_MODE" == external && "$PROFILE" == prod && "$PG_SSL" != verify-full ]
 fi
 KAFKA="kafka-0.kafka.kafka.svc.cluster.local:9092"
 VALKEY_PW="$(gen VALKEY_PASSWORD)"
-REDIS_URL="redis://:${VALKEY_PW}@valkey.data.svc.cluster.local:6379"
+# Release 1 go-live: Valkey is a MANAGED service on Layerbase, not a pod. EXTERNAL_REDIS_URL (rediss://<user>:<password>@<host>:<port>, a secret VALUE
+# that stays in secrets.local.env) becomes REDIS_URL of every service that uses it. Unset = the in-cluster Valkey of the dev box / trial.
+REDIS_URL="${EXTERNAL_REDIS_URL:-redis://:${VALKEY_PW}@valkey.data.svc.cluster.local:6379}"
 MEILI_KEY="$(gen MEILI_MASTER_KEY)"
-FGA_TOKEN=""; [[ "$PROFILE" == prod ]] || FGA_TOKEN="$(gen FGA_API_TOKEN)"   # prod: OpenFGA is not deployed (FGA_ENABLED=false)
+FGA_TOKEN=""; [[ "$PROD_LIKE" == true ]] || FGA_TOKEN="$(gen FGA_API_TOKEN)"   # prod: OpenFGA is not deployed (FGA_ENABLED=false)
 TEMPORAL_TARGET="temporal.temporal.svc.cluster.local:7233"
 
 pg_admin_password() { if [[ "$DB_MODE" == external ]]; then printf '%s' "$EXTERNAL_PG_ADMIN_PASSWORD"; else gen POSTGRES_ADMIN_PASSWORD; fi; }
@@ -93,12 +95,12 @@ platform() {
   log "platform secrets"
   ensure_namespaces
   [[ "$DB_MODE" == cluster ]] && secret data postgres "POSTGRES_PASSWORD=$(pg_admin_password)"
-  secret data valkey "VALKEY_PASSWORD=$VALKEY_PW"
+  [[ -n "${EXTERNAL_REDIS_URL:-}" ]] || secret data valkey "VALKEY_PASSWORD=$VALKEY_PW"   # managed Valkey: no in-cluster pod, no Secret
   secret data meilisearch "MEILI_MASTER_KEY=$MEILI_KEY"
   local tdb_pw ofga_pw
   tdb_pw="$(db_password temporal)"
   secret temporal temporal "POSTGRES_SEEDS=$PG_HOST" "DB_PORT=5432" "POSTGRES_USER=$(role_of temporal)" "POSTGRES_PWD=$tdb_pw"
-  if [[ "$PROFILE" == prod ]]; then
+  if [[ "$PROD_LIKE" == true ]]; then
     # Production extras (no OpenFGA). Values come from secrets.local.env; an empty value is a mistake the apply step refuses.
     secret ingress cloudflared "token=${CLOUDFLARED_TUNNEL_TOKEN:-}"
     secret observability grafana-cloud-otlp "GRAFANA_OTLP_ENDPOINT=${GRAFANA_OTLP_ENDPOINT:-}" "GRAFANA_INSTANCE_ID=${GRAFANA_INSTANCE_ID:-}" "GRAFANA_API_TOKEN=${GRAFANA_API_TOKEN:-}"
@@ -113,19 +115,19 @@ platform() {
     # bucket with its bucket-scoped key (pg-backup.sh builds the rclone remote from B2_*; docs/runbooks/backups-backblaze.md).
     secret ops pg-backup "PGHOST=$PG_HOST" "PGPORT=5432" "PGUSER=$PG_ADMIN" "PGPASSWORD=$(pg_admin_password)" "PGSSLMODE=$PG_SSL" \
       "AGE_RECIPIENT=${BACKUP_AGE_RECIPIENT:-}" "B2_KEY_ID=${BACKUP_B2_KEY_ID:-}" "B2_APPLICATION_KEY=${BACKUP_B2_APPLICATION_KEY:-}" \
-      "B2_BUCKET=${BACKUP_B2_BUCKET:-afrotransact-prod-backups}" "B2_ENDPOINT=${BACKUP_B2_ENDPOINT:-}" \
-      "RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-14}" "RETENTION_MODE=${BACKUP_RETENTION_MODE:-sweep}" "BACKUP_ENV=${GRAFANA_ENV:-prod}" \
+      "B2_BUCKET=${BACKUP_B2_BUCKET:-afrotransact-${PROFILE}-backups}" "B2_ENDPOINT=${BACKUP_B2_ENDPOINT:-}" \
+      "RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-14}" "RETENTION_MODE=${BACKUP_RETENTION_MODE:-sweep}" "BACKUP_ENV=${GRAFANA_ENV:-$PROFILE}" \
       "PUSHGATEWAY_URL=${BACKUP_PUSHGATEWAY_URL:-}" "HEALTHCHECK_URL=${BACKUP_HEALTHCHECK_URL:-}"
     # Nightly R2 -> B2 copy (infra/k8s/platform/lean/backup/r2-cronjob.yaml, S380): two READ-ONLY R2 tokens (one per bucket, not the ones media
     # writes with), the B2 key (R2COPY_B2_* or, by default, the database backup's) and the same public age key. docs/runbooks/backup-restore-r2.md.
-    secret ops r2-backup "R2_ACCOUNT_ID=${R2_ACCOUNT_ID:-}" "R2_MEDIA_BUCKET=${R2_PUBLIC_BUCKET:-afrotransact-prod-media}" \
-      "R2_KYC_BUCKET=${R2_PRIVATE_BUCKET:-afrotransact-prod-kyc-evidence}" \
+    secret ops r2-backup "R2_ACCOUNT_ID=${R2_ACCOUNT_ID:-}" "R2_MEDIA_BUCKET=${R2_PUBLIC_BUCKET:-afrotransact-${PROFILE}-media}" \
+      "R2_KYC_BUCKET=${R2_PRIVATE_BUCKET:-afrotransact-${PROFILE}-kyc-evidence}" \
       "R2_MEDIA_KEY_ID=${R2COPY_R2_MEDIA_KEY_ID:-}" "R2_MEDIA_SECRET=${R2COPY_R2_MEDIA_SECRET:-}" \
       "R2_KYC_KEY_ID=${R2COPY_R2_KYC_KEY_ID:-}" "R2_KYC_SECRET=${R2COPY_R2_KYC_SECRET:-}" \
       "AGE_RECIPIENT=${BACKUP_AGE_RECIPIENT:-}" "B2_KEY_ID=${R2COPY_B2_KEY_ID:-${BACKUP_B2_KEY_ID:-}}" \
       "B2_APPLICATION_KEY=${R2COPY_B2_APPLICATION_KEY:-${BACKUP_B2_APPLICATION_KEY:-}}" \
-      "B2_BUCKET=${R2COPY_B2_BUCKET:-${BACKUP_B2_BUCKET:-afrotransact-prod-backups}}" "B2_ENDPOINT=${BACKUP_B2_ENDPOINT:-}" \
-      "BACKUP_ENV=${GRAFANA_ENV:-prod}" "PUSHGATEWAY_URL=${BACKUP_PUSHGATEWAY_URL:-}" "HEALTHCHECK_URL=${R2COPY_HEALTHCHECK_URL:-}"
+      "B2_BUCKET=${R2COPY_B2_BUCKET:-${BACKUP_B2_BUCKET:-afrotransact-${PROFILE}-backups}}" "B2_ENDPOINT=${BACKUP_B2_ENDPOINT:-}" \
+      "BACKUP_ENV=${GRAFANA_ENV:-$PROFILE}" "PUSHGATEWAY_URL=${BACKUP_PUSHGATEWAY_URL:-}" "HEALTHCHECK_URL=${R2COPY_HEALTHCHECK_URL:-}"
     return 0
   fi
   ofga_pw="$(db_password openfga)"
@@ -145,7 +147,7 @@ databases() {
   log "databases and roles"
   local db role pw
   local names=(temporal temporal_visibility)
-  [[ "$PROFILE" == prod ]] || names+=(openfga)
+  [[ "$PROD_LIKE" == true ]] || names+=(openfga)
   while read -r _ _ db _; do [[ "$db" != "-" ]] && names+=("$db"); done < <(services)
   for db in "${names[@]}"; do
     # temporal_visibility belongs to the temporal role
@@ -213,7 +215,7 @@ service_keys() {
     mcp-server)       out+=("KAFKA_BOOTSTRAP=$KAFKA" "REDIS_URL=$REDIS_URL") ;;
     media)
       # Production media is Cloudflare R2 only (docs/runbooks/r2-buckets.md): one token per bucket. The dev box keeps UploadThing.
-      if [[ "$PROFILE" == prod ]]; then
+      if [[ "$PROD_LIKE" == true ]]; then
         out+=("LINK_SIGNING_KEY=$(gen LINK_SIGNING_KEY)" "LINK_SIGNING_KEYS_PREVIOUS=" "MEDIA_CLIENT_SECRET=$(gen MEDIA_CLIENT_SECRET)" "R2_ACCOUNT_ID=${R2_ACCOUNT_ID:-}"
           "R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID:-}" "R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY:-}"
           "R2_PRIVATE_ACCESS_KEY_ID=${R2_PRIVATE_ACCESS_KEY_ID:-}" "R2_PRIVATE_SECRET_ACCESS_KEY=${R2_PRIVATE_SECRET_ACCESS_KEY:-}")
@@ -301,11 +303,11 @@ deployable_secrets() {
 
 services_secrets() {
   log "service secrets in namespace $NS"
-  if [[ "$PROFILE" == prod ]]; then
+  if [[ "$PROD_LIKE" == true ]]; then
     # Identity refuses to start in prod with a weak or published bootstrap admin (StartupProvisioning): fail here, not at 3 am.
     local pw="${ADMIN_PASSWORD:-}"
-    [[ "${#pw}" -ge 16 && "$pw" != change-me-please-12 ]] || die "ADMIN_PASSWORD must be a real password of at least 16 characters for PROFILE=prod"
-    case "${ADMIN_EMAIL:-}" in ""|admin@example.com|*.test|*@example.com) die "ADMIN_EMAIL must be a real address for PROFILE=prod" ;; esac
+    [[ "${#pw}" -ge 16 && "$pw" != change-me-please-12 ]] || die "ADMIN_PASSWORD must be a real password of at least 16 characters for PROFILE=$PROFILE"
+    case "${ADMIN_EMAIL:-}" in ""|admin@example.com|*.test|*@example.com) die "ADMIN_EMAIL must be a real address for PROFILE=$PROFILE" ;; esac
   fi
   ensure_namespaces
   # F11: the CA bundle every service mounts (chart value postgresCA.enabled=true in infra/argocd/envs/<env>/platform-values.yaml).
