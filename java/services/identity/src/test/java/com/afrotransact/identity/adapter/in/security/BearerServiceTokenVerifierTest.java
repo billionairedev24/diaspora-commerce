@@ -73,4 +73,17 @@ class BearerServiceTokenVerifierTest {
         when(decoder.decode("abc")).thenReturn(jwt("SERVICE"));
         assertThat(verifier(true).verifiedService()).isEmpty();
     }
+
+    @Test
+    void theScopeClaimDecidesWhetherTheServiceHoldsUsersRead() {
+        request("Bearer abc");
+        when(decoder.decode("abc")).thenReturn(new Jwt("t", Instant.now(), Instant.now().plusSeconds(60),
+                Map.of("alg", "RS256"), Map.of("sub", "notifications-service", "pt", "SERVICE",
+                        "scope", "users:read delivery-runs:audience.read")));
+        assertThat(verifier(false).verifiedService().orElseThrow().can("users:read")).isTrue();
+
+        when(decoder.decode("abc")).thenReturn(new Jwt("t", Instant.now(), Instant.now().plusSeconds(60),
+                Map.of("alg", "RS256"), Map.of("sub", "orders-service", "pt", "SERVICE", "scope", "orders:lookup")));
+        assertThat(verifier(false).verifiedService().orElseThrow().can("users:read")).isFalse();
+    }
 }

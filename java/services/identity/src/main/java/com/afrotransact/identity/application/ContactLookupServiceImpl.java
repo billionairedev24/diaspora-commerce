@@ -115,7 +115,9 @@ class ContactLookupServiceImpl implements ContactLookupService {
     }
 
     private void requireServiceLookup() {
-        Actor actor = current.actor();
+        // caller(), not actor(): in core on the local profile (security off) actor() is the local super admin (STAFF), so
+        // notifications-service's client-credentials token was refused with 403; caller() reads the verified bearer token.
+        Actor actor = current.caller();
         if (actor.type() != PrincipalType.SERVICE || !actor.can(IdentityPermissions.USERS_READ)) {
             throw new ForbiddenActionException("identity.service-lookup-only",
                     "Contact lookups need a service token with users:read");
