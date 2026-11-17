@@ -153,6 +153,15 @@
             <artifactId>orders-service</artifactId>
             <version>${project.version}</version>
             <classifier>plain</classifier>
+            <exclusions>
+                <!-- temporal-spring-boot-starter pulls the test server (temporal-testing, temporal-test-server, cron-utils) as a compile
+                     dependency; only TestServerAutoConfiguration (@ConditionalOnClass TestWorkflowEnvironment, spring.temporal.test-server.enabled)
+                     uses it, and orders' own tests declare temporal-testing in test scope. -->
+                <exclusion>
+                    <groupId>io.temporal</groupId>
+                    <artifactId>temporal-testing</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>com.afrotransact</groupId>
@@ -259,6 +268,37 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>repackage</id>
+                        <configuration>
+                            <!-- Native libraries of platforms the image never runs on (the deployables are linux; Maven classifier jars cannot be
+                                 excluded with a dependency exclusion). The other jars' foreign natives are stripped in java/Dockerfile. -->
+                            <excludes>
+                                <exclude>
+                                    <groupId>io.netty</groupId>
+                                    <artifactId>netty-codec-native-quic</artifactId>
+                                    <classifier>osx-x86_64</classifier>
+                                </exclude>
+                                <exclude>
+                                    <groupId>io.netty</groupId>
+                                    <artifactId>netty-codec-native-quic</artifactId>
+                                    <classifier>osx-aarch_64</classifier>
+                                </exclude>
+                                <exclude>
+                                    <groupId>io.netty</groupId>
+                                    <artifactId>netty-codec-native-quic</artifactId>
+                                    <classifier>windows-x86_64</classifier>
+                                </exclude>
+                                <exclude>
+                                    <groupId>io.netty</groupId>
+                                    <artifactId>netty-resolver-dns-native-macos</artifactId>
+                                    <classifier>osx-x86_64</classifier>
+                                </exclude>
+                            </excludes>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
