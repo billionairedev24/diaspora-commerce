@@ -1,0 +1,40 @@
+name: Build the Java jar
+description: >
+  Builds one Maven project of the java/ reactor on the runner (JDK 25, Maven repository cached by setup-java, keyed on every pom.xml)
+  and leaves the executable jar at java/dist/app.jar, where java/Dockerfile reads it with --build-arg JAR_FROM=prebuilt. This keeps Maven
+  out of Docker (a BuildKit cache mount is not exported by the gha cache, so every in-Docker build downloaded the whole repository)
+  and out of QEMU on multi-arch builds (the jar is the same for every platform; only jlink runs per platform).
+inputs:
+  project:
+    description: Maven project path relative to java/ (apps/core or services/<name>).
+    required: true
+  jar-glob:
+    description: Executable jar file name pattern inside <project>/target (the -plain.jar is skipped).
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-java@v6
+      with:
+        distribution: temurin
+        java-version: "25"
+        cache: maven
+        cache-dependency-path: |
+          java/**/pom.xml
+    - name: Maven package (no tests, verify runs them)
+      shell: bash
+      working-directory: java
+      env:
+        PROJECT: ${{ inputs.project }}
+        JAR_GLOB: ${{ inputs.jar-glob }}
+      run: |
+        set -euo pipefail
+        ./mvnw -B -ntp -pl "$PROJECT" -am package -DskipTests
+        jar=""
+        for f in "$PROJECT"/target/$JAR_GLOB; do
+          case "$f" in *-plain.jar) ;; *) jar="$f"; break ;; esac
+        done
+        [[ -n "$jar" && -f "$jar" ]] || { echo "::error::no executable jar matching $JAR_GLOB in $PROJECT/target"; exit 1; }
+        mkdir -p dist
+        cp "$jar" dist/app.jar
+        echo "jar: $jar ($(du -m dist/app.jar | cut -f1) MB)" >> "$GITHUB_STEP_SUMMARY"

@@ -24,7 +24,7 @@ inputs:
     default: "true"
   max-size-mb:
     description: >
-      Size budget of the linux/amd64 image in MB (uncompressed, as `docker image ls` shows it); empty = no budget.
+      Size budget of the linux/amd64 image in MB (sum of the uncompressed layer sizes); empty = no budget.
       Go services: 60 (S010). Checked on every build, pull requests included.
     required: false
     default: ""
@@ -160,7 +160,10 @@ runs:
         for kv in $REQUIRED_ENV; do
           grep -qxF "$kv" <<<"$envs" || { echo "::error title=image policy::$IMAGE lacks ENV $kv"; fail=1; }
         done
-        bytes="$(docker image inspect --format '{{.Size}}' "$IMAGE")"
+        # Sum of the layer sizes: the same number on the classic overlay2 store and on the containerd image store (where `.Size`
+        # also counts the compressed blobs and reads about twice as much). Falls back to `.Size` if history is unavailable.
+        bytes="$(docker history --human=false --format '{{.Size}}' "$IMAGE" | awk '{ s += $1 } END { printf "%d", s }')"
+        [[ "$bytes" -gt 0 ]] || bytes="$(docker image inspect --format '{{.Size}}' "$IMAGE")"
         mb="$(awk -v b="$bytes" 'BEGIN { printf "%.1f", b / 1000000 }')"
         {
           echo "### Image policy: ${{ inputs.service }}"

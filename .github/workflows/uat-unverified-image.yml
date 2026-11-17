@@ -64,6 +64,10 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/java-jar
+        with:
+          project: apps/core
+          jar-glob: afrotransact-core*.jar
       - id: publish
         uses: ./.github/actions/publish-image
         with:
@@ -71,13 +75,12 @@ jobs:
           context: java
           dockerfile: java/Dockerfile
           build-args: |
-            SERVICE=core
-            PROJECT=apps/core
-            JAR_GLOB=afrotransact-core*.jar
+            JAR_FROM=prebuilt
           push: "true"
           verified: "false"
           platforms: linux/amd64
-          max-size-mb: "420"
+          # Same budget as core.yml (measured 369 MB, +~4%).
+          max-size-mb: "385"
           required-env: SPRING_PROFILES_ACTIVE=prod
       - name: Summary
         env:

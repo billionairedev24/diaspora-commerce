@@ -46,7 +46,7 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
           BEFORE: ${{ github.event.before }}
           SHA: ${{ github.sha }}
-          RELEVANT: '^(java/|contracts/openapi/|infra/helm/library/|infra/ops/postgres/|tools/ci/core_ci_db\.sh|tools/release/(route_diff\.py|parity\.py|parity\.yaml|requirements-ci\.txt|test_cutover_render\.sh)|\.github/workflows/(core|_deploy)\.yml|\.github/actions/(publish-image|helm-check)/)'
+          RELEVANT: '^(java/|contracts/openapi/|infra/helm/library/|infra/ops/postgres/|tools/ci/core_ci_db\.sh|tools/release/(route_diff\.py|parity\.py|parity\.yaml|requirements-ci\.txt|test_cutover_render\.sh)|\.github/workflows/(core|_deploy)\.yml|\.github/actions/(publish-image|java-jar|helm-check)/)'
         run: |
           case "$EVENT" in
             pull_request) git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"; files="$(git diff --name-only "origin/${BASE_REF}...HEAD")" ;;
@@ -200,6 +200,11 @@ jobs:
       digest: ${{ steps.publish.outputs.digest }}
     steps:
       - uses: actions/checkout@v7
+      # The jar is built here (Maven repository cached) and only packaged by the Dockerfile: no Maven in Docker, no QEMU for Maven.
+      - uses: ./.github/actions/java-jar
+        with:
+          project: apps/core
+          jar-glob: afrotransact-core*.jar
       - id: publish
         uses: ./.github/actions/publish-image
         with:
@@ -207,13 +212,14 @@ jobs:
           context: java
           dockerfile: java/Dockerfile
           build-args: |
-            SERVICE=core
-            PROJECT=apps/core
-            JAR_GLOB=afrotransact-core*.jar
+            JAR_FROM=prebuilt
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/release-1' }}
-          # A guard rail, not a measurement: the jlinked JRE (~60 MB) + distroless (~25 MB) + the one fat jar (96 MB for two modules,
-          # release-1-architecture.md 11.2; each further module adds libraries). TIGHTEN it from the first image policy summary.
-          max-size-mb: "420"
+          # OVH nodes are amd64: no arm64 leg (it ran jlink under QEMU).
+          platforms: linux/amd64
+          # Measured 2026-11-17 on the 14-module jar (docker history layer sum): jlinked JRE 68 MB + distroless 37 MB + libraries 259 MB +
+          # our jars 14 MB = 369 MB. Budget = measured + ~4%. Every new module adds its libraries: raise it on purpose, not by reflex.
+          # With APPCDS=true the image is ~115 MB larger (docs/runbooks/release-1-go-live.md, "Image size").
+          max-size-mb: "385"
           required-env: SPRING_PROFILES_ACTIVE=prod
 
   deploy-dev:
