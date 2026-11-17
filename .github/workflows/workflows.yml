@@ -1,19 +1,9 @@
 # CI for the CI: actionlint on every workflow, and the generated per-service workflows must match
 # tools/ci/gen_workflows.py (+ infra/local/PORTS.md, which lists the services).
 name: workflows
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
-  pull_request:
-    paths:
-      - .github/**
-      - tools/ci/**
-      - infra/local/PORTS.md
-  push:
-    branches: [main]
-    paths:
-      - .github/**
-      - tools/ci/**
-      - infra/local/PORTS.md
+  workflow_dispatch:
 
 permissions:
   contents: read

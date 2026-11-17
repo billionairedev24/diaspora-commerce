@@ -1,0 +1,1 @@
+Workflows run only when triggered by hand. Restore: python3 tools/ci/manual_only.py enable

@@ -3,33 +3,8 @@
 # in the code must be covered by its ACL prefix. docs/engineering/kafka-topics-and-acls.md.
 # Hand-written (tools/ci/gen_workflows.py generates only the per-service, web and promote workflows).
 name: kafka-topics
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
-  pull_request:
-    paths:
-      - contracts/asyncapi/**
-      - infra/tofu/kafka-topics.json
-      - infra/tofu/envs/**/main.tf
-      - infra/tofu/modules/shared/confluent/**
-      - infra/local/kafka/**
-      - infra/k8s/platform/lean/kafka.yaml
-      - java/services/*/src/main/resources/application.yml
-      - java/services/*/src/main/java/**/*Listener*.java
-      - go/services/*/config/*.yaml
-      - tools/ops/topics-check.sh
-      - tools/ops/topics_model.py
-      - tools/ops/dlq-topics.sh
-      - .github/workflows/kafka-topics.yml
-  push:
-    branches: [main]
-    paths:
-      - contracts/asyncapi/**
-      - infra/tofu/kafka-topics.json
-      - infra/tofu/envs/**/main.tf
-      - infra/local/kafka/**
-      - infra/k8s/platform/lean/kafka.yaml
-      - tools/ops/topics-check.sh
-      - tools/ops/topics_model.py
   workflow_dispatch:
 
 permissions:

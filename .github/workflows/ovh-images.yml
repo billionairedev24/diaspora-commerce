@@ -4,7 +4,7 @@
 # signature of the publish-image action still run. Production images come from the per-service pipelines on main.
 #   Actions > ovh-images > Run workflow (branch main), then copy the commit sha into the ovh-vps workflow's image-tag.
 name: ovh-images
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
   workflow_dispatch:
     inputs:
