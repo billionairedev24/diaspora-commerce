@@ -72,6 +72,7 @@ workflows:
   legal-documents.yml:       {line: release-1, reason: "legal document seed consistency (content module)"}
   mobile.yml:                {line: release-1, reason: "OTA preview from release-1; production store builds only from a commit release-1 contains"}
   observability-config.yml:  {line: release-1, reason: "rules, dashboards and Alloy config"}
+  backup-tools-image.yml:    {line: manual, reason: "tools image of the backup CronJobs (pg client, rclone, age, curl; non-root), built on demand when infra/ops/backup-tools changes"}
   ovh-images.yml:            {line: manual, reason: "per-service images for the single-VPS test box (ovh-vps), on demand; release-1 images come from core.yml and afrotransact-go.yml"}
   ovh-vps.yml:               {line: manual, reason: "single-VPS test environment (per-service k3s path), billed by the hour, never automatic"}
   ovh-web.yml:               {line: manual, reason: "web apps on Cloudflare Workers for the OVH environment"}
