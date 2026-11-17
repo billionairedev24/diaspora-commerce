@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/httpclient"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
@@ -166,15 +167,20 @@ func (s *sellerServiceImpl) SaveApplicationStep(ctx context.Context, bearer, ste
 	return a, err
 }
 
+// stripeSessionPolicy: the first session call creates the Stripe connected account and then the account session (two
+// Stripe round trips, often over the upstream's default 3s). The seller service makes it idempotent per organisation (one
+// account, whatever the number of calls), so the BFF may wait longer per attempt and retry a transient failure.
+var stripeSessionPolicy = &httpclient.Policy{Timeout: 15 * time.Second, Retries: 2, Backoff: 500 * time.Millisecond}
+
 func (s *sellerServiceImpl) ApplicationStripeSession(ctx context.Context, bearer string) (port.SellerAccountSession, error) {
 	var out port.SellerAccountSession
-	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/applications/me/stripe/account-session", Bearer: bearer, UserBearer: true}, &out)
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/applications/me/stripe/account-session", Bearer: bearer, UserBearer: true, Policy: stripeSessionPolicy}, &out)
 	return out, err
 }
 
 func (s *sellerServiceImpl) OrgStripeSession(ctx context.Context, bearer, orgID string) (port.SellerAccountSession, error) {
 	var out port.SellerAccountSession
-	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: orgPath(orgID, "/stripe/account-session"), Bearer: bearer, UserBearer: true}, &out)
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: orgPath(orgID, "/stripe/account-session"), Bearer: bearer, UserBearer: true, Policy: stripeSessionPolicy}, &out)
 	return out, err
 }
 
