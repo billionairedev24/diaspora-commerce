@@ -334,7 +334,7 @@ outbound traffic charges. **Cloudflare:** free-plan WAF and rate-limit rule quot
 - No admission control in prod (Kyverno deferred, ~0.3-0.5 GiB): image trust rests on signature verification at promote plus digest pinning (section 7).
 - Nothing was applied, rendered by tofu, or tested against OVH, Layerbase or Cloudflare. Argo CD, `kustomize build` and `helm template` were run for the
   repository's own manifests only.
-- The backup CronJob installs `rclone`, `age` and `curl` with `apk` at run time (root, default capabilities): a pre-built tools image would remove that.
+- The backup CronJobs run from the pre-built `backup-tools` image (non-root, read-only root; build it first: `read-only-root-first-boot.md`). Every lean workload now runs with a read-only root filesystem and the mounts listed there are UNVERIFIED until the UAT dry run.
 - The OTLP collector only has an OTLP receiver: service metrics (`/actuator/prometheus`, `/metrics`) are not scraped and logs are not shipped; decide between
   a Prometheus receiver, OTLP metrics or `kubectl logs` + traces only at launch.
 - The tax, legal, Stripe Connect, Resend domain and counsel items of `docs/runbooks/launch-plan.md` and `production-readiness.md` are external lead-time gates.
