@@ -129,7 +129,7 @@ cd <worktree of origin/release-1>
 | JRE (jlink) | 68 MB layer (61 MB `lib/modules` + libjvm) | none |
 | Base | distroless cc 37 MB | distroless static 4.8 MB |
 | **Image (layer sum, uncompressed)** | **369 MB**, budget 385 MB | **98.6 MB**, budget 103 MB |
-| Pull size (compressed) | about 300 MB cold; a code change re-pulls about 20 MB (own jars + app layer) | about 40 MB |
+| Pull size (compressed) | about 300 MB cold; a code change re-pulls about 13 MB (own jars + app layer) | about 40 MB |
 
 Why the Java image is not smaller: the jars are already compressed, so gzip gains nothing, and the weight is real dependencies. Top of the core jar:
 `openai-java-core` 68.5 MB (178 MB of classes: 34,000 classes of the OpenAI SDK, pulled by Spring AI for `ai-gateway`), `stripe-java` 21.6 MB, Temporal
@@ -138,7 +138,7 @@ client 12.8 MB, `grpc-netty-shaded` 10.9 MB, `kafka-clients` 10.2 MB, `bcprov` 7
 jar listing, not measured); the modules stay switchable by `MODULE_AI_GATEWAY_ENABLED`; (2) `snappy-java`, `lz4-java` and `zstd-jni` (Kafka compression)
 stay: nothing in the repo sets a compression type, but a broker-side `compression.type` would make consumers need them; (3) Go: the 94 MB comes from
 seven modules with the AWS, Azure, Elasticsearch, Redis, excelize and arrow libraries; build tags per `SEARCH_PROVIDER` / storage provider would cut
-about 15 MB but is a code change.
+an estimated 10-15 MB but is a code change.
 
 Removed (safe, behaviour on linux amd64/arm64 identical): macOS, Windows, BSD and other-CPU native libraries inside `zstd-jni`, `snappy-java`, `lz4-java`,
 `grpc-netty-shaded`, the netty QUIC/epoll jars (`java/tools/StripNatives.java` in the Dockerfile, plus `spring-boot-maven-plugin` excludes in
