@@ -24,6 +24,8 @@
 @media (pointer: coarse) {
   .cta { display: inline-flex; align-items: center; min-height: var(--at-size-touch); }
 }
+/* Phones: the tile is two cards wide (a swipe away); a small photo beside the text, never a tall one that outgrows the cards. */
 @media (max-width: 599px) {
-  .withPhoto { grid-template-columns: minmax(0, 1fr); }
+  .withPhoto { grid-template-columns: 96px minmax(0, 1fr); gap: var(--at-space-3); }
+  .photo { align-self: start; }
 }
