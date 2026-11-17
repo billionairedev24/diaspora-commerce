@@ -181,7 +181,12 @@ def check_routes(ctx):
             module = m.group(1)
             new = op_signatures(yaml.safe_load(ctx.text(rel)))
             old_text = ctx.show_base(rel) if status == "M" else None
-            old = op_signatures(yaml.safe_load(old_text)) if old_text else {}
+            try:
+                old = op_signatures(yaml.safe_load(old_text)) if old_text else {}
+            except yaml.YAMLError:
+                # The merge base can hold a contract that was itself invalid YAML (fixed later on main): treat every
+                # operation as changed, which only makes the route check stricter.
+                old = {}
             diff = sorted(k for k, v in new.items() if old.get(k) != v)
             if diff:
                 changed_routes[module] = diff
