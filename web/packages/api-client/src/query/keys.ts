@@ -9,6 +9,7 @@ export const siteKeys = {
   config: () => [...siteKeys.all, 'config'] as const,
   home: () => [...siteKeys.all, 'home'] as const,
   navigation: () => [...siteKeys.all, 'navigation'] as const,
+  recentlyViewedRail: (atins: readonly string[]) => [...siteKeys.all, 'recently-viewed-rail', ...atins] as const,
   recentlyViewed: (atins: readonly string[]) => [...siteKeys.all, 'recently-viewed', ...atins] as const,
   deliveryLocation: () => [...siteKeys.all, 'delivery-location'] as const
 };

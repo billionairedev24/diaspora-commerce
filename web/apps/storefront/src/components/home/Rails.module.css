@@ -10,6 +10,11 @@
 }
 .track::-webkit-scrollbar { display: none; }
 .track > li { scroll-snap-align: start; min-width: 0; }
+/* A rail with a fill tile: cards keep their width and the tile takes the rest of the row (two cards at least), so there is
+   no dead area. The tile is the last item: on a narrow screen it is simply the end of the swipe. */
+.track[data-fill='true'] { display: flex; }
+.track[data-fill='true'] > li { flex: 0 0 var(--rail-card); }
+.track[data-fill='true'] > li:last-child { flex: 1 0 calc(var(--rail-card) * 2 + var(--rail-gap)); }
 .track:focus-visible { outline: 2px solid var(--at-color-focus, currentColor); outline-offset: 2px; }
 
 .arrow {

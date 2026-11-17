@@ -107,7 +107,8 @@ describe('the Recently viewed rail', () => {
     window.localStorage.setItem('at.recentlyViewed', JSON.stringify([atinOf('p11'), atinOf('p11'), atinOf('P11'), atinOf('p9'), atinOf('p11')]));
     renderWithProviders(<RecentlyViewed />);
     const rail = await screen.findByRole('region', { name: 'Recently viewed' });
-    expect(within(rail).getAllByRole('listitem')).toHaveLength(2);
+    // The fill tile (a short row's last item) is not a viewed product.
+    expect(within(rail).getAllByRole('listitem').filter((li) => li.dataset.testid !== 'rail-fill')).toHaveLength(2);
     expect(within(rail).getAllByText(/Basmati Rice/)).toHaveLength(1);
     expect(within(rail).queryByTestId('card-availability')).not.toBeInTheDocument();
     expect(rail.textContent ?? '').not.toMatch(/deliver|fulfilled by|arrives|tomorrow|ships from/i);
@@ -128,7 +129,7 @@ describe('the Recently viewed rail', () => {
     [atinOf('p11'), 'ATNOPE0000', atinOf('p9')].forEach(rememberViewed);
     renderWithProviders(<RecentlyViewed />);
     const rail = await screen.findByRole('region', { name: 'Recently viewed' });
-    const names = within(rail).getAllByRole('listitem');
+    const names = within(rail).getAllByRole('listitem').filter((li) => li.dataset.testid !== 'rail-fill');
     expect(names).toHaveLength(2);
     expect(names[0]).toHaveTextContent(/Blue Mountain Jerk Paste|Jerk/i);
   });

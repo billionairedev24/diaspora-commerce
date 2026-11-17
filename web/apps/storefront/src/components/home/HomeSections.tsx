@@ -1,4 +1,4 @@
-import { type Rail, type Tile } from '@afrotransact/api-client';
+import { type Rail, RAIL_FILL_TARGET, type Tile } from '@afrotransact/api-client';
 import { type ReactNode } from 'react';
 
 import { CartAwareProductCard } from '@/components/common/CartAwareProductCard';
@@ -9,6 +9,7 @@ import { getT } from '@/i18n/server';
 import styles from './Home.module.css';
 import { HomePhoto } from './modules/HomePhoto';
 import { RailCarousel } from './RailCarousel';
+import { RailFillTile } from './RailFillTile';
 
 /** Server-rendered tiles under the hero. The columns follow the tile count (see Home.module.css): no empty tracks. */
 export async function Tiles({ tiles }: { tiles: Tile[] }) {
@@ -38,11 +39,16 @@ export async function Tiles({ tiles }: { tiles: Tile[] }) {
   );
 }
 
+/** A rail with fewer cards than fit the row and no fill tile narrows to its own width (left-aligned, no hollow area). */
+export function shortRail(rail: Rail): 'true' | 'false' {
+  return !rail.fill && rail.items.length < RAIL_FILL_TARGET ? 'true' : 'false';
+}
+
 /** A product rail: heading, "See all" and a scrolling row of cards. `extra` is rendered in the header (countdown, label). */
 export async function RailSection({ rail, extra, wrap }: { rail: Rail; extra?: ReactNode; wrap?: (card: ReactNode, index: number) => ReactNode }) {
   const t = await getT();
   return (
-    <section className={styles.rail} aria-labelledby={`rail-${rail.id}`}>
+    <section className={styles.rail} aria-labelledby={`rail-${rail.id}`} data-short={shortRail(rail)}>
       <div className={styles.railHead}>
         <h2 id={`rail-${rail.id}`} className={styles.railTitle}>
           {rail.title}
@@ -52,7 +58,7 @@ export async function RailSection({ rail, extra, wrap }: { rail: Rail; extra?: R
           {t('home.seeAll')}
         </Link>
       </div>
-      <RailCarousel label={rail.title}>
+      <RailCarousel label={rail.title} fill={rail.fill ? <RailFillTile fill={rail.fill} /> : undefined}>
         {rail.items.map((p, i) => {
           const card = <CartAwareProductCard product={p} variant="rail" />;
           return <li key={p.atin}>{wrap ? wrap(card, i) : card}</li>;
