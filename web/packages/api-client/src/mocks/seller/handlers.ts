@@ -782,6 +782,27 @@ const query = (ctx: Ctx) => new URL(ctx.request.url).searchParams;
 const normaliseBrand = (s: string) => s.normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
 const nextId = (db: MockSellerDb, prefix: string) => `${prefix}-${++db.seq}`;
 
+/** The seller service's logo rule: https, or http on a local-only host (the local media service is http://localhost). */
+export function logoAddressAccepted(url: string): boolean {
+  if (/\s/.test(url) || url.length > 2048) return false;
+  try {
+    const u = new URL(url);
+    if (u.username || u.password) return false;
+    if (u.protocol === 'https:') return true;
+    const h = u.hostname;
+    return u.protocol === 'http:' && (h === 'localhost' || h.endsWith('.localhost') || h === 'host.docker.internal' || /^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h) || h === '[::1]');
+  } catch {
+    return false;
+  }
+}
+
+const normaliseColour = (v: string): string | null => {
+  const m = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(v.trim());
+  if (!m?.[1]) return null;
+  const x = m[1].length === 3 ? [...m[1]].map((c) => c + c).join('') : m[1];
+  return `#${x.toLowerCase()}`;
+};
+
 const BusinessPageBody = z.object({ description: z.string().max(2000).default(''), brandColor: z.string().max(7).default(''), logoUrl: z.string().max(2048).default('') });
 
 function businessPage(ctx: Ctx): BusinessPageSettings {
@@ -1235,12 +1256,14 @@ export const sellerHandlers = [
     `${W}/onboarding/business`,
     saveStep(BusinessBody, (app, b) => {
       if (b.storeName !== undefined && b.storeName.trim().length === 1) return { storeName: '2 to 80 characters' } as FieldErrors;
-      if (b.brandColor && !/^#[0-9a-fA-F]{6}$/.test(b.brandColor)) return { brandColor: 'Use a colour like #1a7f4b' } as FieldErrors;
+      // The seller service's own field names (business.branding.*): the wizard maps them back onto its fields.
+      if (b.brandColor && !normaliseColour(b.brandColor)) return { 'business.branding.brandColor': 'Choose a colour from the list, or enter a hex code like #1a7f4b' } as FieldErrors;
+      if (b.logoUrl && !logoAddressAccepted(b.logoUrl)) return { 'business.branding.logoUrl': 'We couldn\'t use this logo. Remove it and upload it again, or continue without a logo' } as FieldErrors;
       if (b.description && b.description.length > 500) return { description: 'At most 500 characters' } as FieldErrors;
       const next = {
         ...app.form,
         business: { offering: b.offering ?? null, entityType: b.entityType ?? null, country: blankToNull(b.country)?.toUpperCase() ?? null, storeName: blankToNull(b.storeName),
-          contactEmail: blankToNull(b.contactEmail), phone: blankToNull(b.phone), description: blankToNull(b.description), brandColor: blankToNull(b.brandColor)?.toLowerCase() ?? null, logoUrl: blankToNull(b.logoUrl) }
+          contactEmail: blankToNull(b.contactEmail), phone: blankToNull(b.phone), description: blankToNull(b.description), brandColor: b.brandColor ? normaliseColour(b.brandColor) : null, logoUrl: blankToNull(b.logoUrl) }
       };
       app.form = { ...next, owners: b.entityType === 'SOLE_PROPRIETOR' ? [] : next.owners, prefilled: app.form.prefilled.filter((k) => !k.startsWith('business.') ||
         JSON.stringify((app.form.business as Record<string, unknown>)[k.slice(9)] ?? null) === JSON.stringify((next.business as Record<string, unknown>)[k.slice(9)] ?? null)) };
@@ -2788,10 +2811,10 @@ export const sellerHandlers = [
       const b = await body(ctx.request, BusinessPageBody);
       const errors: Record<string, string> = {};
       if (b.description.trim().length > 500) errors.description = 'At most 500 characters';
-      if (b.brandColor.trim() && !/^#[0-9a-fA-F]{6}$/.test(b.brandColor.trim())) errors.brandColor = 'Use a colour like #1a7f4b';
-      if (b.logoUrl.trim() && !/^https:\/\/\S+$/.test(b.logoUrl.trim())) errors.logoUrl = 'Upload your logo again';
+      if (b.brandColor.trim() && !normaliseColour(b.brandColor)) errors.brandColor = 'Choose a colour from the list, or enter a hex code like #1a7f4b';
+      if (b.logoUrl.trim() && !logoAddressAccepted(b.logoUrl.trim())) errors.logoUrl = 'We couldn\'t use this logo. Remove it and upload it again, or continue without a logo';
       if (Object.keys(errors).length) throw invalid(errors);
-      ctx.db.businessPage[ctx.org.id] = { description: b.description.trim(), brandColor: b.brandColor.trim().toLowerCase(), logoUrl: b.logoUrl.trim() };
+      ctx.db.businessPage[ctx.org.id] = { description: b.description.trim(), brandColor: normaliseColour(b.brandColor) ?? '', logoUrl: b.logoUrl.trim() };
       return businessPage(ctx);
     })
   ),

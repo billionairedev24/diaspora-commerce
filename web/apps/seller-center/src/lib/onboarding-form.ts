@@ -14,6 +14,7 @@ import {
   type SellerDepartment,
   US_STATES
 } from '@afrotransact/api-client';
+import { normaliseHex } from '@afrotransact/tokens';
 import { type AddressSuggestionItem } from '@afrotransact/ui';
 
 /* The application wizard's answers as editable text (S286, S289), their validation (inline errors and the error
@@ -113,8 +114,23 @@ export interface BusinessValues {
   description: string;
   /** #rrggbb, or empty for the default. */
   brandColor: string;
-  /** https URL of the uploaded logo, or empty. */
+  /** Address of the uploaded logo (https; http on a local media host), or empty. */
   logoUrl: string;
+}
+
+/**
+ * A logo address the client will send: any http(s) URL without spaces. Which hosts are acceptable is the seller
+ * service's call (https on the media CDN, http only on local hosts); the client only drops what cannot be an address.
+ */
+export function isLogoAddress(url: string): boolean {
+  const u = url.trim();
+  if (!u || /\s/.test(u)) return false;
+  try {
+    const p = new URL(u);
+    return (p.protocol === 'https:' || p.protocol === 'http:') && p.hostname !== '';
+  } catch {
+    return false;
+  }
 }
 
 /** National display of a US number (+17132490142 → (713) 249-0142); other numbers are shown as stored. */
@@ -132,7 +148,7 @@ export function businessValues(form: OnboardingForm, kind: OrgKind): BusinessVal
     contactEmail: text(b.contactEmail),
     phone: displayPhone(b.phone),
     description: text(b.description),
-    brandColor: text(b.brandColor),
+    brandColor: normaliseHex(b.brandColor) ?? text(b.brandColor),
     logoUrl: text(b.logoUrl)
   };
 }
@@ -149,7 +165,8 @@ export function validateBusiness(v: BusinessValues, kind: OrgKind): Errors {
   if (!EMAIL.test(v.contactEmail.trim())) e.contactEmail = 'Enter a valid email address';
   if (digitsOf(v.phone).length !== 10) e.phone = 'Enter a 10-digit US mobile number';
   if (v.description.length > 500) e.description = 'At most 500 characters';
-  if (v.brandColor.trim() && !/^#[0-9a-fA-F]{6}$/.test(v.brandColor.trim())) e.brandColor = 'Use a colour like #rrggbb';
+  if (v.brandColor.trim() && normaliseHex(v.brandColor) === null) e.brandColor = 'Choose a colour from the list, or enter a hex code';
+  if (v.logoUrl.trim() && !isLogoAddress(v.logoUrl)) e.logoUrl = 'We couldn’t use this logo. Remove it and upload it again, or continue without a logo.';
   return e;
 }
 
@@ -162,7 +179,7 @@ export function toBusinessInput(v: BusinessValues): OnboardingBusinessInput {
     contactEmail: opt(v.contactEmail),
     phone: opt(v.phone),
     description: opt(v.description),
-    brandColor: opt(v.brandColor),
+    brandColor: normaliseHex(v.brandColor) ?? opt(v.brandColor),
     logoUrl: opt(v.logoUrl)
   };
 }
@@ -574,6 +591,9 @@ export function toComplianceInput(v: ComplianceValues, offering: OnboardingOffer
 
 /** Seller service field names that differ from the wizard's. */
 const RENAMES: Record<string, string> = {
+  'branding.logoUrl': 'logoUrl',
+  'branding.brandColor': 'brandColor',
+  'branding.description': 'description',
   'foodPermit.permitType': 'permitType',
   'foodPermit.permitNumber': 'permitNumber',
   'foodPermit.expiresOn': 'permitExpiresOn',

@@ -6,9 +6,11 @@ import { ArrowDown, Bank, CheckCircle, IdentificationCard, LockSimple, Receipt }
 import { useQueryClient } from '@tanstack/react-query';
 import { type ReactNode, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 
+import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 import { fieldId, payoutAccountLabel } from '@/lib/onboarding-form';
 import { useSeller } from '@/lib/session';
+import { withTransientRetry } from '@/lib/stripe-session';
 
 import { isLocalSession, LocalStripeForm, StripeEmbedded, StripeLoadFailed, StripeLoading } from '../StripeEmbedded';
 import { type StepProps } from '../WizardKit';
@@ -82,6 +84,12 @@ export function StripeStep({ status, ref, advance }: StepProps) {
   const { orgId } = useSeller();
   const [session, setSession] = useState<OnboardingStripeSession | null>(null);
   const [phase, setPhase] = useState<'idle' | 'loading' | 'failed' | 'ready'>('idle');
+  const [retrying, setRetrying] = useState(false);
+  const t = useT();
+  // One session call at a time: React StrictMode runs the opening effect twice and a second concurrent first call would wait on the first.
+  const opening = useRef(false);
+  // The client secret of the call that opened the step is handed to Connect.js once; later calls (Stripe asks again when it expires) fetch fresh ones.
+  const firstSecret = useRef<string | null>(null);
   const [failure, setFailure] = useState<string>('');
   const [note, setNote] = useState<string | null>(null);
   const [moving, setMoving] = useState(false);
@@ -93,18 +101,41 @@ export function StripeStep({ status, ref, advance }: StepProps) {
 
   const apply = useCallback((st: OnboardingStatus) => qc.setQueryData(sellerKeys.onboarding(orgId), st), [qc, orgId]);
   const problem = (e: unknown) => (isApiError(e) && e.problem.detail ? e.problem.detail : 'Stripe is unavailable right now. Try again in a minute.');
+  const unavailable = t('sc.stripe.unavailable');
 
   const open = useCallback(async () => {
+    if (opening.current) return;
+    opening.current = true;
     setPhase('loading');
+    setRetrying(false);
     try {
-      setSession(await sellerApi().createOnboardingStripeSession());
+      const fresh = await withTransientRetry(
+        () => sellerApi().createOnboardingStripeSession(),
+        () => setRetrying(true)
+      );
+      firstSecret.current = fresh.clientSecret;
+      setSession(fresh);
+      setRetrying(false);
       setPhase('ready');
       apply(await sellerApi().getOnboarding());
     } catch (e) {
-      setFailure(problem(e));
+      setRetrying(false);
+      // A refusal says why (Stripe's own reason); a failure that did not answer gets one friendly line.
+      setFailure(isApiError(e) && e.status < 500 && e.problem.detail ? e.problem.detail : unavailable);
       setPhase('failed');
+    } finally {
+      opening.current = false;
     }
-  }, [apply]);
+  }, [apply, unavailable]);
+
+  const nextSecret = useCallback(async (): Promise<string> => {
+    const first = firstSecret.current;
+    if (first) {
+      firstSecret.current = null;
+      return first;
+    }
+    return (await withTransientRetry(() => sellerApi().createOnboardingStripeSession())).clientSecret;
+  }, []);
 
   // The form opens with the step: nothing to click before it.
   useEffect(() => {
@@ -157,7 +188,7 @@ export function StripeStep({ status, ref, advance }: StepProps) {
           </p>
         ) : null}
         {!editable ? <p className="m-0 text-sm text-muted">Your application is with our team; Stripe verification can’t be changed now.</p> : null}
-        {editable && (phase === 'loading' || phase === 'idle') ? <StripeLoading /> : null}
+        {editable && (phase === 'loading' || phase === 'idle') ? <StripeLoading label={retrying ? t('sc.stripe.reconnecting') : t('sc.stripe.loading')} /> : null}
         {phase === 'failed' ? <StripeLoadFailed message={failure} onRetry={() => void open()} /> : null}
         {phase === 'ready' && session && local ? (
           <LocalStripeForm
@@ -177,7 +208,7 @@ export function StripeStep({ status, ref, advance }: StepProps) {
           <StripeEmbedded
             session={session}
             component="account-onboarding"
-            fetchClientSecret={async () => (await sellerApi().createOnboardingStripeSession()).clientSecret}
+            fetchClientSecret={nextSecret}
             onExit={() => void finished()}
           />
         ) : null}

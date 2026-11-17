@@ -5,6 +5,7 @@ import { Button } from '@afrotransact/ui';
 import { Flask, WarningCircle } from '@phosphor-icons/react/ssr';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 
+import { useT } from '@/i18n/t';
 import { type ConnectComponent, hasStripeKey, initConnect } from '@/lib/stripe';
 
 import { Spinner } from '../ui/States';
@@ -24,18 +25,20 @@ const NAMES: Record<ConnectComponent, string> = {
 export const isLocalSession = (s: OnboardingStripeSession): boolean => s.localTest || !hasStripeKey(s.publishableKey);
 
 /** Loading the secure form: a soft placeholder where the form will appear (no layout jump). */
-export function StripeLoading({ label = 'Loading the secure Stripe form…' }: { label?: string }) {
-  return <Spinner label={label} center className="min-h-48" />;
+export function StripeLoading({ label }: { label?: string }) {
+  const t = useT();
+  return <Spinner label={label ?? t('sc.stripe.loading')} center className="min-h-48" />;
 }
 
 /** Stripe couldn't load: why, and a way to try again, in the same spot as the form. */
 export function StripeLoadFailed({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const t = useT();
   return (
     <div role="alert" className="flex min-h-48 flex-col items-center justify-center gap-3 rounded-lg bg-danger-bg px-4 text-center text-sm">
       <WarningCircle size={28} weight="fill" className="text-danger" aria-hidden />
       <span className="max-w-[48ch]">{message}</span>
       <Button size="sm" variant="neutral" onClick={onRetry}>
-        Try again
+        {t('sc.stripe.tryAgain')}
       </Button>
     </div>
   );
@@ -44,6 +47,11 @@ export function StripeLoadFailed({ message, onRetry }: { message: string; onRetr
 /**
  * Mounts one Connect.js component with the session's client secret (fetched again by Stripe when it expires), full
  * width and borderless; closing it calls {@link onExit} so the caller re-reads what Stripe holds.
+ *
+ * The component is mounted once and then left alone: it is only ever re-mounted by the seller's own "Try again" click
+ * (or a different account / component). Stripe's sign-in and verification windows are opened by Connect.js inside its
+ * iframe from the seller's click; tearing the iframe down and mounting a new one around such a click (an automatic retry,
+ * a re-created session object) would detach the window from that click, and browsers then open a tab or block it.
  */
 export function StripeEmbedded({
   session,
@@ -56,6 +64,7 @@ export function StripeEmbedded({
   fetchClientSecret: () => Promise<string>;
   onExit?: () => void;
 }) {
+  const t = useT();
   const box = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading');
   const [attempt, setAttempt] = useState(0);
@@ -92,7 +101,7 @@ export function StripeEmbedded({
     <div className="flex flex-col">
       {state === 'loading' ? <StripeLoading /> : null}
       {state === 'failed' ? (
-        <StripeLoadFailed message="The secure Stripe form couldn’t load. Check your connection and try again." onRetry={() => setAttempt((n) => n + 1)} />
+        <StripeLoadFailed message={t('sc.stripe.formFailed')} onRetry={() => setAttempt((n) => n + 1)} />
       ) : null}
       <div ref={box} className={state === 'ready' ? 'w-full' : 'hidden'} aria-label={NAMES[component]} />
     </div>
