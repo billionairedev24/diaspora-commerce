@@ -34,6 +34,13 @@ type Config struct {
 		// bookings, content, inventory, payments, trustOps, retail, deliveryRuns) to addresses; missing names default to the
 		// AsyncAPI channel addresses.
 		Topics map[string]string `yaml:"topics"`
+		// Retry bounds how long one failing event may hold the consumer (zero values take app.RetryPolicy defaults).
+		Retry struct {
+			Attempts   int           `yaml:"attempts" env:"KAFKA_RETRY_ATTEMPTS"`
+			Backoff    time.Duration `yaml:"backoff" env:"KAFKA_RETRY_BACKOFF"`
+			MaxBackoff time.Duration `yaml:"maxBackoff" env:"KAFKA_RETRY_MAX_BACKOFF"`
+			MaxRounds  int           `yaml:"maxRounds" env:"KAFKA_RETRY_MAX_ROUNDS"`
+		} `yaml:"retry"`
 	} `yaml:"kafka"`
 	// Identity resolves recipients by user id / org id for events that carry no contact details.
 	Identity struct {

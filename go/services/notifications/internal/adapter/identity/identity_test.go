@@ -96,3 +96,37 @@ func TestResolverBadCredentialsIsTransient(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+// The contact lookup carries the client-credentials service token (never anonymous, never a user token): identity
+// answers 403 identity.service-lookup-only to anything else, and that 403 is a permanent UpstreamError.
+func TestContactLookupSendsTheServiceTokenAndReportsAForbiddenAsPermanent(t *testing.T) {
+	var gotAuth string
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /oauth2/token", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"svc-token","token_type":"Bearer","expires_in":300}`))
+	})
+	mux.HandleFunc("GET /v1/internal/users/{id}/contact", func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		if r.PathValue("id") == "forbidden" || gotAuth != "Bearer svc-token" {
+			w.Header().Set("Content-Type", "application/problem+json")
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"title":"Forbidden","status":403,"code":"identity.service-lookup-only"}`))
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"userId": r.PathValue("id"), "email": "a@example.com"})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	res := identity.New(identity.Config{BaseURL: srv.URL, TokenURL: srv.URL + "/oauth2/token", ClientID: "notifications-service",
+		ClientSecret: "s", Scopes: []string{"users:read"}}, &http.Client{Timeout: 2 * time.Second})
+
+	if _, err := res.Contact(context.Background(), "u-1"); err != nil || gotAuth != "Bearer svc-token" {
+		t.Fatalf("auth=%q err=%v", gotAuth, err)
+	}
+	_, err := res.Contact(context.Background(), "forbidden")
+	var up *domain.UpstreamError
+	if !errors.As(err, &up) || up.Status != 403 || up.Code != "identity.service-lookup-only" || up.Transient() {
+		t.Fatalf("%v", err)
+	}
+}

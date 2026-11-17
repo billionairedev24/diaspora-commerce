@@ -239,3 +239,14 @@ type PreorderCatalog interface {
 type CampaignCatalog interface {
 	Campaigns(ctx context.Context, market string) ([]domain.Campaign, error)
 }
+
+// FailedEventStore sets aside consumed events that cannot be processed (the poison-message dead letter), so the
+// consumer commits their offset and carries on. Recording is idempotent per (consumer, event id).
+type FailedEventStore interface {
+	RecordFailedEvent(ctx context.Context, f domain.FailedEvent) error
+}
+
+// FailureCounter counts failed events by reason (notifications_events_failed_total{reason}).
+type FailureCounter interface {
+	EventFailed(reason string)
+}

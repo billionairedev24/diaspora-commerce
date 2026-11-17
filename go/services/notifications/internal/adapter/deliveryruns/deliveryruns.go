@@ -120,7 +120,8 @@ func (a *audienceImpl) page(ctx context.Context, path string, q url.Values) (por
 		return port.AudiencePage{}, domain.ErrRecipientNotFound
 	case res.StatusCode != http.StatusOK:
 		body, _ := io.ReadAll(io.LimitReader(res.Body, 512))
-		return port.AudiencePage{}, fmt.Errorf("delivery-runs %s: status %d: %s", path, res.StatusCode, strings.TrimSpace(string(body)))
+		return port.AudiencePage{}, &domain.UpstreamError{Service: "delivery-runs", Path: path, Status: res.StatusCode,
+			Detail: string(body)}
 	}
 	var page port.AudiencePage
 	if err := json.NewDecoder(io.LimitReader(res.Body, 8<<20)).Decode(&page); err != nil {
