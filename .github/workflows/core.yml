@@ -111,7 +111,7 @@ jobs:
         run: |
           pip install -q -r tools/release/requirements-ci.txt
           jar=""
-          for f in java/apps/core/target/afrotransact-core-*.jar; do
+          for f in java/apps/core/target/afrotransact-core*.jar; do
             case "$f" in *-plain.jar) ;; *) jar="$f"; break ;; esac
           done
           [[ -n "$jar" ]] || { echo "::error::no executable core jar was built"; exit 1; }
@@ -213,7 +213,7 @@ jobs:
           build-args: |
             SERVICE=core
             PROJECT=apps/core
-            JAR_GLOB=afrotransact-core-*.jar
+            JAR_GLOB=afrotransact-core*.jar
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/release-1' }}
           # A guard rail, not a measurement: the jlinked JRE (~60 MB) + distroless (~25 MB) + the one fat jar (96 MB for two modules,
           # release-1-architecture.md 11.2; each further module adds libraries). TIGHTEN it from the first image policy summary.

@@ -73,7 +73,7 @@ jobs:
           build-args: |
             SERVICE=core
             PROJECT=apps/core
-            JAR_GLOB=afrotransact-core-*.jar
+            JAR_GLOB=afrotransact-core*.jar
           push: "true"
           verified: "false"
           max-size-mb: "420"

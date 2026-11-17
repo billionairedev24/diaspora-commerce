@@ -13,7 +13,7 @@
 # eclipse-temurin:25-jdk is the one still unpinned: Docker Hub rate-limited the resolver when this was added; run the script once from CI/dev.
 FROM eclipse-temurin:25-jdk AS build
 ARG SERVICE
-# Release 1 (ADR 0011) builds the deployable from the same file: --build-arg PROJECT=apps/core JAR_GLOB='afrotransact-core-*.jar'
+# Release 1 (ADR 0011) builds the deployable from the same file: --build-arg PROJECT=apps/core JAR_GLOB='afrotransact-core*.jar'
 # (the core workflow). Per-service builds keep the defaults.
 ARG PROJECT=services/${SERVICE}
 ARG JAR_GLOB='*-service-*.jar'
