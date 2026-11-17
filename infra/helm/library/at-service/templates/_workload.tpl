@@ -55,6 +55,7 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: {{ if eq .Values.service.runtime "java" }}1000{{ else }}65532{{ end }}
+        runAsGroup: {{ if eq .Values.service.runtime "java" }}1000{{ else }}65532{{ end }}
         fsGroup: 1000
         seccompProfile: {type: RuntimeDefault}
       topologySpreadConstraints:
@@ -88,9 +89,13 @@ spec:
           {{- end }}
           resources: {{- toYaml .Values.resources | nindent 12 }}
           securityContext:
+            # Repeated at container level (the pod-level values already apply): scanners and admission policies read this block, and a
+            # read-only root filesystem needs only the emptyDir at /tmp below (Spring/Tomcat temp files, multipart spooling).
+            runAsNonRoot: true
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: {drop: [ALL]}
+            seccompProfile: {type: RuntimeDefault}
           startupProbe:
             httpGet: {path: {{ include "at-service.livenessPath" . }}, port: {{ include "at-service.probePort" . }}}
             periodSeconds: 5
