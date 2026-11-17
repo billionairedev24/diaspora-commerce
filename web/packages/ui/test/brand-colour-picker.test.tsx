@@ -75,7 +75,7 @@ describe('BrandColourPicker', () => {
     const hex = screen.getByLabelText('Hex code');
     await userEvent.type(hex, 'green');
     expect(hex).toHaveAttribute('aria-invalid', 'true');
-    expect(screen.getByText(/Enter a colour like/)).toBeInTheDocument();
+    expect(screen.getByText(/Enter a hex code/)).toBeInTheDocument();
     expect(screen.getByTestId('brand-colour-preview').style.background).toContain('var(--at-color-action-primary)');
   });
 

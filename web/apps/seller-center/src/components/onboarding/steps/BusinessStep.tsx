@@ -7,6 +7,7 @@ import { useImperativeHandle } from 'react';
 import { sellerApi } from '@/lib/api';
 import { businessValues, ENTITY_TYPES, fieldId, isPrefilled, OFFERINGS, toBusinessInput, validateBusiness } from '@/lib/onboarding-form';
 
+import { BrandColourField } from '../../ui/BrandColourField';
 import { Cell, ChoiceCards, FieldGrid, FromAccount, Optional, StepErrors, type StepProps, useStepForm } from '../WizardKit';
 import { LogoField } from './LogoField';
 
@@ -121,24 +122,11 @@ export function BusinessStep({ status, ref }: StepProps) {
             )}
           </Field>
         </Cell>
-        <Cell span={6}>
-          <TextField
-            id={fieldId('brandColor')}
-            label={
-              <>
-                Brand colour
-                <Optional />
-              </>
-            }
-            placeholder="#rrggbb"
-            value={v.brandColor}
-            onChange={(e) => f.patch({ brandColor: e.target.value }, ['brandColor'])}
-            error={f.errors.brandColor}
-            disabled={disabled}
-          />
+        <Cell span={12}>
+          <BrandColourField id={fieldId('brandColor')} value={v.brandColor} onChange={(brandColor) => f.patch({ brandColor }, ['brandColor'])} error={f.errors.brandColor} disabled={disabled} />
         </Cell>
         <Cell span={12}>
-          <LogoField value={v.logoUrl} onChange={(logoUrl) => f.patch({ logoUrl }, ['logoUrl'])} disabled={disabled} />
+          <LogoField id={fieldId('logoUrl')} value={v.logoUrl} onChange={(logoUrl) => f.patch({ logoUrl }, ['logoUrl'])} error={f.errors.logoUrl} disabled={disabled} />
         </Cell>
       </FieldGrid>
       {f.failure ? (
