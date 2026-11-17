@@ -12,7 +12,7 @@ import styles from './Rails.module.css';
  * mouse users (shown only while there is more to see) and Left/Right keys when the row itself has focus. A row that
  * fits on screen shows no arrows and does not scroll. Respects prefers-reduced-motion and right-to-left.
  */
-export function RailCarousel({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
+export function RailCarousel({ label, children, className, fill }: { label: string; children: ReactNode; className?: string; fill?: ReactNode }) {
   const t = useT();
   const list = useRef<HTMLUListElement>(null);
   const [edges, setEdges] = useState({ overflow: false, atStart: true, atEnd: true });
@@ -60,8 +60,9 @@ export function RailCarousel({ label, children, className }: { label: string; ch
       </button>
       {/* A scrollable region must be keyboard reachable (WCAG 2.1.1); Left/Right scroll it while it has focus. */}
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions */}
-      <ul ref={list} className={styles.track} aria-label={label} tabIndex={0} onKeyDown={onKeyDown}>
+      <ul ref={list} className={styles.track} data-fill={fill ? 'true' : 'false'} aria-label={label} tabIndex={0} onKeyDown={onKeyDown}>
         {children}
+        {fill}
       </ul>
       <button type="button" className={`${styles.arrow} ${styles.arrowNext}`} aria-label={t('home.railNext', { title: label })} disabled={edges.atEnd} onClick={() => scroll(1)} hidden={!edges.overflow}>
         <CaretRight aria-hidden />
