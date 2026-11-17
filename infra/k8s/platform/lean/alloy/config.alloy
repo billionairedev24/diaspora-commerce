@@ -229,19 +229,17 @@ prometheus.scrape "meilisearch" {
 }
 
 // ------------------------------------------------------------------------------------------------ metrics: node, containers, volumes
-// cadvisor (container memory/CPU/OOM) and kubelet (PVC usage) through the API server proxy: no hostPath, no node port.
+// cadvisor (container memory/CPU/OOM) and kubelet (PVC usage) are scraped straight from the kubelet (node InternalIP:10250, the
+// address discovery.kubernetes gives a node) with Alloy's ServiceAccount token. The kubelet authorises /metrics and /metrics/cadvisor
+// as the "nodes/metrics" subresource, so the ClusterRole needs nodes/metrics only and NOT "nodes/proxy" (Trivy KSV-0047: nodes/proxy
+// get lets a holder run commands in any pod through the kubelet). No hostPath, no hostNetwork. UNVERIFIED on OVH MKS: the kubelet
+// serving certificate must chain to the cluster CA (check `up{job=~"kubelet|cadvisor"}` in Grafana on the first UAT boot).
 discovery.relabel "kubelet" {
 	targets = discovery.kubernetes.nodes.targets
 
 	rule {
-		target_label = "__address__"
-		replacement  = "kubernetes.default.svc:443"
-	}
-
-	rule {
-		source_labels = ["__meta_kubernetes_node_name"]
-		replacement   = "/api/v1/nodes/$1/proxy/metrics"
-		target_label  = "__metrics_path__"
+		target_label = "__metrics_path__"
+		replacement  = "/metrics"
 	}
 
 	rule {
@@ -259,14 +257,8 @@ discovery.relabel "cadvisor" {
 	targets = discovery.kubernetes.nodes.targets
 
 	rule {
-		target_label = "__address__"
-		replacement  = "kubernetes.default.svc:443"
-	}
-
-	rule {
-		source_labels = ["__meta_kubernetes_node_name"]
-		replacement   = "/api/v1/nodes/$1/proxy/metrics/cadvisor"
-		target_label  = "__metrics_path__"
+		target_label = "__metrics_path__"
+		replacement  = "/metrics/cadvisor"
 	}
 
 	rule {
