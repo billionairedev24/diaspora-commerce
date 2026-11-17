@@ -47,11 +47,13 @@ cd <worktree of origin/release-1>
 ## 2. The blockers found while preparing this (read before you start)
 
 1. **No image of `afrotransact-core` or `afrotransact-go` has ever been published.** `core.yml` and `afrotransact-go.yml` publish only after `verify` is green on a `release-1` push, and
-   `verify` has failed on every full run. State at the time of writing: **core** fails at `bookings-service` `ServiceAreasIT` (a test that places a catering provider with a 5-mile
-   radius although `AreaPolicy` requires 10; fixed on release-1 in `java/services/bookings/src/test`, **not yet proven green**, the reactor then continues to the other modules and
-   core's context tests, which have never run to the end). **afrotransact-go** fails lint (golangci-lint v2.14.0): the deployable's own findings are fixed on release-1, but the per-service Go modules still carry about
-   90 findings (wrapcheck, unparam, revive) and `services/gateway-bff` about 145 that CI never reached because `gofmt` failed first (gofmt fixed). main fails the same way. **Until both
-   `verify` jobs are green there is no image, so nothing can be deployed.** Decide: fix the lint debt (mechanical; the linter runs locally) or accept a one-time image build that does not wait for lint (an owner decision, not made here).
+   `verify` has failed on every full run (main fails the same way: it is accumulated test and lint debt, not a deployment problem). State at 2026-11-17 02:40 UTC:
+   **core**: the Maven reactor stops at the first red module. `bookings-service` `ServiceAreasIT` is fixed on release-1 (the test placed a catering provider with a 5-mile radius; `AreaPolicy` requires 10) and now passes; the
+   next red module is **catalog**: `ListingModerationIT` (3 tests) and `ProductRelationshipsIT` (3) fail with "This product is waiting for its barcode exemption to be decided" (their `liveProduct` helpers predate the barcode-exemption rule),
+   and every module after catalog (offers ... trust-ops, core's own context tests) has not been reached, so more may follow. **afrotransact-go**: golangci-lint v2.14.0 (installable locally: `GOTOOLCHAIN=go1.27.4 go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0`)
+   is clean for the deployable itself (fixed on release-1); the per-service Go modules still carry about 90 findings (wrapcheck, unparam, revive, noctx), `tools/ops/kafka-replay` 2, `pkg/httpserver` 2, and `services/gateway-bff` about 145 that CI never reached because `gofmt` failed first (gofmt is fixed now, so they will show).
+   **Until both `verify` jobs are green there is no image, so nothing can be deployed.** Decide: (a) fix the red tests and the lint debt (mechanical, several CI cycles of ~15 minutes, each cycle reveals the next module), or (b) an owner-approved one-time manual image build that does not wait for `verify`
+   (for example a `workflow_dispatch` input on `core.yml` / `afrotransact-go.yml` that lets the `image` job run when `verify` failed; the image is still Trivy-scanned and cosign-signed). (b) is a policy decision and is **not** implemented here.
 2. **Tag strategy is deterministic**: images are tagged with the full 40-character commit sha and signed (cosign keyless); `promote` (Actions) writes `image.tag` and `image.digest` into
    `java/apps/core/deploy/helm/values-<env>.yaml` and `go/apps/afrotransact-go/deploy/helm/values-<env>.yaml` on release-1 after verifying the signature; Argo CD pulls
    `ghcr.io/billionairedev24/diaspora-commerce/afrotransact-core:<sha>@sha256:<digest>`. There is no `latest`. Today `values-uat.yaml` and `values-prod.yaml` have **no pin** (the chart default tag is the sentinel `dev`): `check_launch_set.py --env <env> --require-tags` fails until you promote.
