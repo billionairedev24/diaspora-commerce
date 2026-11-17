@@ -366,4 +366,13 @@ example "why is payout po_… still in transit?". Lola cannot approve, pay or ch
   how it is labelled. **Move up** and **Move down** (also in the row's menu) reorder it, **Set priority** sets an exact
   position (higher shows first). Reordering needs no new review. A module that has nothing to show for a shopper (no deals
   today, no providers in their area, too few products) is simply not shown.
+- **Rail fill tile** (slot *Rail fill tile*) fills the empty space beside a short product row, so the home and department pages
+  never show a large blank area. Order of use when a row is short: more matching products first, then a **Sponsored** tile, then
+  your own editorial tile; if there is nothing, the row simply narrows. Give an **Advertiser** to make it a paid, always
+  "Sponsored" tile (a second person approves it, as for every paid creative); leave it empty for an editorial tile. Fields:
+  headline (60 characters), optional text (140), button text and link, a real photo address (without one the tile is text only),
+  up to 3 product codes to show (only in-stock products with a photo appear), *Shows beside rails of these departments* (empty =
+  every row), US states, ZIP prefixes and Starts / Ends. Use seasonal content only for Christmas, Easter, Thanksgiving, Detty
+  December and back to school. Preview it in **Marketing, Home, Preview** (the page lists each row with its tile) or by
+  scheduling it as of a date; the audit trail shows who created, changed, approved and ended it.
 - The seller's **sponsored products** are not created here: sellers run campaigns in Seller Center; staff place the rail.

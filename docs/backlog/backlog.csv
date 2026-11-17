@@ -2224,3 +2224,11 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - A failed preview shows a plain message with Try again
 - Gateway-bff, seller and seller-center tests cover it
 - Playwright and the seed run on Mama Put Pantry not verified here","E16","","High","3","seller storefront","storefront","In Review"
+"S527","Story","Fill short rails with relevant products, a Sponsored tile or an editorial tile instead of dead space","A product rail with fewer cards than fit the row (home, Recently viewed, Deals of the day) left a large empty white area on wide screens. The gateway now fills it with the rail: more eligible products when the rail's title stays true, then a Sponsored tile (paid rail_fill placement or sponsored-products auction), then a staff editorial rail_fill tile, else the row narrows. New content slot rail_fill with staff editing, contract first, demo tiles only in local seeds.","- Priority order products, Sponsored tile, editorial tile, collapse, with no placeholder when nothing exists
+- A paid tile always shows Sponsored and the advertiser (visible and in the accessible name), never an advertiser-less ad
+- Only in-stock products with a real photo, no repeat of a product already on the page, no icon or emoji image
+- Resolved with the rail in one response, tile in the first HTML (no layout shift), impressions and clicks through the existing ad mechanism
+- Slot rail_fill: openapi contract, content migration without any placement, staff create or edit, schedule, targeting and review
+- Demo tiles only in the local seed, never in a migration
+- Verified in a browser at 1280, 1920 and 390 px, hero aligned with the rails at ultra-wide
+- Vitest, Go and Java unit tests, docs and staff guide, same change on main, develop and release-1","E25","","High","5","home storefront gateway content staff-console ads","staff-console","In Review"
