@@ -169,4 +169,37 @@ class FulfilmentModeTransitionTest {
                 new TransitionActor(ActorKind.DELIVERY_STAFF, "staff-1", null), " ", TransitionSource.API, "e2",
                 Instant.now(), null, POLICY)).isInstanceOf(OrdersRuleViolation.class);
     }
+
+    private static Shipment selfShipped(ShipmentStatus status) {
+        return Shipments.of(FulfilmentType.SELLER_FULFILLED, DeliveryMethod.SELLER_SELF_SHIPS, status);
+    }
+
+    /** Behind the staff switch: a self-shipped shipment is its own mode, distinct from the read-only legacy history. */
+    @Test
+    void selfShippedIsItsOwnModeAndTheSellerMovesIt() {
+        Shipment ready = selfShipped(ShipmentStatus.READY);
+        assertThat(ready.fulfilmentMode()).isEqualTo(FulfilmentMode.SELLER_SHIPS);
+        assertThat(ready.fulfilmentMode().legacy()).isFalse();
+        assertThat(ready.fulfilmentMode().staffDelivers()).isFalse();
+        assertThat(ready.fulfilmentMode().deliveredByAfroTransact()).isFalse();
+        assertThat(ready.sellerResponsible()).isTrue();
+        assertThat(legacySellerShipped(ShipmentStatus.READY).sellerResponsible()).isFalse();
+        assertThat(POLICY.nextFor(ready, ActorKind.SELLER)).contains(ShipmentStatus.PICKED_UP);
+        assertThat(POLICY.decide(selfShipped(ShipmentStatus.PICKED_UP), ShipmentStatus.DELIVERED, ActorKind.SELLER).kind())
+                .isEqualTo(TransitionDecision.Kind.ALLOW);
+        assertThat(POLICY.nextFor(selfShipped(ShipmentStatus.PICKED_UP), ActorKind.SELLER))
+                .contains(ShipmentStatus.DELIVERED);
+    }
+
+    @Test
+    void selfShippedNeverEntersTheAfroTransactDeliveryQueueAndStaffOnlyOverrideIt() {
+        for (ShipmentStatus status : ShipmentStatus.values()) {
+            assertThat(POLICY.nextFor(selfShipped(status), ActorKind.DELIVERY_STAFF)).as(status.name()).isEmpty();
+        }
+        assertThat(selfShipped(ShipmentStatus.READY).overridable()).isTrue();
+        assertThat(POLICY.decide(selfShipped(ShipmentStatus.READY), ShipmentStatus.DELIVERED, ActorKind.ADMIN_OVERRIDE)
+                .kind()).isEqualTo(TransitionDecision.Kind.ALLOW);
+        assertThatThrownBy(() -> POLICY.decide(selfShipped(ShipmentStatus.PICKED_UP), ShipmentStatus.PACKED,
+                ActorKind.ADMIN_OVERRIDE)).as("never backwards").isInstanceOf(TransitionRefused.class);
+    }
 }

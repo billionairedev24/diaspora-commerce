@@ -58,6 +58,7 @@ class ShipmentServiceImpl implements ShipmentService {
                 (o, s) -> access.transitionActor(o, s), reason, TransitionSource.API, idempotencyKey, null, null,
                 s -> {
                     requireOwnerSteps(s, target);
+                    checkSellerShipDetails(s, target, reason);
                     checkPickupHandover(s, target, handoverCode, reason);
                 }));
         return result(outcome);
@@ -77,6 +78,10 @@ class ShipmentServiceImpl implements ShipmentService {
         if (DeliverySteps.isStep(s, target)) {
             throw new ForbiddenActionException("orders.use-delivery-steps", "AfroTransact delivers this order: "
                     + "move it with the delivery steps (permission delivery:manage), not the general status change");
+        }
+        if (s.sellerResponsible() && target != ShipmentStatus.CANCELLED) {
+            throw new ForbiddenActionException("orders.seller-ships", "The seller ships this order and updates it "
+                    + "themselves. Overriding it needs the permission orders:override-shipment and a reason");
         }
         if (s.legacySellerShipped() && target != ShipmentStatus.CANCELLED) {
             throw new ForbiddenActionException("orders.legacy-seller-shipped", "The seller shipped this order "
@@ -101,6 +106,22 @@ class ShipmentServiceImpl implements ShipmentService {
         ShipmentTransitions.Outcome outcome = transitions.apply(new ShipmentTransitions.Request(shipmentId, target,
                 (o, s) -> access.overrideActor(o, s), why, TransitionSource.API, key, null, null, s -> { }));
         return result(outcome);
+    }
+
+    /**
+     * A seller who ships it themselves says how it left: a tracking number recorded on the shipment, or handover details
+     * in the note (who took it, when, how it was sent). Nothing is invented for them.
+     */
+    private static void checkSellerShipDetails(Shipment s, ShipmentStatus target, String reason) {
+        if (target != ShipmentStatus.PICKED_UP || s.deliveryMethod() != DeliveryMethod.SELLER_SELF_SHIPS
+                || s.status() == ShipmentStatus.PICKED_UP) {
+            return;
+        }
+        boolean tracked = s.trackingNumber() != null && !s.trackingNumber().isBlank();
+        if (!tracked && (reason == null || reason.isBlank())) {
+            throw new OrdersRuleViolation("orders.ship-details-required",
+                    "Add a tracking number, or say how you sent it (for example who took it)");
+        }
     }
 
     /**

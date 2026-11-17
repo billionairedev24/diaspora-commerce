@@ -31,8 +31,8 @@ class FulfilmentModeSplitTest {
 
         assertThat(share(s, "org_c").shipping().minor()).isZero();
         assertThat(s.platform().shipping().minor()).isEqualTo(599);
-        // The seller is paid items less commission and the pickup fee; none of the 599 reaches them.
-        assertThat(share(s, "org_c").net().minor()).isEqualTo(3000 - 240 - 200);
+        // The seller is paid items less commission and nothing else (no pickup fee, owner decision); none of the 599 reaches them.
+        assertThat(share(s, "org_c").net().minor()).isEqualTo(3000 - 240);
         assertThat(s.line("D1").orElseThrow().shippingToPlatform()).isTrue();
     }
 

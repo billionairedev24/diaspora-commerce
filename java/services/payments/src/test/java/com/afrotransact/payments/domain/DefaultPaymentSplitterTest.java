@@ -40,7 +40,7 @@ class DefaultPaymentSplitterTest {
         assertThat(retail.kind()).isEqualTo(RecipientKind.RETAIL);
         assertThat(retail.fbaFees().minor()).isZero();
         assertThat(retail.shipping().minor()).isEqualTo(300);
-        assertThat(b.fbaFees().minor()).isEqualTo(975);
+        assertThat(b.fbaFees().minor()).as("no per-unit FBA fee on sellers").isZero();
         assertThat(platform.shipping().minor()).isZero();
         // Largest remainder: exact 0 / 88.40 / 45.87 / 107.73 → floors 240, two cents to the largest remainders.
         assertThat(platform.stripeFee().minor()).isZero();
@@ -49,10 +49,10 @@ class DefaultPaymentSplitterTest {
         assertThat(b.stripeFee().minor()).isEqualTo(108);
         assertThat(a.net().minor()).isEqualTo(2252);
         assertThat(retail.net().minor()).isEqualTo(1000 + 300 - 46);
-        assertThat(b.net().minor()).isEqualTo(1557);
+        assertThat(b.net().minor()).isEqualTo(3000 - 360 - 108);
         assertThat(platform.commission().minor()).isEqualTo(520);
-        assertThat(platform.fbaFees().minor()).isEqualTo(975);
-        assertThat(platform.net().minor()).isEqualTo(1495);
+        assertThat(platform.fbaFees().minor()).isZero();
+        assertThat(platform.net().minor()).isEqualTo(520);
         assertThat(split.totalTax().minor()).isEqualTo(496);
         assertThat(a.taxByJurisdiction()).containsEntry("US-TX", Fixtures.usd(165));
     }
@@ -79,28 +79,24 @@ class DefaultPaymentSplitterTest {
         RecipientShare c = share(split, "org_c");
         RecipientShare a = share(split, "org_a");
         assertThat(platform.shipping().minor()).isEqualTo(1128);
-        assertThat(platform.deliveryFees().minor()).isEqualTo(200);
+        assertThat(platform.deliveryFees().minor()).as("the seller pays no pickup-delivery fee").isZero();
         assertThat(c.shipping().minor()).isZero();
         assertThat(c.commission().minor()).isEqualTo(240);
         assertThat(c.fbaFees().minor()).isZero();
-        assertThat(c.deliveryFees().minor()).isEqualTo(200);
+        assertThat(c.deliveryFees().minor()).isZero();
         // Weights 1128 / 3248 / 2124: exact 38.00 / 109.43 / 71.56 → floors 218, the leftover cent to org_a.
         assertThat(platform.stripeFee().minor()).isEqualTo(38);
         assertThat(c.stripeFee().minor()).isEqualTo(109);
         assertThat(a.stripeFee().minor()).isEqualTo(72);
-        assertThat(c.net().minor()).isEqualTo(3000 - 240 - 200 - 109);
+        assertThat(c.net().minor()).isEqualTo(3000 - 240 - 109);
         assertThat(a.net().minor()).isEqualTo(1500 + 500 - 120 - 72);
-        assertThat(platform.net().minor()).isEqualTo(1128 + 360 + 200 - 38);
+        assertThat(platform.net().minor()).isEqualTo(1128 + 360 - 38);
         assertThat(split.line("D1").orElseThrow().shippingToPlatform()).isTrue();
-        assertThat(split.line("D1").orElseThrow().deliveryFee().minor()).isEqualTo(200);
+        assertThat(split.line("D1").orElseThrow().deliveryFee().minor()).isZero();
         assertThat(split.line("A1").orElseThrow().deliveryFee().minor()).isZero();
 
         Journal capture = Postings.capture(UUID.randomUUID(), Instant.EPOCH, "k", "o1", "p1", "ch", split);
-        assertThat(capture.lines()).anySatisfy(l -> {
-            assertThat(l.account().chart().code()).isEqualTo("4250");
-            assertThat(l.amount().minor()).isEqualTo(200);
-            assertThat(l.side()).isEqualTo(EntrySide.CREDIT);
-        });
+        assertThat(capture.lines()).noneSatisfy(l -> assertThat(l.account().chart().code()).isEqualTo("4250"));
         assertThat(capture.lines()).anySatisfy(l -> {
             assertThat(l.account().chart().code()).isEqualTo("4200");
             assertThat(l.amount().minor()).isEqualTo(1128);
@@ -203,7 +199,7 @@ class DefaultPaymentSplitterTest {
         assertThat(a.commission().minor()).isEqualTo(160);
         assertThat(a.fbaFees().minor()).isZero();
         assertThat(b.commission().minor()).isEqualTo(360);
-        assertThat(b.fbaFees().minor()).isEqualTo(975);
+        assertThat(b.fbaFees().minor()).isZero();
         assertThat(b.shipping().minor()).isZero();
         assertThat(platform.shipping().minor()).isEqualTo(600);
         // Weights 600 / 4922 / 2665 / 3248: exact 18.99 / 155.82 / 84.37 / 102.82 → floors 359; the three leftover
@@ -214,8 +210,8 @@ class DefaultPaymentSplitterTest {
         assertThat(b.stripeFee().minor()).isEqualTo(103);
         assertThat(retail.net().minor()).isEqualTo(3900 + 700 - 156);
         assertThat(a.net().minor()).isEqualTo(2000 + 500 - 160 - 84);
-        assertThat(b.net().minor()).isEqualTo(3000 - 360 - 975 - 103);
-        assertThat(platform.net().minor()).isEqualTo(600 + 520 + 975 - 19);
+        assertThat(b.net().minor()).isEqualTo(3000 - 360 - 103);
+        assertThat(platform.net().minor()).isEqualTo(600 + 520 - 19);
         long nets = split.recipients().stream().mapToLong(r -> r.net().minor()).sum();
         assertThat(nets + split.totalTax().minor()).isEqualTo(11_435 - 362);
         assertThat(split.line("R1").orElseThrow().fbaFee().minor()).isZero();
@@ -346,12 +342,11 @@ class DefaultPaymentSplitterTest {
                     assertThat(r.deliveryFees().minor()).isZero();
                     assertThat(r.net().minor()).isEqualTo(items + shipping - r.stripeFee().minor());
                 } else if (r.kind() == RecipientKind.SELLER) {
-                    long deliveryFees = lines.stream().filter(l -> l.sellerOrg().equals(r.recipientId())
-                            && l.fulfilment() == Fulfilment.AFROTRANSACT_DELIVERY)
-                            .mapToLong(l -> l.deliveryFee().minor()).sum();
-                    assertThat(r.deliveryFees().minor()).isEqualTo(deliveryFees);
+                    // Fulfilled by AfroTransact costs the seller nothing: no FBA fee, no pickup-delivery fee, ever.
+                    assertThat(r.deliveryFees().minor()).isZero();
+                    assertThat(r.fbaFees().minor()).isZero();
                     assertThat(r.net().minor()).isEqualTo(r.items().minor() + r.shipping().minor()
-                            - r.commission().minor() - r.fbaFees().minor() - deliveryFees - r.stripeFee().minor());
+                            - r.commission().minor() - r.stripeFee().minor());
                 }
             }
             long preorderFees = lines.stream().filter(l -> l.fulfilment() == Fulfilment.PREORDER)

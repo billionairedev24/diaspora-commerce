@@ -23,6 +23,7 @@ import com.afrotransact.offers.domain.ShipFrom;
 import com.afrotransact.offers.it.OffersIntegrationTest;
 import com.afrotransact.offers.it.StubCatalog;
 import com.afrotransact.offers.it.TestActors;
+import com.afrotransact.platform.web.error.BusinessRuleException;
 import com.afrotransact.platform.web.error.ConflictException;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.internals.RecordHeader;
@@ -118,8 +119,8 @@ class FbaInboundOfferIT extends OffersIntegrationTest {
                 .as("still one seller-fulfilled offer per condition").isInstanceOf(ConflictException.class);
         assertThatThrownBy(() -> offers.update(own.offer().id(), new UpdateOfferCommand(null, null, null, null,
                 Fulfilment.AFROTRANSACT, null, null, null, null)))
-                .as("cannot move the own-store offer into the FBA channel that is taken")
-                .isInstanceOf(ConflictException.class);
+                .as("AfroTransact holds no seller stock, so a seller cannot move an offer into the stock-held channel")
+                .isInstanceOf(BusinessRuleException.class);
     }
 
     @Test

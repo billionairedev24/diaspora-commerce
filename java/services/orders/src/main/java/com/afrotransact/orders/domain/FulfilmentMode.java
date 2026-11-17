@@ -15,6 +15,11 @@ public enum FulfilmentMode {
      * orders:override-shipment can still move an open one, forward only with a reason.
      */
     LEGACY_SELLER_SHIPPED,
+    /**
+     * The seller ships it themselves and keeps the shipping charge (behind the staff switch, off by default). The seller moves
+     * it (confirm, pack, ready, shipped, delivered); no AfroTransact queue, no AfroTransact claim in any copy.
+     */
+    SELLER_SHIPS,
     /** Fulfilled by AfroTransact from the seller's store: staff collect from the seller's location and deliver. */
     AFROTRANSACT_DELIVERY,
     /** Fulfilled by AfroTransact (FBA stock or Retail): staff deliver from the fulfilment centre. */

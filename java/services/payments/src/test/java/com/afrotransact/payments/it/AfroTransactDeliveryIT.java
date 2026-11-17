@@ -12,7 +12,7 @@ import tools.jackson.databind.JsonNode;
 
 /**
  * S255 AfroTransact Delivery from the seller's store: quotes from the fee schedule's delivery pricing, the third
- * fulfilment mode in the split and ledger (customer charge → 4200, seller fee → 4250, no FBA fee) and the fault rules
+ * fulfilment mode in the split and ledger (customer charge → 4200, no seller fee and no FBA fee: owner decision, both retired) and the fault rules
  * of refunds. Uses the seed version (v1 launch defaults: customer $4.99 + $0.85/mi, min $5.99, max $24.99, 25 mi;
  * seller $2 per package).
  */
@@ -48,10 +48,10 @@ class AfroTransactDeliveryIT extends PaymentsIntegrationTest {
     }
 
     @Test
-    void deliveryLinesBookShippingTo4200AndTheSellerFeeTo4250ThenFollowTheFaultRules() {
+    void deliveryLinesBookShippingTo4200AndNoSellerFeeThenFollowTheFaultRules() {
         String order = id("ORD");
         String orgC = id("org_dc").toLowerCase(Locale.ROOT);
-        List<Map<String, Object>> lines = List.of(deliveryLine("D1", orgC, 2, 3000, 1128, 248, 200),
+        List<Map<String, Object>> lines = List.of(deliveryLine("D1", orgC, 2, 3000, 1128, 248, 0),
                 line("A1", "org_a", "Groceries", "SELF", 1, 1500, 500, 124));
         STRIPE.createIntent(order, "pi_" + order, 6500);
         TestSupport.as(TestSupport.ORDERS_SERVICE);
@@ -65,10 +65,10 @@ class AfroTransactDeliveryIT extends PaymentsIntegrationTest {
 
         assertEveryJournalBalances();
         assertThat(balance(order, "4200", "")).isEqualTo(1128);
-        assertThat(balance(order, "4250", "")).isEqualTo(200);
+        assertThat(balance(order, "4250", "")).as("the seller pays no pickup-delivery fee").isZero();
         assertThat(balance(order, "4100", "")).isZero();
         assertThat(balance(order, "4000", "")).isEqualTo(240 + 120);
-        assertThat(balance(order, "2000", orgC)).isEqualTo(3000 - 240 - 200 - 109);
+        assertThat(balance(order, "2000", orgC)).isEqualTo(3000 - 240 - 109);
         assertThat(balance(order, "2000", "org_a")).isEqualTo(1500 + 500 - 120 - 72);
         assertThat(-balance(order, "5000", "")).isEqualTo(38);
 
@@ -76,46 +76,46 @@ class AfroTransactDeliveryIT extends PaymentsIntegrationTest {
         JsonNode split = ok(send("GET", "/v1/orders/" + order + "/split", null, null));
         for (JsonNode r : split.path("recipients")) {
             if (r.path("recipient").asString().equals(orgC)) {
-                assertThat(r.path("deliveryFeesMinor").asLong()).isEqualTo(200);
+                assertThat(r.path("deliveryFeesMinor").asLong()).isZero();
                 assertThat(r.path("fbaFeesMinor").asLong()).isZero();
-                assertThat(r.path("netMinor").asLong()).isEqualTo(2451);
+                assertThat(r.path("netMinor").asLong()).isEqualTo(2651);
             }
             if (r.path("kind").asString().equals("PLATFORM")) {
                 assertThat(r.path("shippingMinor").asLong()).isEqualTo(1128);
-                assertThat(r.path("deliveryFeesMinor").asLong()).isEqualTo(200);
+                assertThat(r.path("deliveryFeesMinor").asLong()).isZero();
             }
         }
-        // S259: the seller's earnings show the pickup fees it paid; org_a (seller-shipped) paid none.
+        // The seller's earnings show no pickup fee: Fulfilled by AfroTransact costs the seller nothing; org_a paid none either.
         assertThat(ok(send("GET", "/v1/payouts/balance?orgId=" + orgC, null, null)).path("deliveryFeesMinor")
-                .asLong()).isEqualTo(200);
+                .asLong()).isZero();
         assertThat(ok(send("GET", "/v1/payouts/balance?orgId=org_a", null, null)).path("deliveryFeesMinor")
                 .asLong()).isZero();
         JsonNode payment = ok(send("GET", "/v1/payments/" + paymentId, null, null));
         JsonNode d1 = payment.path("lines").get(0);
         assertThat(d1.path("fulfilment").asString()).isEqualTo("AFROTRANSACT_DELIVERY");
-        assertThat(d1.path("deliveryFeeMinor").asLong()).isEqualTo(200);
-        assertThat(d1.path("deliveryFeeChargedMinor").asLong()).isEqualTo(200);
+        assertThat(d1.path("deliveryFeeMinor").asLong()).isZero();
+        assertThat(d1.path("deliveryFeeChargedMinor").asLong()).isZero();
 
         // Customer at fault: the delivery charge is not refundable …
         TestSupport.as(TestSupport.ORDERS_SERVICE);
         problem(send("POST", "/v1/payments/" + paymentId + "/refunds", Map.of("fault", "CUSTOMER", "lines",
                 List.of(Map.of("lineId", "D1", "shippingMinor", 100))), "refund-x-" + order), 422,
                 "payments.delivery-charge-not-refundable");
-        // … and half the items give the seller half its fee back (Dr 4250 100, seller debited 1500 − 120 − 100).
+        // … and half the items are refunded with the commission given back pro rata (there is no seller fee to return).
         STRIPE.refund("pi_" + order, "re_c_" + order, 1624, "succeeded");
         JsonNode refund = ok(send("POST", "/v1/payments/" + paymentId + "/refunds", Map.of("fault", "CUSTOMER",
                 "lines", List.of(Map.of("lineId", "D1", "itemsMinor", 1500, "taxMinor", 124))),
                 "refund-c-" + order), 201);
-        assertThat(refund.path("lines").get(0).path("deliveryFeeReversedMinor").asLong()).isEqualTo(100);
+        assertThat(refund.path("lines").get(0).path("deliveryFeeReversedMinor").asLong()).isZero();
         assertEveryJournalBalances();
-        assertThat(balance(order, "4250", "")).isEqualTo(100);
-        assertThat(balance(order, "2000", orgC)).isEqualTo(2451 - 1280);
+        assertThat(balance(order, "4250", "")).isZero();
+        assertThat(balance(order, "2000", orgC)).isEqualTo(2651 - 1380);
         TestSupport.as(TestSupport.FINANCE);
         assertThat(ok(send("GET", "/v1/payouts/balance?orgId=" + orgC, null, null)).path("deliveryFeesMinor")
-                .asLong()).as("customer-fault refund gave half the fee back").isEqualTo(100);
+                .asLong()).as("no seller fee to give back").isZero();
         TestSupport.as(TestSupport.ORDERS_SERVICE);
 
-        // Seller at fault (default): the rest incl. the whole delivery charge back to the customer, fee kept.
+        // Seller at fault (default): the rest incl. the whole delivery charge back to the customer.
         STRIPE.refund("pi_" + order, "re_s_" + order, 1500 + 1128 + 124, "succeeded");
         JsonNode sellerFault = ok(send("POST", "/v1/payments/" + paymentId + "/refunds", Map.of("lines",
                 List.of(Map.of("lineId", "D1", "itemsMinor", 1500, "shippingMinor", 1128, "taxMinor", 124))),
@@ -123,8 +123,8 @@ class AfroTransactDeliveryIT extends PaymentsIntegrationTest {
         assertThat(sellerFault.path("lines").get(0).path("deliveryFeeReversedMinor").asLong()).isZero();
         assertEveryJournalBalances();
         assertThat(balance(order, "4200", "")).isZero();
-        assertThat(balance(order, "4250", "")).isEqualTo(100);
-        assertThat(balance(order, "2000", orgC)).isEqualTo(2451 - 1280 - (1500 - 120));
+        assertThat(balance(order, "4250", "")).isZero();
+        assertThat(balance(order, "2000", orgC)).isEqualTo(2651 - 1380 - (1500 - 120));
     }
 
     @Test

@@ -68,6 +68,8 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
     private static final Pattern ZIP = Pattern.compile("\\d{5}");
     /** {@link FeeRuleSnapshot#source()} of a shipment charged by an agreed delivery quote: never waived by a membership. */
     static final String QUOTE_SOURCE = "DELIVERY_QUOTE";
+    /** The fee rule source of a seller's own flat shipping charge (behind the staff switch). */
+    static final String SELLER_CHARGE_SOURCE = "SELLER_SELF_SHIPPING";
 
     private final MarketEligibility markets;
     private final ProductFactsClient catalog;
@@ -90,6 +92,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
     private final DeliveryRunSlots runSlots;
     private final DeliveryFeeRules deliveryFees;
     private final MemberBenefits memberBenefits;
+    private final SellerSelfShippingService selfShipping;
     private final PreorderSettings preorderSettings;
     private final OrdersSettings settings;
     private final Clock clock;
@@ -101,7 +104,8 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                            OrderCouponRepository orderCoupons, OrderRepository orderRepository,
                            OrderPlacementService placement, LocalDeliveryQuotes localDelivery,
                            PickupPoints pickupPoints, PreorderEligibility preorders, DeliveryRunSlots runSlots,
-                           DeliveryFeeRules deliveryFees, MemberBenefits memberBenefits, PreorderSettings preorderSettings,
+                           DeliveryFeeRules deliveryFees, MemberBenefits memberBenefits,
+                           SellerSelfShippingService selfShipping, PreorderSettings preorderSettings,
                            OrdersSettings settings, Clock clock) {
         this.markets = markets;
         this.catalog = catalog;
@@ -124,6 +128,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         this.runSlots = runSlots;
         this.deliveryFees = deliveryFees;
         this.memberBenefits = memberBenefits;
+        this.selfShipping = selfShipping;
         this.preorderSettings = preorderSettings;
         this.settings = settings;
         this.clock = clock;
@@ -218,20 +223,23 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                 // From the seller's store: AfroTransact Delivery, or collected by the customer at the seller's own
                 // pickup location (e.g. the store itself).
                 if (sel != null && sel.option() != null && !sel.option().isBlank()
-                        && method != DeliveryMethod.AFROTRANSACT_DELIVERY && method != DeliveryMethod.PICKUP) {
+                        && method != DeliveryMethod.AFROTRANSACT_DELIVERY && method != DeliveryMethod.PICKUP
+                        && method != DeliveryMethod.SELLER_SELF_SHIPS) {
                     throw new OrdersRuleViolation(CheckoutCodes.INVALID_SELECTION, (first.sellerName() == null
                             ? first.sellerOrgId() : first.sellerName()) + " delivers this package with AfroTransact "
                             + "Delivery from its store or has it picked up there; choose afrotransact_delivery or "
                             + "pickup");
                 }
-                method = method == DeliveryMethod.PICKUP ? DeliveryMethod.PICKUP
+                method = method == DeliveryMethod.PICKUP || method == DeliveryMethod.SELLER_SELF_SHIPS ? method
                         : DeliveryMethod.AFROTRANSACT_DELIVERY;
             }
-            if (!sellerStore && method != DeliveryMethod.PICKUP
+            if (method == DeliveryMethod.SELLER_SELF_SHIPS) {
+                requireSelfShipping(first, sellerStore, in.currency());
+            } else if (!sellerStore && method != DeliveryMethod.PICKUP
                     && fulfilmentType(first) == FulfilmentType.SELLER_FULFILLED) {
                 // The seller is not Fulfilled by AfroTransact (no collection location) and AfroTransact does not hold the
-                // stock, so the only way to get this package is Seller pickup. Sellers do not ship themselves: never
-                // guess a mode (docs/engineering/delivery-fulfilment.md).
+                // stock, so the only way to get this package is Seller pickup (or the seller's own shipping, only when the
+                // staff switch is on and the shopper chose it). Never guess a mode (docs/engineering/delivery-fulfilment.md).
                 throw new OrdersRuleViolation(CheckoutCodes.FULFILMENT_UNAVAILABLE, (first.sellerName() == null
                         ? first.sellerOrgId() : first.sellerName()) + " does not offer delivery for this item. "
                         + "Choose pickup if the seller offers it, or remove the item");
@@ -555,6 +563,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                 // An agreed delivery quote is the shipping of the order's first delivered shipment (once, whatever the
                 // number of packages or fulfilment nodes), recorded on the shipment; later ones carry 0.
                 FeeRuleSnapshot rule = p.quote() != null ? quoteRule(p, plan.currency(), quoteCharged)
+                        : p.method() == DeliveryMethod.SELLER_SELF_SHIPS ? sellerChargeRule(p, plan.currency())
                         : carrierRule(p, items, plan.currency());
                 long shippingMinor = p.quote() != null ? rule.amountMinor() : shippingOf(p, items, rule);
                 quoteCharged |= p.quote() != null;
@@ -580,7 +589,9 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
      */
     private List<OrderDraft.DraftShipment> withMembership(CheckoutInput in, String currency,
                                                           List<OrderDraft.DraftShipment> shipments) {
+        // The seller's own shipping is the seller's revenue: no AfroTransact plan waives it.
         List<MemberBenefits.Fee> fees = shipments.stream().filter(s -> s.shippingMinor() > 0)
+                .filter(s -> s.method() != DeliveryMethod.SELLER_SELF_SHIPS)
                 .filter(s -> s.feeRule() == null || !QUOTE_SOURCE.equals(s.feeRule().source()))
                 .map(s -> new MemberBenefits.Fee(Integer.toString(s.seq()), feeKind(s), s.shippingMinor())).toList();
         long items = shipments.stream().flatMap(s -> s.lines().stream()).mapToLong(CheckoutPlan.Line::itemsMinor).sum();
@@ -618,7 +629,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         }
         return switch (s.method()) {
             case PICKUP -> MemberBenefits.FeeKind.PICKUP;
-            case AFROTRANSACT_DELIVERY, SELLER_SHIPS -> MemberBenefits.FeeKind.AFROTRANSACT_DELIVERY;
+            case AFROTRANSACT_DELIVERY, SELLER_SHIPS, SELLER_SELF_SHIPS -> MemberBenefits.FeeKind.AFROTRANSACT_DELIVERY;
             case CARRIER -> MemberBenefits.FeeKind.CARRIER;
         };
     }
@@ -966,6 +977,33 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
     }
 
     /**
+     * The seller's own shipping (behind the staff switch, off by default): the shopper chose it, so the switch must be on and
+     * the seller must have opted in with a charge, and the package must be one the seller packs (never a package AfroTransact
+     * holds or collects). Anything else is refused in plain words (422), never guessed.
+     */
+    private void requireSelfShipping(CartClient.Item first, boolean sellerStore, String currency) {
+        String seller = first.sellerName() == null ? first.sellerOrgId() : first.sellerName();
+        if (!shipping.selfShippingEnabled()) {
+            throw new OrdersRuleViolation(CheckoutCodes.SELF_SHIPPING_UNAVAILABLE, "Shipping by the seller is not "
+                    + "available. Reload the page and choose pickup or delivery by AfroTransact.");
+        }
+        if (sellerStore || fulfilmentType(first) != FulfilmentType.SELLER_FULFILLED
+                || selfShipping.offered(List.of(first.sellerOrgId()), currency).isEmpty()) {
+            throw new OrdersRuleViolation(CheckoutCodes.SELF_SHIPPING_UNAVAILABLE, seller + " does not ship this "
+                    + "package themselves. Choose another option, or remove the item");
+        }
+    }
+
+    /** The seller's flat charge for this package, kept on the shipment (the same source the shopper was shown). */
+    private FeeRuleSnapshot sellerChargeRule(CheckoutPlan.Package p, String currency) {
+        SellerSelfShippingService.Setting s = selfShipping.offered(List.of(p.sellerOrgId()), currency).stream()
+                .findFirst().orElseThrow(() -> new OrdersRuleViolation(CheckoutCodes.SELF_SHIPPING_UNAVAILABLE,
+                        "The seller no longer ships this package themselves. Reload and choose again."));
+        return new FeeRuleSnapshot(DeliveryMethod.SELLER_SELF_SHIPS.name(), p.sellerOrgId(), s.version(), currency,
+                s.chargeMinor(), SELLER_CHARGE_SOURCE, null, null);
+    }
+
+    /**
      * The staff carrier rate (ADR 0005 §3) of a standard carrier shipment, which is what an address beyond
      * AfroTransact's coverage pays; the rule is kept on the shipment. Null for every other method, and when staff
      * configured no carrier rule or delivery-runs cannot answer. Only reached while the seller carrier switch is on.
@@ -1019,6 +1057,8 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
             case "afrotransact_delivery", "delivery", "local" -> DeliveryMethod.AFROTRANSACT_DELIVERY;
             case "pickup" -> DeliveryMethod.PICKUP;
             // Seller carrier labels are retired with self-shipping: the staff switch no longer creates carrier shipments.
+            // The seller's own shipping: only while the staff switch is on (the caller checks), always the seller's own flat charge.
+            case "seller_ships" -> DeliveryMethod.SELLER_SELF_SHIPS;
             case "carrier", "standard", "ship", "express" -> throw optionsChanged();
             case "quote_required" -> throw new OrdersRuleViolation(CheckoutCodes.INVALID_SELECTION,
                     "This address is too far for standard delivery. Ask us for a quote, or choose another address.");

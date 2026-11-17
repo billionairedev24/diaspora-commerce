@@ -11,7 +11,8 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 /**
- * Owner decision, pinned: Fulfilled by AfroTransact (FBA) is free for the seller by default. The delivery fee is paid by
+ * Owner decision, pinned: Fulfilled by AfroTransact (FBA) is free for the seller: AfroTransact collects from the seller and
+ * delivers; there is no per-unit FBA fee and no seller delivery fee (retired, never applied). The delivery fee is paid by
  * the customer and is 100 % AfroTransact revenue, never part of the seller payable; the seller's pickup fee and the
  * per-unit FBA fee are 0 unless staff publish a fee schedule that sets them; Seller pickup has no delivery fee for
  * anybody. Marketplace commission is the same in every mode. The delivery fee's tax is untouched: tax is the line's own
@@ -81,14 +82,16 @@ class FulfilledByAfroTransactMoneyTest {
     }
 
     @Test
-    void aSellerSideFeeExistsOnlyWhenStaffConfigureIt() {
+    void aStaffScheduleCannotChargeTheSellerAPerUnitFbaFee() {
         FeeSchedule staffSet = new FeeSchedule(UUID.randomUUID(), 3, FROM, Fixtures.USD,
                 Map.of("Groceries", 800), 1000, List.of(), 290, Fixtures.usd(30), Fixtures.usd(100), true, null,
                 "staff-1", FROM);
         PaymentSplit s = split(staffSet, Fixtures.line("F1", "org_a", "Groceries", Fulfilment.FBA, 3, 3000, 599, 248));
 
-        assertThat(share(s, "org_a").fbaFees().minor()).isEqualTo(300);
-        assertThat(share(s, "org_a").net().minor()).isEqualTo(3000 - 240 - 300);
+        // The per-unit FBA fee is retired (AfroTransact collects from the seller and the customer pays delivery): a schedule that
+        // still carries one, here $1.00 per unit, is never applied to a new payment.
+        assertThat(share(s, "org_a").fbaFees().minor()).isZero();
+        assertThat(share(s, "org_a").net().minor()).isEqualTo(3000 - 240);
         assertThat(s.platform().shipping().minor()).isEqualTo(599);
     }
 
@@ -112,5 +115,24 @@ class FulfilledByAfroTransactMoneyTest {
         for (String org : List.of("org_a", "org_c", "org_p")) {
             assertThat(share(s, org).commission().minor()).as(org).isEqualTo(80);
         }
+    }
+
+    /**
+     * Seller self-shipping (behind the staff switch, off by default): the seller's flat shipping charge is the SELLER's revenue.
+     * Commission is on the items only (the existing rule: no commission on shipping), AfroTransact books none of it, and the
+     * payable is items plus shipping less commission.
+     */
+    @Test
+    void aSellersOwnShippingChargeIsTheSellersRevenueWithNoCommissionOnIt() {
+        PaymentSplit s = split(freeForSellers(),
+                Fixtures.line("S1", "org_a", "Groceries", Fulfilment.SELF, 2, 3000, 750, 248));
+
+        RecipientShare seller = share(s, "org_a");
+        assertThat(seller.shipping().minor()).as("the seller keeps the shipping the customer paid").isEqualTo(750);
+        assertThat(seller.commission().minor()).as("commission is on items only (8 percent of 3000)").isEqualTo(240);
+        assertThat(seller.net().minor()).isEqualTo(3000 + 750 - 240);
+        assertThat(s.platform().shipping().minor()).as("AfroTransact books none of it").isZero();
+        assertThat(s.platform().net().minor()).isEqualTo(240);
+        assertThat(s.line("S1").orElseThrow().shippingToPlatform()).isFalse();
     }
 }

@@ -197,6 +197,13 @@ public final class DefaultShipmentTransitionPolicy implements ShipmentTransition
         if (method == DeliveryMethod.PICKUP) {
             m.put(ShipmentStatus.DELIVERED, EnumSet.of(ShipmentStatus.READY));
         }
+        if (method == DeliveryMethod.SELLER_SELF_SHIPS) {
+            // Behind the staff switch: "Shipped" (the seller sends it; tracking or handover details are checked by the use
+            // case) and "Delivered" (the seller confirms it). Never reaches an AfroTransact driver or staff queue.
+            m.put(ShipmentStatus.PICKED_UP, EnumSet.of(ShipmentStatus.PACKED, ShipmentStatus.READY));
+            m.put(ShipmentStatus.DELIVERED, EnumSet.of(ShipmentStatus.PICKED_UP, ShipmentStatus.IN_TRANSIT,
+                    ShipmentStatus.OUT_FOR_DELIVERY));
+        }
         if (method == DeliveryMethod.CARRIER) {
             // LEGACY parcels already in flight; no new carrier shipment is created (self-shipping is retired).
             // "Shipped": the parcel with its label is handed to the carrier; the carrier's tracking moves it on.

@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Shipping settings", description = "The one flat delivery fee AfroTransact charges at launch (listing "
-        + "rules D16), its optional free-above threshold and the seller carrier switch: read by the shopper estimate "
+        + "rules D16), its optional free-above threshold and the seller self-shipping switch (off by default): read by the shopper estimate "
         + "and by checkout, changed by staff with a reason (orders:shipping.view, orders:shipping.edit)")
 @RestController
 class ShippingSettingsController {
@@ -35,7 +35,8 @@ class ShippingSettingsController {
     @Operation(summary = "What delivery costs (no sign-in)",
             description = "The settings checkout charges by: flatFeeMinor for Delivery by AfroTransact and for "
                     + "AfroTransact collecting from a store, freeAboveMinor (null = never free) and "
-                    + "sellerCarrierShippingEnabled (false at launch). Pickup is always 0.")
+                    + "sellerSelfShippingEnabled (false unless staff turn it on). "
+                    + "sellerCarrierShippingEnabled is retired and ignored. Pickup is always 0.")
     @SecurityRequirements
     @GetMapping("/v1/public/shipping-settings")
     SettingsResponse publicSettings(@RequestParam(defaultValue = "USD") String currency) {
@@ -51,7 +52,8 @@ class ShippingSettingsController {
     @PutMapping("/v1/shipping-settings/{currency}")
     SettingsResponse replace(@PathVariable String currency, @Valid @RequestBody SettingsRequest body) {
         return SettingsResponse.of(settings.replace(currency, new ShippingSettingsCommand(body.flatFeeMinor(),
-                body.freeAboveMinor(), Boolean.TRUE.equals(body.sellerCarrierShippingEnabled()), body.reason()),
+                body.freeAboveMinor(), Boolean.TRUE.equals(body.sellerCarrierShippingEnabled()),
+                Boolean.TRUE.equals(body.sellerSelfShippingEnabled()), body.reason()),
                 body.expectedVersion()));
     }
 
@@ -64,15 +66,16 @@ class ShippingSettingsController {
     }
 
     record SettingsRequest(@NotNull Long flatFeeMinor, Long freeAboveMinor, Boolean sellerCarrierShippingEnabled,
-                           String reason, Long expectedVersion) {
+                           Boolean sellerSelfShippingEnabled, String reason, Long expectedVersion) {
     }
 
     record SettingsResponse(String currency, long version, long flatFeeMinor, Long freeAboveMinor,
-                            boolean sellerCarrierShippingEnabled, Instant updatedAt, String updatedBy, String reason) {
+                            boolean sellerCarrierShippingEnabled, boolean sellerSelfShippingEnabled,
+                            Instant updatedAt, String updatedBy, String reason) {
 
         static SettingsResponse of(ShippingSettings s) {
             return new SettingsResponse(s.currency(), s.version(), s.flatFeeMinor(), s.freeAboveMinor(),
-                    s.sellerCarrierShippingEnabled(), s.updatedAt(), s.updatedBy(), s.reason());
+                    s.sellerCarrierShippingEnabled(), s.sellerSelfShippingEnabled(), s.updatedAt(), s.updatedBy(), s.reason());
         }
     }
 

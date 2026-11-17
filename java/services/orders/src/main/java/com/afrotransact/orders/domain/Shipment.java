@@ -158,6 +158,9 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
         if (deliveryMethod == DeliveryMethod.PICKUP) {
             return FulfilmentMode.PICKUP;
         }
+        if (deliveryMethod == DeliveryMethod.SELLER_SELF_SHIPS) {
+            return FulfilmentMode.SELLER_SHIPS;
+        }
         if (deliveryMethod == DeliveryMethod.SELLER_SHIPS || deliveryMethod == DeliveryMethod.CARRIER) {
             return FulfilmentMode.LEGACY_SELLER_SHIPPED;
         }
@@ -175,10 +178,18 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
         return fulfilmentMode().legacy() && fulfilmentType == FulfilmentType.SELLER_FULFILLED;
     }
 
-    /** The shipments the admin override may correct: Fulfilled by AfroTransact, and legacy seller-shipped history. */
+    /** The seller is responsible for moving this shipment (self-shipping behind the staff switch). */
+    public boolean sellerResponsible() {
+        return fulfilmentMode() == FulfilmentMode.SELLER_SHIPS;
+    }
+
+    /**
+     * The shipments the admin override may correct: Fulfilled by AfroTransact, the seller's own shipments and legacy
+     * seller-shipped history.
+     */
     public boolean overridable() {
         FulfilmentMode mode = fulfilmentMode();
-        return mode.staffDelivers() || mode.legacy();
+        return mode.staffDelivers() || mode.legacy() || mode == FulfilmentMode.SELLER_SHIPS;
     }
 
     /** A community pre-order shipment (S272). */
@@ -286,7 +297,7 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
 
     /** Records the carrier label so tracking webhooks can be matched to this shipment. */
     public Shipment withTracking(String newCarrier, String newTrackingNumber) {
-        if (deliveryMethod != DeliveryMethod.CARRIER) {
+        if (deliveryMethod != DeliveryMethod.CARRIER && deliveryMethod != DeliveryMethod.SELLER_SELF_SHIPS) {
             throw new OrdersRuleViolation("orders.not-carrier-shipment",
                     "Only legacy carrier parcels have tracking numbers; sellers no longer ship orders themselves");
         }
