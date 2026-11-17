@@ -72,6 +72,17 @@ describe('Add a product starts with one search box, the barcode is an optional s
     expect(document.body.textContent).not.toMatch(/ATSHEA|AT[0-9A-Z]{8}/);
   });
 
+  it('drops the unavailable notice as soon as a search answers again, and shows the pages it finds', async () => {
+    await renderScreen(<AddProductFlow />);
+    const user = await typeName('offline rice');
+    const notice = 'We can’t search right now. You can still add your product as new.';
+    expect(await screen.findByText(notice, undefined, LOOKUP)).toBeInTheDocument();
+    await user.clear(screen.getByLabelText('What are you selling?'));
+    await user.type(screen.getByLabelText('What are you selling?'), 'raw shea butter 8oz');
+    expect(await screen.findByTestId('candidate', undefined, LOOKUP)).toBeInTheDocument();
+    expect(screen.queryByText(notice)).not.toBeInTheDocument();
+  });
+
   it('asks the size with one tap (Same size, 8 oz?) before it goes on to the price and stock', async () => {
     await renderScreen(<AddProductFlow />);
     const user = await typeName('raw shea butter 8oz');
