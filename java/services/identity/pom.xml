@@ -16,7 +16,7 @@
     <description>Spring Authorization Server (OAuth 2.1 / OIDC), accounts, RBAC, MFA, passkeys and social login.</description>
 
     <properties>
-        <libphonenumber.version>9.0.42</libphonenumber.version>
+        <libphonenumber.version>9.0.43</libphonenumber.version>
         <!-- Spring Security's Argon2PasswordEncoder delegates to Bouncy Castle; it verifies the argon2id hashes
              imported from Keycloak (docs/runbooks/afrotransact-v1-to-v2-migration.md). Not managed by the Boot BOM. -->
         <bouncycastle.version>1.86</bouncycastle.version>
