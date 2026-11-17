@@ -1,2 +1,17 @@
+# Build context of java/Dockerfile is java/. The Maven reactor needs the whole tree (poms, libs, services, apps, config, platform-parent,
+# .mvn, mvnw), so only build outputs, IDE files and local junk are excluded: the context stays small and the cache keys stable.
+# Keep dist/ (the prebuilt jar of --build-arg JAR_FROM=prebuilt) and tools/ (StripNatives.java) in the context.
 **/target
 **/.idea
+**/*.iml
+**/.vscode
+**/.DS_Store
+**/*.log
+**/.git
+**/.gitignore
+**/node_modules
+**/.local
+**/*.hprof
+**/hs_err_pid*
+**/.env
+**/.env.*
