@@ -30,7 +30,7 @@
         <project.build.outputTimestamp>2026-01-01T00:00:00Z</project.build.outputTimestamp>
 
         <spring-ai.version>2.0.2</spring-ai.version>
-        <springdoc.version>3.1.1</springdoc.version>
+        <springdoc.version>3.2.0</springdoc.version>
         <archunit.version>1.5.1</archunit.version>
         <stripe.version>34.0.0</stripe.version>
         <temporal.version>1.40.0</temporal.version>
