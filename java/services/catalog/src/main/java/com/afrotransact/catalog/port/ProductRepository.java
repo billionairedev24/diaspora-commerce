@@ -122,6 +122,15 @@ public interface ProductRepository {
     ProductPage search(ProductQuery query);
 
     /**
+     * The database fallback of the candidate search: LIVE pages whose title or brand contains the words, best first, at
+     * most {@code limit}. A page matches when it holds every word, or all but one when more than two were typed. Pages
+     * of organisations hidden by listing enforcement are left out. No search index is involved.
+     *
+     * @param words lower-case words (see {@code NameTokens}); empty gives an empty list
+     */
+    List<Product> findLiveByNameWords(List<String> words, int limit);
+
+    /**
      * Sets the quantity of the owner's variant with this ATIN to what the offers service holds (it changes with
      * every sale, cancellation and stock count) and bumps the product's version, so a form opened before the change
      * is refused instead of saving a stale number. Returns false when nothing changed. Publishes no event.

@@ -23,4 +23,11 @@ class MicrometerMatchMetrics implements MatchMetrics {
         Counter.builder("catalog.match").tag("result", result)
                 .description("Catalog match lookups by outcome").register(registry).increment();
     }
+
+    @Override
+    public void candidatesFallback(String reason) {
+        Counter.builder("catalog.candidates.fallback").tag("reason", reason)
+                .description("Candidate searches answered from the database because the search index failed or was empty")
+                .register(registry).increment();
+    }
 }

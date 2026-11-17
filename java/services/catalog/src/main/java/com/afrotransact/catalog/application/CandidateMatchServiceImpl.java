@@ -27,6 +27,7 @@ import com.afrotransact.catalog.domain.matching.CandidateRanker;
 import com.afrotransact.catalog.domain.matching.CandidateRanker.Kind;
 import com.afrotransact.catalog.domain.matching.CandidateRanker.Score;
 import com.afrotransact.catalog.domain.matching.MatchThresholds;
+import com.afrotransact.catalog.domain.matching.NameTokens;
 import com.afrotransact.catalog.domain.matching.PackSize;
 import com.afrotransact.catalog.domain.matching.RealPhoto;
 import com.afrotransact.catalog.port.CandidateRecall;
@@ -34,17 +35,22 @@ import com.afrotransact.catalog.port.CandidateRecall.RecallUnavailable;
 import com.afrotransact.catalog.port.CategoryRepository;
 import com.afrotransact.catalog.port.MatchDecisionRepository;
 import com.afrotransact.catalog.port.MatchDecisionRepository.Decision;
+import com.afrotransact.catalog.port.MatchMetrics;
 import com.afrotransact.catalog.port.ProductRepository;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.ActorResolver;
 import com.afrotransact.platform.security.PrincipalType;
 import com.afrotransact.platform.web.error.BusinessRuleException;
 import com.afrotransact.platform.web.error.ForbiddenActionException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 class CandidateMatchServiceImpl implements CandidateMatchService {
+
+    private static final Logger LOG = LoggerFactory.getLogger(CandidateMatchServiceImpl.class);
 
     static final int MAX_QUERY = 200;
     private static final int ROW_CANDIDATES = 3;
@@ -61,12 +67,13 @@ class CandidateMatchServiceImpl implements CandidateMatchService {
     private final SearchRateLimiter limiter;
     private final MatchThresholds thresholds;
     private final ActorResolver actors;
+    private final MatchMetrics metrics;
     private final Clock clock;
 
     CandidateMatchServiceImpl(CandidateRecall recall, ProductRepository products, CategoryRepository categories,
                               OfferEligibilityService eligibility, CatalogSettingsService settings,
                               MatchDecisionRepository decisions, SearchRateLimiter limiter, MatchThresholds thresholds,
-                              ActorResolver actors, Clock clock) {
+                              ActorResolver actors, MatchMetrics metrics, Clock clock) {
         this.recall = recall;
         this.products = products;
         this.categories = categories;
@@ -76,6 +83,7 @@ class CandidateMatchServiceImpl implements CandidateMatchService {
         this.limiter = limiter;
         this.thresholds = thresholds;
         this.actors = actors;
+        this.metrics = metrics;
         this.clock = clock;
     }
 
@@ -195,28 +203,48 @@ class CandidateMatchServiceImpl implements CandidateMatchService {
         return org.strip();
     }
 
-    /** Recalls from the index, keeps what a seller may be shown, ranks it. Best first, ties by ATIN. */
+    /**
+     * Recalls from the search index, falling back to the catalogue's own tables when the index cannot be asked or knows
+     * nothing (an empty or not yet built index must never stop a seller from finding the page); keeps what a seller may be
+     * shown and ranks it. Best first, ties by ATIN. Unavailable only when both ways fail.
+     */
     private Found find(String name, String brand, UUID categoryId) {
         CategoryNode chosen = categoryId == null ? null : categories.findById(categoryId).orElse(null);
         CandidateRanker.Query query = new CandidateRanker.Query(name, brand, categoryId, chosen == null ? null : chosen.path());
-        List<String> atins;
+        String text = brand == null || brand.isBlank() ? name : brand + " " + name;
+        List<Product> pages = List.of();
+        String reason = null;
         try {
-            atins = recall.recall(brand == null || brand.isBlank() ? name : brand + " " + name, thresholds.recall());
+            List<String> atins = recall.recall(text, thresholds.recall());
+            if (atins.isEmpty()) {
+                reason = "search_empty";
+            } else {
+                pages = pagesOf(atins);
+            }
         } catch (RecallUnavailable e) {
-            return new Found(List.of(), true);
+            reason = "search_error";
+            LOG.warn("Candidate search: the search index could not be asked ({}); answering from the catalogue database",
+                    causeOf(e));
+        }
+        if (reason != null) {
+            try {
+                pages = fromDatabase(text);
+                metrics.candidatesFallback(reason);
+                if (reason.equals("search_empty")) {
+                    LOG.debug("Candidate search: the search index knew nothing, the database found {} page(s)", pages.size());
+                }
+            } catch (RuntimeException e) {
+                metrics.candidatesFallback("both_failed");
+                LOG.warn("Candidate search: the search index ({}) and the database ({}) both failed", reason, causeOf(e));
+                return new Found(List.of(), true);
+            }
         }
         String partKey = settings.current().mpnAttributeKey();
         Map<UUID, Ranked> byPage = new LinkedHashMap<>();
-        Set<String> seen = new LinkedHashSet<>();
-        for (String atin : atins) {
-            if (!seen.add(atin)) {
+        for (Product p : pages) {
+            if (!shown(p)) {
                 continue;
             }
-            Optional<Product> page = productOf(atin);
-            if (page.isEmpty() || !shown(page.get())) {
-                continue;
-            }
-            Product p = page.get();
             CategoryNode node = p.categoryId() == null ? null : categories.findById(p.categoryId()).orElse(null);
             CandidateRanker.Page view = new CandidateRanker.Page(p.atin().value(), p.title(),
                     p.attributes().get(BrandKeys.NAME), p.categoryId(), node == null ? null : node.path(),
@@ -231,6 +259,29 @@ class CandidateMatchServiceImpl implements CandidateMatchService {
                         .thenComparing(r -> r.page().atin().value()))
                 .toList();
         return new Found(ranked, false);
+    }
+
+    /** The pages behind the index's ATINs, in the index's order; an ATIN catalog does not know is dropped. */
+    private List<Product> pagesOf(List<String> atins) {
+        List<Product> out = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        for (String atin : atins) {
+            if (seen.add(atin)) {
+                productOf(atin).ifPresent(out::add);
+            }
+        }
+        return out;
+    }
+
+    /** The deterministic match on the words of the name (a barcode has its own exact lookup, CatalogMatchService). */
+    private List<Product> fromDatabase(String text) {
+        return products.findLiveByNameWords(NameTokens.of(text), thresholds.recall());
+    }
+
+    /** The class of the failure, never its message (a message can carry what the seller typed). */
+    private static String causeOf(Throwable e) {
+        Throwable root = e.getCause() == null ? e : e.getCause();
+        return root.getClass().getSimpleName();
     }
 
     private Optional<Product> productOf(String atin) {

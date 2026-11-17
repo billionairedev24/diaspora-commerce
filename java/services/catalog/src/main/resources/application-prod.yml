@@ -14,6 +14,9 @@ at:
       # dataset fake for the local stack only: a deployed catalog never resolves tax by itself.
       resolver: ${CATALOG_TAX_RESOLVER:http}
       base-url: ${TAX_RETURNS_URL:http://tax-returns}
+    search:
+      # search-service (Helm chart `search`, Service port 80); in release 1 SEARCH_URL is rendered from the chart upstreams.
+      base-url: ${SEARCH_URL:http://search}
     media:
       # In-cluster service name of media-service (Helm chart `media`, port 8080).
       base-url: ${MEDIA_URL:http://media:8080}

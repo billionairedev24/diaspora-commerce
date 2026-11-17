@@ -2046,7 +2046,7 @@ paths:
         seller types ("basmati rice 5kg"); name, brand and size are read from it and the category is the optional chip
         (`categoryId`). Up to six live pages with a real photo, best first, each with its photo, brand, size and the number of
         sellers (`sellerCount`, null when offers cannot be read). `kind` is `SAME_NAME` or `SIMILAR`; both always need the
-        seller's click. Nothing about any seller is returned. `searchUnavailable` means no suggestions, never a guess.
+        seller's click. Nothing about any seller is returned. `searchUnavailable` means neither the search index nor catalog's database match could answer: no suggestions, never a guess.
         429 `RATE_LIMITED` when the organisation searched too often.
       requestBody:
         required: true
@@ -6503,7 +6503,7 @@ components:
         suggestedCategory: {oneOf: [{$ref: '#/components/schemas/MatchCategory'}, {type: 'null'}]}
         category: {oneOf: [{$ref: '#/components/schemas/MatchCategory'}, {type: 'null'}]}
         tooShort: {type: boolean, description: The name is too short to search yet}
-        searchUnavailable: {type: boolean, description: The search did not answer; the seller may still add the product as new}
+        searchUnavailable: {type: boolean, description: Neither the search index nor the catalogue database answered; the seller may still add the product as new}
     DecisionRequest:
       type: object
       required: [choice, query]

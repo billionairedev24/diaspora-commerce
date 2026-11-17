@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -50,6 +51,7 @@ import com.afrotransact.catalog.port.CandidateRecall.RecallUnavailable;
 import com.afrotransact.catalog.port.CategoryRepository;
 import com.afrotransact.catalog.port.MatchDecisionRepository;
 import com.afrotransact.catalog.port.MatchDecisionRepository.Decision;
+import com.afrotransact.catalog.port.MatchMetrics;
 import com.afrotransact.catalog.port.ProductRepository;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.ActorResolver;
@@ -74,6 +76,7 @@ class CandidateMatchServiceImplTest {
     private final CatalogSettingsService settings = mock(CatalogSettingsService.class);
     private final MatchDecisionRepository decisions = mock(MatchDecisionRepository.class);
     private final ActorResolver actors = mock(ActorResolver.class);
+    private final MatchMetrics metrics = mock(MatchMetrics.class);
     private final Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
     private final SearchRateLimiter limiter = new SearchRateLimiterImpl(clock);
     private final MatchThresholds thresholds = new MatchThresholds(45, 75, 6, 30, 3, 5, 2);
@@ -93,7 +96,7 @@ class CandidateMatchServiceImplTest {
             return new Eligibility(v.atin().value(), p.atin().value(), true, List.of(), List.of(ItemCondition.NEW), "org_a");
         });
         service = new CandidateMatchServiceImpl(recall, products, categories, eligibility, settings, decisions, limiter,
-                thresholds, actors, clock);
+                thresholds, actors, metrics, clock);
     }
 
     private static CategoryNode node(UUID id, String path) {
@@ -194,13 +197,66 @@ class CandidateMatchServiceImplTest {
     }
 
     @Test
-    void whenTheSearchIndexIsDownTheAnswerIsNoSuggestionsNotAGuess() {
+    void whenTheSearchIndexIsDownTheDatabaseAnswersAndTheSellerIsNotBlocked() {
+        Product egusi = live("Ground Egusi (Melon Seeds) 12oz", "Kuli Kuli", RICE);
+        when(recall.recall(anyString(), anyInt())).thenThrow(new RecallUnavailable("down", new IllegalStateException("x")));
+        when(products.findLiveByNameWords(eq(List.of("ground", "egusi")), anyInt())).thenReturn(List.of(egusi));
+
+        CandidateResult result = search("ground egusi", RICE);
+
+        assertThat(result.searchUnavailable()).isFalse();
+        assertThat(result.candidates()).extracting(Candidate::parentAtin).containsExactly(egusi.atin().value());
+        verify(metrics).candidatesFallback("search_error");
+    }
+
+    @Test
+    void whenTheSearchIndexIsEmptyTheDatabaseAnswers() {
+        Product egusi = live("Ground Egusi (Melon Seeds)", "Kuli Kuli", RICE);
+        when(recall.recall(anyString(), anyInt())).thenReturn(List.of());
+        when(products.findLiveByNameWords(eq(List.of("ground", "egusi")), anyInt())).thenReturn(List.of(egusi));
+
+        CandidateResult result = search("ground egusi", null);
+
+        assertThat(result.searchUnavailable()).isFalse();
+        assertThat(result.candidates()).extracting(Candidate::title).containsExactly("Ground Egusi (Melon Seeds)");
+        verify(metrics).candidatesFallback("search_empty");
+    }
+
+    @Test
+    void theFallbackNeverShowsWhatTheIndexPathWouldHide() {
+        Product draft = page("Ground Egusi", "Kuli Kuli", RICE, ProductStatus.IN_REVIEW, "https://cdn.example.com/a.jpg");
+        Product noPhoto = page("Ground Egusi", "Kuli Kuli", RICE, ProductStatus.LIVE, null);
         when(recall.recall(anyString(), anyInt())).thenThrow(new RecallUnavailable("down", null));
+        when(products.findLiveByNameWords(any(), anyInt())).thenReturn(List.of(draft, noPhoto));
+
+        CandidateResult result = search("ground egusi", null);
+
+        assertThat(result.candidates()).isEmpty();
+        assertThat(result.searchUnavailable()).isFalse();
+    }
+
+    @Test
+    void searchUnavailableOnlyWhenTheIndexAndTheDatabaseBothFail() {
+        when(recall.recall(anyString(), anyInt())).thenThrow(new RecallUnavailable("down", null));
+        when(products.findLiveByNameWords(any(), anyInt())).thenThrow(new IllegalStateException("db down"));
 
         CandidateResult result = search("tilda basmati rice", RICE);
 
         assertThat(result.searchUnavailable()).isTrue();
         assertThat(result.candidates()).isEmpty();
+        verify(metrics).candidatesFallback("both_failed");
+    }
+
+    @Test
+    void whenTheIndexAnswersTheDatabaseIsNotAsked() {
+        index(live("Tilda Basmati Rice 5kg", "Tilda", RICE));
+
+        CandidateResult result = search("tilda basmati rice 5kg", RICE);
+
+        assertThat(result.searchUnavailable()).isFalse();
+        assertThat(result.candidates()).hasSize(1);
+        verify(products, never()).findLiveByNameWords(any(), anyInt());
+        verify(metrics, never()).candidatesFallback(anyString());
     }
 
     @Test
