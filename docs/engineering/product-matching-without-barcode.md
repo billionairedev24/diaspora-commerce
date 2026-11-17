@@ -22,8 +22,10 @@ One search box, **What are you selling?**, is the entry of Add a product.
    narrows the search (same-category boost); the suggestion itself is not fed back.
 3. Each page has **This is my product**. The size or pack is confirmed with one tap on the chosen page, not typed: "Same size, 5 kg?"
    with **Yes, same size** and **No, a different size**. A page with several variants asks which one first. A page that states no size
-   goes straight on. Then the seller sets price, quantity and condition (the existing price-and-stock form, shipping and fulfilment
-   behind "more"). The photos, title and details are the page's and are never edited here.
+   goes straight on. Then the seller sets price and quantity (the existing price-and-stock form, shipping and fulfilment behind "more");
+   **condition is asked only for the categories whose rules allow used or renewed items** (section 12) and **no SKU is asked**: the
+   catalogue code of the page is shown read-only (section 13). The photos, title and details are the page's and are never edited here.
+   **No, a different size** is not a dead end: the seller types their own size and asks for it to be added to the page (section 11).
 4. **Not here, add it as new** starts the full product form with the name pre-filled and the category chip kept. The answer is
    recorded (section 6).
 5. **I have a barcode** is an optional shortcut under the box: an exact match on the barcode, as before (check digit, UPC/EAN meet on
@@ -46,12 +48,16 @@ copy `go/services/gateway-bff/api/openapi-seller.yaml` is identical).
 |---|---|---|
 | `POST /v1/catalog/matches/candidates` | `{ query (max 200), categoryId? }` | up to 6 `MatchCandidate` (parentAtin, atin when one variant, title, brand, image, category, `sizeLabel`, variants, `kind` SAME_NAME or SIMILAR, `likely`, canOffer, blockers), `suggestedCategory`, `category`, `tooShort`, `searchUnavailable` |
 | `POST /v1/catalog/matches/decisions` | `{ choice SELL_EXISTING or NONE_OF_THESE, query, categoryId?, atin?, sizeConfirmed? }` | `{ decisionId, choice, atin, canOffer, blockers, possibleDuplicateQueued }` |
+| `POST /v1/catalog/matches/size-requests` | `{ query, categoryId?, atin, size ("1 kg"), note? }` | `{ outcome REQUESTED / ALREADY_REQUESTED / ALREADY_ON_PAGE, size, requestId, existingAtin, reviewDueAt, canOffer, blockers }` |
 | `POST /v1/catalog/matches` | `{ gtin }` | as before; no brand + MPN, no `matchedOn` |
 
 The gateway adds `sellerCount` per candidate from offers (best effort, null when unreadable), checks the Listings module (EDIT),
 validates cheaply (query 1 to 200, UUID category, ATIN shape), never forwards a `sellerOrgId` from the body, and maps the
 problems: `catalog.match-rate-limited` to 429 `RATE_LIMITED`, `catalog.match-size-unconfirmed` to 422 `SIZE_UNCONFIRMED`,
-`catalog.match-choice-not-shown` to 422 `CHOICE_NOT_SHOWN`.
+`catalog.match-choice-not-shown` to 422 `CHOICE_NOT_SHOWN`, and for size requests `catalog.variant-size-invalid` to 422 `SIZE_INVALID`,
+`catalog.variant-page-size-unknown` to 422 `SIZE_PAGE_UNKNOWN`, `catalog.variant-theme-unsupported` to 422 `SIZE_NOT_ADDABLE` and
+`catalog.variant-request-blocked` to 422 `SIZE_REQUEST_BLOCKED` (the BFF route is `POST /v1/seller/catalog/candidates/size-requests`).
+Every candidate and barcode match also carries `allowedConditions` (section 12).
 
 ## 4. Candidate ranking (catalog, `domain/matching`)
 
@@ -109,7 +115,23 @@ row, and a seller's own tax decision must be RESOLVED before it goes on sale (se
 
 `NONE_OF_THESE` is stored in `product_match_decision` (migration `V9__match_decisions.sql`): organisation, the typed name, the
 category, the pages that were shown. When a page that scored as "likely" was shown next to it, `review_state` is `OPEN` and
-`possibleDuplicateQueued` is true, so staff can compare the new page with it. It never blocks the seller. The existing wrong-match
+`possibleDuplicateQueued` is true, so staff can compare the new page with it. It never blocks the seller.
+
+**Nothing in the flow traps a seller (owner feedback, Nov 2026).** An answer is a record for staff, never a state that disables the
+next one. Rules, server and screen:
+
+- The server keeps no per-product "rejected" flag. `SELL_EXISTING` after any earlier `NONE_OF_THESE` (or the other way round) is
+  allowed; the only limits are the rates (600 searches per organisation per hour, 30 `NONE_OF_THESE` per 24 hours, 20 waiting size
+  requests), which answer 429 `RATE_LIMITED` in plain words and free themselves. The screen records `NONE_OF_THESE` without waiting for
+  it, so even a refused record never stops adding the product.
+- A waiting wrong-product report stops a *new page with the same barcode* (so a page is not made while staff check it) and nothing
+  else. The seller who reported by mistake takes the report back (`withdraw`) from the "can't add this product yet" notice itself, and
+  the barcode is free at once.
+- Screen: a candidate card has four states (start, size question, own size, answered) and each has a way back: "Not this product"
+  returns to the start, "No, a different size" and "It is the same size after all" go to each other, "Change my answer" reopens the
+  size form. "Not here, add it as new" and the search box are never disabled. Going back from the new product form, or from a saved
+  draft that autosave already gave an address, returns to the search with the typed name and category as they were (the draft stays in
+  Drafts). The price-and-stock form has "Search again". The existing wrong-match
 report and "this page is a duplicate" paths stay as they are (`change-requests`). A staff queue screen over `review_state = OPEN`
 (and the DISTINCT or DUPLICATE decision) is not built yet: the rows are recorded and indexed for it.
 
@@ -129,9 +151,9 @@ found, none, too short, unavailable, rate limited, and the NONE_OF_THESE rate).
 
 | Where | What |
 |---|---|
-| Java unit (JDK 25) | `CandidateRankerTest` (weights, brand and size agreement, category, hidden part number, SAME_NAME versus SIMILAR, thresholds), `PackSizeTest`, `ProductNamesTest`, `RealPhotoTest`, `CandidateMatchServiceImplTest` (live-and-photo only, six at most, confirmation, not-shown refusal, none-of-these queueing, rate limits, index down: database fallback, index empty, both down, index ok so the database is not asked), `NameTokensTest`, `HttpCandidateRecallTest` (URL with and without the `/modules/search` prefix, no token, 5xx, 404 and a dead port are unavailable), `OfferImportValidatorTest`, `CatalogMatchServiceImplTest`, `CatalogContractTest`, `ArchitectureTest`, `TaxGateArchitectureTest` |
-| Go | gateway-bff contract conformance for both routes against `gateway-bff-seller.yaml`, validation, 429 and size problems, no `sellerOrgId` forwarded, Listings module gate |
-| vitest | api-client mock (ranking, size, never not-live, none-of-these record), Seller Center flow (search, chip, one-tap size, different size, not here, barcode shortcut, report paths), five-locale key parity, no part number copy, tour keys |
+| Java unit (JDK 25) | `CandidateRankerTest` (weights, brand and size agreement, category, hidden part number, SAME_NAME versus SIMILAR, thresholds), `PackSizeTest`, `ProductNamesTest`, `RealPhotoTest`, `CandidateMatchServiceImplTest` (live-and-photo only, six at most, confirmation, not-shown refusal, none-of-these queueing, rate limits, index down: database fallback, index empty, both down, index ok so the database is not asked), `NameTokensTest`, `HttpCandidateRecallTest` (URL with and without the `/modules/search` prefix, no token, 5xx, 404 and a dead port are unavailable), `OfferImportValidatorTest`, `CatalogMatchServiceImplTest`, `SizeVariantRulesTest`, `PageVariantServiceImplTest` (a seller's size), `ChangeRequestServiceImplTest` (`resultAtin`), `ClasspathRulesRegistryTest` (condition and per-category questions), `CatalogContractTest`, `ArchitectureTest`, `TaxGateArchitectureTest` |
+| Go | gateway-bff contract conformance for all three routes against `gateway-bff-seller.yaml`, validation, 429 and size problems, size requests (requested, again, already on the page, refused), allowed conditions, no `sellerOrgId` forwarded, Listings module gate |
+| vitest | api-client mock (ranking, size, never not-live, none-of-these record, size requests, allowed conditions), Seller Center flow (search, chip, one-tap size, different size request and every way back, price and stock after approval, condition only where allowed, no SKU, back from a draft, take back a report, not here, barcode shortcut, report paths), five-locale key parity, no part number copy, tour keys |
 | Not run | Docker Testcontainers ITs (the JDBC decision repository, the migration and `findLiveByNameWords`; its SQL was run by hand on PostgreSQL 16) and a real search engine against `HttpCandidateRecall` |
 
 ## 10. Owner decisions
@@ -140,3 +162,54 @@ found, none, too short, unavailable, rate limited, and the NONE_OF_THESE rate).
 2. A staff screen for the possible-duplicate queue (section 6).
 3. Whether "Not here" should keep sending `noGtin` (the existing exemption review) or whether a name-keyed new page needs no barcode review
    at all in categories that do not need one.
+
+## 11. Selling a different size, weight or pack of a page that exists
+
+The seller's product is on the page but in another size ("the page is 5 kg, I sell 1 kg"). They are not stopped and they do not create
+a duplicate page: their size is added to the page as one more variant, with its own ATIN, after catalogue staff check it like any new
+variant. Contract first: `POST /v1/catalog/matches/size-requests` (section 3), `ChangeRequest.resultAtin`.
+
+1. **Seller.** "No, a different size" opens "Your size is different": one field, "Your size or weight" ("1 kg", "500 ml", "6 pack"),
+   and "Ask to add my size". The page must have been in the list for the same query and category (`catalog.match-choice-not-shown`)
+   and the organisation must be allowed to sell on it (`catalog.variant-request-blocked`).
+2. **Size rules** (`SizeVariantRules`, pure): the text must be only a size with a unit or a pack word, read like names (5 kg = 5000 g,
+   `PackSize`), else `catalog.variant-size-invalid`. A size the page already has (its own, or one of its variants, in the Size
+   dimension) answers `ALREADY_ON_PAGE` with that variant: the seller sells it. A page that states no size has none to differ from
+   (`catalog.variant-page-size-unknown`). A page that varies by something that is not a size alone (colour, size and colour) answers
+   `catalog.variant-theme-unsupported`: the seller adds the product as new (the screen offers it). Nothing here guesses.
+3. **Request.** A `NEW_VARIANT` change request, payload `{ source: SELLER_SIZE, options: { Size: "1 kg" }, existingOptions }`, stored under
+   the field `MASS:100000:1` (the size key) so one size is one waiting request per page and organisation (`ALREADY_REQUESTED`, no 409).
+   It needs no open offer (the generic `NEW_VARIANT` suggestion does), because the seller has none yet; eligibility is the offer
+   eligibility of the page (live, brand, approval). At most 20 waiting per organisation (`openSizeRequests`, `at.catalog.matching.open-size-requests`).
+4. **Staff.** The request is in the existing change-request queue. Approving goes through `PageVariantService.addVariant` with the same
+   tax gate as any new variant (a live page leaves sale until the new variant has its tax decision, `holdPageForTax`). For a seller's
+   size it also: gives a page **without variations** the built-in `Size` theme (every product type knows it, `VariationTheme.SIZE`; the
+   page's only variant keeps its ATIN and takes its own size as its option), needs no barcode (the variant is found by its ATIN; staff may
+   add one later), copies the tax facts of the first variant and generates the page owner's SKU like any variant. A page that already
+   varies by Size takes the new value in its own dimension.
+5. **Price and stock.** After approval the request in "Your suggestions and reports" reads Applied and carries `resultAtin`: "Add your price
+   and stock" opens the same price-and-stock form for that variant. The seller never sets price, stock, shipping or fulfilment on the
+   request itself (those belong to the seller's own listing and follow the normal rules once the variant exists).
+
+## 12. Condition and other per-category questions are data
+
+Condition is decided by catalog's listing rules (`tools/listing-rules/rules.json`, rule field `condition`, [listing-rules.md](listing-rules.md)
+D9), never by the screen. Shown for 11 categories (electronics, books and magazines, toys, furniture and small appliances, kitchenware,
+sports goods, school and office supplies), never required, hidden and stored as New everywhere else (groceries, beverages, beauty, health,
+baby, pets, clothing, jewelry, digital, services and the consumable home goods). The rule reaches every place: the product form and bulk
+template read the rule; the offer form for a page that exists reads `allowedConditions` of the candidate or barcode match (the same
+answer offers uses for `offers.condition-not-allowed`): one entry (New) hides the field and the server uses New, several show it. The
+server never requires a condition: an absent one is New. The audit of the other per-category questions is in listing-rules.md (D9, overrides).
+
+## 13. SKU
+
+For a page that exists the SKU input is gone. The catalogue's own code (the variant ATIN) identifies the item, is shown read-only
+("Catalogue code") and offers generates the seller's SKU (`<ATIN>-<CONDITION>`) as before; `sellerSku` stays optional in the contract and is
+not sent by Seller Center on this path. For a new product the SKU field is unchanged: optional, generated and kept stable when left empty
+(`sc.pf.sku.placeholder`). The bulk upload "Seller SKU" column is optional and is not on this path. Nothing asks for an internal reference
+on Add a product.
+4. Whether the seller may state price and stock together with the size request (today they come after staff approve the size, so a size
+   staff reject costs the seller nothing to undo). Staff-console wording for `SELLER_SIZE` requests ("a seller sells this page in 1 kg")
+   is the existing generic change-request screen.
+5. Fashion: the owner's note listed fashion among the categories that may have a condition; D9 hid it for clothing, bags and jewelry
+   (hygiene, brand gating, "pre-owned programme later"). Kept hidden; a pre-owned programme is a rule change (one cell per category).

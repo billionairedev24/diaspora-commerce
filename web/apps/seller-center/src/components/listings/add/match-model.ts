@@ -1,4 +1,4 @@
-import { type CatalogMatch, type MatchCandidate, OFFER_CONDITIONS, type OfferCondition, type OfferFulfilment, type OfferOnlyInput } from '@afrotransact/api-client';
+import { type CatalogMatch, type ChangeRequest, type MatchCandidate, OFFER_CONDITIONS, type OfferCondition, type OfferFulfilment, type OfferOnlyInput } from '@afrotransact/api-client';
 
 import { type MessageKey } from '@/i18n/t';
 
@@ -46,8 +46,47 @@ export function sizeToConfirm(c: MatchCandidate, atin: string): string | null {
 export function candidateAsMatch(c: MatchCandidate, atin: string): CatalogMatch {
   const child = c.variants.find((v) => v.atin === atin);
   return { result: 'MATCH', atin, parentAtin: c.parentAtin, title: c.title, brand: c.brand ?? null, image: c.image ?? null, category: c.category ?? null, variantOptions: child?.options ?? {},
-    variants: c.variants, sellerCount: c.sellerCount ?? null, canOffer: c.canOffer, blockers: c.blockers, canCreate: false, createBlockers: [] };
+    variants: c.variants, sellerCount: c.sellerCount ?? null, canOffer: c.canOffer, blockers: c.blockers, canCreate: false, createBlockers: [], allowedConditions: c.allowedConditions };
 }
+
+/** The conditions the page's category allows, as catalog's listing rules say: NEW alone when it says nothing (the condition is then not asked and the server uses New). */
+export const conditionsAllowed = (match: { allowedConditions?: OfferCondition[] | undefined }): OfferCondition[] =>
+  match.allowedConditions?.length ? match.allowedConditions : ['NEW'];
+
+/** The condition field is shown only where used or renewed items make sense for the category. */
+export const asksCondition = (match: { allowedConditions?: OfferCondition[] | undefined }): boolean => conditionsAllowed(match).length > 1;
+
+/** A variant request the seller can still act on: staff applied it and the variant exists, so price and stock are next. */
+export const readyToSell = (r: ChangeRequest): boolean => r.type === 'NEW_VARIANT' && r.status === 'APPLIED' && Boolean(r.resultAtin);
+
+/** The size a variant request asked for, in the seller's words ("1 kg"); undefined when the request names none. */
+export function requestedSize(r: ChangeRequest): string | undefined {
+  const options = (r.payload as { options?: Record<string, unknown> } | null | undefined)?.options;
+  const first = options ? Object.values(options)[0] : undefined;
+  return typeof first === 'string' && first ? first : undefined;
+}
+
+/** The page a request is about, as the price-and-stock form reads it: only its title and the variant that now exists. */
+export function changeAsMatch(r: ChangeRequest): CatalogMatch {
+  const size = requestedSize(r);
+  const options: Record<string, string> = size ? { Size: size } : {};
+  const atin = r.resultAtin ?? '';
+  return { result: 'MATCH', atin, parentAtin: r.atin, title: r.title ?? '', brand: null, image: null, category: null, variantOptions: options, variants: [{ atin, options }], sellerCount: null, canOffer: true,
+    blockers: [], canCreate: false, createBlockers: [] };
+}
+
+/** Why a size request was refused, in the seller's words (the server's problem codes). */
+const SIZE_PROBLEMS: Record<string, MessageKey> = {
+  SIZE_INVALID: 'sc.match.size.err.invalid',
+  SIZE_PAGE_UNKNOWN: 'sc.match.size.err.pageUnknown',
+  SIZE_NOT_ADDABLE: 'sc.match.size.err.notAddable',
+  SIZE_REQUEST_BLOCKED: 'sc.match.size.err.blocked',
+  RATE_LIMITED: 'sc.match.size.err.limit',
+  CHOICE_NOT_SHOWN: 'sc.match.size.err.notShown'
+};
+export const sizeProblemKey = (code: string | undefined): MessageKey | undefined => (code ? SIZE_PROBLEMS[code] : undefined);
+/** The refusals after which the right next step is to add the product as new. */
+export const sizeNeedsNewProduct = (code: string | undefined): boolean => code === 'SIZE_NOT_ADDABLE' || code === 'SIZE_PAGE_UNKNOWN';
 
 const BLOCKERS: Record<string, MessageKey> = {
   'catalog.page-not-live': 'sc.match.blocker.pageNotLive',
@@ -84,16 +123,15 @@ export interface OfferForm {
   fulfilment: OfferFulfilment;
   handling: string;
   shipFromId: string;
-  sku: string;
   pkg: { length: string; width: string; height: string; weight: string };
 }
 
-export const emptyOffer = (): OfferForm => ({ price: '', listPrice: '', shipping: '', qty: '', condition: 'NEW', note: '', fulfilment: 'SELLER', handling: '2', shipFromId: '', sku: '',
+export const emptyOffer = (): OfferForm => ({ price: '', listPrice: '', shipping: '', qty: '', condition: 'NEW', note: '', fulfilment: 'SELLER', handling: '2', shipFromId: '',
   pkg: { length: '', width: '', height: '', weight: '' } });
 
 export const OFFER_FIELD = {
   price: 'of-price', listPrice: 'of-list-price', shipping: 'of-shipping', qty: 'of-qty', condition: 'of-condition', note: 'of-note', fulfilment: 'of-fulfilment', handling: 'of-handling',
-  shipFrom: 'of-ship-from', sku: 'of-sku', pkg: 'of-pkg'
+  shipFrom: 'of-ship-from', pkg: 'of-pkg'
 } as const;
 
 const positive = (v: string): number | null => {
@@ -135,7 +173,6 @@ export function toOfferInput(atin: string, f: OfferForm): OfferOnlyInput {
   if (f.fulfilment === 'SELLER') input.quantity = whole(f.qty) ?? 0;
   if (f.condition !== 'NEW') input.conditionNote = f.note.trim();
   if (f.shipFromId && f.fulfilment !== 'AFROTRANSACT') input.shipFromLocationId = f.shipFromId;
-  if (f.sku.trim()) input.sellerSku = f.sku.trim();
   if (f.fulfilment === 'AFROTRANSACT') {
     input.packaging = { lengthIn: Number(f.pkg.length), widthIn: Number(f.pkg.width), heightIn: Number(f.pkg.height), weightLb: Number(f.pkg.weight) };
   }
@@ -145,7 +182,7 @@ export function toOfferInput(atin: string, f: OfferForm): OfferOnlyInput {
 /** The server's field names (offers, BFF) mapped to the form's field ids, so a refusal lands on the field it is about. */
 export const serverOfferField = (field: string): string =>
   ({ priceMinor: OFFER_FIELD.price, listPriceMinor: OFFER_FIELD.listPrice, shippingMinor: OFFER_FIELD.shipping, quantity: OFFER_FIELD.qty, condition: OFFER_FIELD.condition,
-    conditionNote: OFFER_FIELD.note, handlingDays: OFFER_FIELD.handling, shipFromLocationId: OFFER_FIELD.shipFrom, sellerSku: OFFER_FIELD.sku, packaging: OFFER_FIELD.pkg,
+    conditionNote: OFFER_FIELD.note, handlingDays: OFFER_FIELD.handling, shipFromLocationId: OFFER_FIELD.shipFrom, packaging: OFFER_FIELD.pkg,
     fulfilment: OFFER_FIELD.fulfilment })[field] ?? OFFER_FIELD.price;
 
 export { OFFER_CONDITIONS };

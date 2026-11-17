@@ -14,7 +14,7 @@ import { sellerApi } from '@/lib/api';
 import { idempotencyKey } from '@/lib/format';
 import { useSeller } from '@/lib/session';
 
-import { emptyOffer, OFFER_CONDITIONS, OFFER_FIELD, type OfferForm, offerProblemKey, offerProblems, optionsText, serverOfferField, toOfferInput } from './match-model';
+import { asksCondition, conditionsAllowed, emptyOffer, OFFER_FIELD, type OfferForm, offerProblemKey, offerProblems, optionsText, serverOfferField, toOfferInput } from './match-model';
 import { type ReportKind,ReportPanel } from './ReportForms';
 
 const FULFILMENTS = ['SELLER', 'AFROTRANSACT', 'AFROTRANSACT_DELIVERY'] as const;
@@ -50,12 +50,15 @@ export function OfferOnlyForm({ match, atin, onBack, onAnother }: Props) {
   const locations = shipFrom.data ?? [];
   const child = match.variants.find((v) => v.atin === atin);
   const options = optionsText(child?.options ?? match.variantOptions);
+  // Condition is asked only where the category's listing rules allow used or renewed items; elsewhere it is not shown and the item is New.
+  const askCondition = asksCondition(match);
+  const conditions = conditionsAllowed(match);
   const patch = (p: Partial<OfferForm>) => {
     setF((prev) => ({ ...prev, ...p }));
     setServer({});
     setForm('');
   };
-  const problems = offerProblems(f);
+  const problems = offerProblems(askCondition ? f : { ...f, condition: 'NEW', note: '' });
   const shown = (id: string): string | undefined => {
     const k = problems[id];
     if (server[id]) return server[id];
@@ -63,7 +66,7 @@ export function OfferOnlyForm({ match, atin, onBack, onAnother }: Props) {
   };
 
   const send = useMutation({
-    mutationFn: () => api.matching.createOffer(toOfferInput(atin, f), key.current),
+    mutationFn: () => api.matching.createOffer(toOfferInput(atin, askCondition ? f : { ...f, condition: 'NEW', note: '' }), key.current),
     onSuccess: (r) => {
       setResult(r);
       void qc.invalidateQueries({ queryKey: sellerKeys.listings(orgId) });
@@ -135,9 +138,11 @@ export function OfferOnlyForm({ match, atin, onBack, onAnother }: Props) {
             <TextField id={OFFER_FIELD.price} label={t('sc.pf.field.priceUsd')} inputMode="decimal" value={f.price} error={shown(OFFER_FIELD.price)} onChange={(e) => patch({ price: e.target.value })} />
             <TextField id={OFFER_FIELD.listPrice} label={t('sc.pf.field.compareAt')} help={t('sc.pf.compareAtHelp')} inputMode="decimal" value={f.listPrice} error={shown(OFFER_FIELD.listPrice)}
               onChange={(e) => patch({ listPrice: e.target.value })} />
-            <Select id={OFFER_FIELD.condition} label={t('sc.pf.field.condition')} value={f.condition} error={shown(OFFER_FIELD.condition)}
-              options={OFFER_CONDITIONS.map((c) => ({ value: c, label: t(`sc.pf.condition.${c}` as MessageKey) }))} onChange={(e) => patch({ condition: e.currentTarget.value as OfferForm['condition'] })} />
-            {f.condition !== 'NEW' ? (
+            {askCondition ? (
+              <Select id={OFFER_FIELD.condition} label={t('sc.pf.field.condition')} value={f.condition} error={shown(OFFER_FIELD.condition)}
+                options={conditions.map((c) => ({ value: c, label: t(`sc.pf.condition.${c}` as MessageKey) }))} onChange={(e) => patch({ condition: e.currentTarget.value as OfferForm['condition'] })} />
+            ) : null}
+            {askCondition && f.condition !== 'NEW' ? (
               <TextField id={OFFER_FIELD.note} label={t('sc.match.offer.note')} help={t('sc.match.offer.noteHelp')} maxLength={200} value={f.note} error={shown(OFFER_FIELD.note)} onChange={(e) => patch({ note: e.target.value })} />
             ) : null}
           </div>
@@ -173,7 +178,11 @@ export function OfferOnlyForm({ match, atin, onBack, onAnother }: Props) {
                 help={locations.length ? undefined : t('sc.pf.shipFromNone')} placeholder={t('sc.match.offer.shipFromDefault')}
                 options={locations.map((a) => ({ value: a.id, label: `${a.label} · ${a.city}, ${a.state}` }))} onChange={(e) => patch({ shipFromId: e.currentTarget.value })} />
             ) : null}
-            <TextField id={OFFER_FIELD.sku} label={t('sc.pf.field.sku')} placeholder={t('sc.pf.sku.placeholder')} maxLength={40} value={f.sku} error={shown(OFFER_FIELD.sku)} onChange={(e) => patch({ sku: e.target.value })} />
+            <div className="flex flex-col gap-1" data-testid="catalog-code">
+              <span className="text-sm font-semibold">{t('sc.match.offer.catalogCode')}</span>
+              <output className="text-sm" aria-label={t('sc.match.offer.catalogCode')}>{atin}</output>
+              <span className="text-xs text-muted">{t('sc.match.offer.catalogCodeHelp')}</span>
+            </div>
           </div>
 
           {f.fulfilment === 'AFROTRANSACT' ? (

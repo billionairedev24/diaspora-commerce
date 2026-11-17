@@ -1,7 +1,7 @@
 'use client';
 
-import { type CatalogMatch, type MatchCandidate, matchingKeys } from '@afrotransact/api-client';
-import { Button, TextLinkButton } from '@afrotransact/ui';
+import { type CatalogMatch, isApiError, type MatchCandidate, matchingKeys, type SizeRequestResult } from '@afrotransact/api-client';
+import { Button, TextField, TextLinkButton } from '@afrotransact/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useId, useState } from 'react';
 
@@ -10,7 +10,7 @@ import { problemMessage } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 
-import { blockerKey, candidateAsMatch, optionsText, sizeToConfirm } from './match-model';
+import { blockerKey, candidateAsMatch, optionsText, sizeNeedsNewProduct, sizeProblemKey, sizeToConfirm } from './match-model';
 
 interface Props {
   candidate: MatchCandidate;
@@ -19,34 +19,58 @@ interface Props {
   categoryId: string | undefined;
   /** The seller confirmed the page (and its size): on to the price-and-stock form. */
   onSell: (match: CatalogMatch, atin: string) => void;
+  /** "Add it as a new product instead": the full form, started with what was typed. */
+  onNew: () => void;
 }
+
+/** Where the card is. Every step has a way back to the one before, so a wrong tap is never a dead end. */
+type Step = 'start' | 'confirm' | 'different' | 'answered';
 
 /**
  * One page that looks like what the seller is selling: its photo, brand, size or pack and the number of sellers. Nothing is matched
- * silently: "This is my product" opens the one-tap size question ("Same size, 5 kg?"), and only "Yes, same size" goes on. A page that
- * states a different size is not the product, so "No, a different size" sends the seller back to the other results or to "Not here".
+ * silently: "This is my product" opens the one-tap size question ("Same size, 5 kg?"), and only "Yes, same size" goes on. A seller whose
+ * size is different is not stopped and does not make a duplicate page: "No, a different size" asks for their own size to be added to this
+ * page (staff check it like any new size). Every state can be left: "Not this product" goes back to the start, the size question and
+ * the size form go back to each other, and nothing here disables the other answers.
  */
-export function CandidateCard({ candidate: c, query, categoryId, onSell }: Props) {
+export function CandidateCard({ candidate: c, query, categoryId, onSell, onNew }: Props) {
   const t = useT();
   const heading = useId();
   const api = sellerApi().matching;
   const qc = useQueryClient();
   const only = c.variants.length === 1 ? (c.variants[0]?.atin ?? '') : '';
   const [atin, setAtin] = useState(c.atin ?? only);
-  const [asking, setAsking] = useState(false);
-  const [notThisSize, setNotThisSize] = useState(false);
-  const size = sizeToConfirm(c, atin);
+  const [step, setStep] = useState<Step>('start');
+  const [size, setSize] = useState('');
+  const [answer, setAnswer] = useState<SizeRequestResult | null>(null);
+  const confirm = sizeToConfirm(c, atin);
   const decide = useMutation({
-    mutationFn: () => api.decide({ choice: 'SELL_EXISTING', query, ...(categoryId ? { categoryId } : {}), atin, sizeConfirmed: true }),
-    onSuccess: (d) => {
+    mutationFn: (target: string) => api.decide({ choice: 'SELL_EXISTING', query, ...(categoryId ? { categoryId } : {}), atin: target, sizeConfirmed: true }),
+    onSuccess: (d, target) => {
       void qc.invalidateQueries({ queryKey: matchingKeys.all });
-      if (d.canOffer) onSell(candidateAsMatch(c, atin), atin);
+      if (d.canOffer) onSell(candidateAsMatch(c, target), target);
+    }
+  });
+  const ask = useMutation({
+    mutationFn: () => api.requestSize({ query, ...(categoryId ? { categoryId } : {}), atin: atin || c.parentAtin, size: size.trim() }),
+    onSuccess: (r) => {
+      setAnswer(r);
+      setStep('answered');
+      void qc.invalidateQueries({ queryKey: matchingKeys.all });
     }
   });
   const blockers = decide.data && !decide.data.canOffer ? decide.data.blockers : c.blockers;
   const sellers = c.sellerCount;
+  const back = () => {
+    setStep('start');
+    setAnswer(null);
+    decide.reset();
+    ask.reset();
+  };
+  const problemCode = ask.isError && isApiError(ask.error) ? ask.error.code : undefined;
+  const problemKey = sizeProblemKey(problemCode);
   return (
-    <li className="m-0 flex list-none flex-col gap-3 border-0 border-t border-solid border-border pt-4 first:border-t-0 first:pt-0" aria-labelledby={`${heading}-t`} data-testid="candidate" data-kind={c.kind}>
+    <li className="m-0 flex list-none flex-col gap-3 border-0 border-t border-solid border-border pt-4 first:border-t-0 first:pt-0" aria-labelledby={`${heading}-t`} data-testid="candidate" data-kind={c.kind} data-step={step}>
       <div className="flex flex-wrap gap-4">
         {c.image?.url ? <img src={c.image.url} alt={c.title} className="size-24 rounded-sm bg-surface-muted object-contain" /> : null}
         <div className="flex min-w-0 flex-1 basis-60 flex-col gap-1">
@@ -65,10 +89,12 @@ export function CandidateCard({ candidate: c, query, categoryId, onSell }: Props
           ))}
         </Notice>
       ) : null}
-      {!asking && !notThisSize ? (
-        <div><Button variant="primary" disabled={!c.canOffer} onClick={() => setAsking(true)}>{t('sc.match.cand.mine')}</Button></div>
+      {step === 'start' ? (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <Button variant="primary" disabled={!c.canOffer} onClick={() => setStep('confirm')}>{t('sc.match.cand.mine')}</Button>
+        </div>
       ) : null}
-      {asking && !notThisSize ? (
+      {step === 'confirm' ? (
         <div className="flex flex-col gap-3" role="group" aria-label={t('sc.match.cand.mine')}>
           {c.variants.length > 1 ? (
             <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
@@ -81,15 +107,67 @@ export function CandidateCard({ candidate: c, query, categoryId, onSell }: Props
               ))}
             </fieldset>
           ) : null}
-          {atin && size ? <p className="m-0 text-sm font-semibold" data-testid="size-question">{t('sc.match.cand.sameSize', { size })}</p> : null}
+          {atin && confirm ? <p className="m-0 text-sm font-semibold" data-testid="size-question">{t('sc.match.cand.sameSize', { size: confirm })}</p> : null}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <Button variant="primary" disabled={!atin || decide.isPending} onClick={() => decide.mutate()}>{size ? t('sc.match.cand.yesSize') : t('sc.match.cand.confirm')}</Button>
-            {size ? <TextLinkButton onClick={() => setNotThisSize(true)}>{t('sc.match.cand.noSize')}</TextLinkButton> : null}
+            <Button variant="primary" disabled={!atin || decide.isPending} onClick={() => decide.mutate(atin)}>{confirm ? t('sc.match.cand.yesSize') : t('sc.match.cand.confirm')}</Button>
+            {confirm ? <TextLinkButton onClick={() => setStep('different')}>{t('sc.match.cand.noSize')}</TextLinkButton> : null}
+            <TextLinkButton onClick={back}>{t('sc.match.cand.undo')}</TextLinkButton>
           </div>
           {decide.isError ? <p role="alert" className="m-0 text-sm text-danger">{problemMessage(decide.error)}</p> : null}
         </div>
       ) : null}
-      {notThisSize ? <p className="m-0 text-sm" data-testid="size-differs">{t('sc.match.cand.noSizeNote')}</p> : null}
+      {step === 'different' ? (
+        <form
+          className="flex flex-col gap-3"
+          aria-label={t('sc.match.cand.differentTitle')}
+          data-testid="size-differs"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (size.trim() && !ask.isPending) ask.mutate();
+          }}
+        >
+          <h3 className="m-0 text-base font-semibold">{t('sc.match.cand.differentTitle')}</h3>
+          <p className="m-0 text-sm">{t('sc.match.cand.differentLead')}</p>
+          <TextField id={`${heading}-size`} label={t('sc.match.cand.sizeLabel')} help={t('sc.match.cand.sizeHelp')} autoComplete="off" maxLength={40} value={size} onChange={(e) => { setSize(e.target.value); ask.reset(); }} />
+          {ask.isError ? <p role="alert" className="m-0 text-sm text-danger">{problemKey ? t(problemKey) : problemMessage(ask.error)}</p> : null}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <Button type="submit" variant="primary" loading={ask.isPending} disabled={!size.trim()}>{t('sc.match.cand.sizeAsk')}</Button>
+            {sizeNeedsNewProduct(problemCode) ? <Button variant="neutral" onClick={onNew}>{t('sc.match.cand.sizeAddNew')}</Button> : null}
+            <TextLinkButton onClick={() => { ask.reset(); setStep('confirm'); }}>{t('sc.match.cand.sizeSame')}</TextLinkButton>
+            <TextLinkButton onClick={back}>{t('sc.match.cand.undo')}</TextLinkButton>
+          </div>
+        </form>
+      ) : null}
+      {step === 'answered' && answer ? (
+        <div className="flex flex-col gap-3" data-testid="size-answer" data-outcome={answer.outcome}>
+          {answer.outcome === 'ALREADY_ON_PAGE' ? (
+            <>
+              <p className="m-0 text-sm font-semibold">{t('sc.match.cand.sizeOnPage', { size: answer.size ?? '' })}</p>
+              {answer.blockers.length ? (
+                <Notice tone="warning" title={t('sc.match.cannotOffer')}>
+                  {answer.blockers.map((b) => <span key={b.code} className="block">{blockerKey(b.code) ? t(blockerKey(b.code) ?? 'sc.match.blocker.exists') : b.message}</span>)}
+                </Notice>
+              ) : null}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <Button variant="primary" disabled={!answer.canOffer || !answer.existingAtin || decide.isPending} onClick={() => decide.mutate(answer.existingAtin ?? '')}>{t('sc.match.cand.sizeSell', { size: answer.size ?? '' })}</Button>
+                <TextLinkButton onClick={() => setStep('different')}>{t('sc.match.cand.sizeChange')}</TextLinkButton>
+                <TextLinkButton onClick={back}>{t('sc.match.cand.undo')}</TextLinkButton>
+              </div>
+              {decide.isError ? <p role="alert" className="m-0 text-sm text-danger">{problemMessage(decide.error)}</p> : null}
+            </>
+          ) : (
+            <>
+              <Notice tone="success" title={answer.outcome === 'ALREADY_REQUESTED' ? t('sc.match.cand.sizeWaiting') : t('sc.match.cand.sizeSent')}>
+                {answer.outcome === 'REQUESTED' ? t('sc.match.cand.sizeSentBody') : null}
+              </Notice>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <TextLinkButton onClick={() => setStep('different')}>{t('sc.match.cand.sizeChange')}</TextLinkButton>
+                <TextLinkButton onClick={back}>{t('sc.match.cand.undo')}</TextLinkButton>
+              </div>
+            </>
+          )}
+        </div>
+      ) : null}
     </li>
   );
 }
