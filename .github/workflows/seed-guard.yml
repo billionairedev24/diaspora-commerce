@@ -2,18 +2,9 @@
 # migration removes, when a migration after the cleanup inserts placements again, or when the seeder stops refusing
 # production, UAT and trial.
 name: seed-guard
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
-  pull_request:
-    paths:
-      - java/services/content/src/main/resources/db/migration/**
-      - tools/seed/**
-      - .github/workflows/seed-guard.yml
-  push:
-    branches: [main]
-    paths:
-      - java/services/content/src/main/resources/db/migration/**
-      - tools/seed/**
+  workflow_dispatch:
 
 permissions:
   contents: read

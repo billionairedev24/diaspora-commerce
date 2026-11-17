@@ -11,37 +11,8 @@
 #   update-baselines   label a PR `update-visual-baselines` (or dispatch with update_baselines on a branch): regenerate
 #                      the baselines in the same image and commit them to the branch
 name: storybook
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, labeled]
-    paths:
-      - web/packages/ui/**
-      - web/packages/tokens/**
-      - web/packages/i18n/**
-      - web/apps/*/src/**/*.stories.tsx
-      # App components and styles rendered by web/packages/ui/stories/apps/seller-center.
-      - web/apps/seller-center/src/components/ui/**
-      - web/apps/seller-center/src/app/globals.css
-      - web/apps/seller-center/src/i18n/**
-      - package.json
-      - pnpm-lock.yaml
-      - pnpm-workspace.yaml
-      - .github/workflows/storybook.yml
-  push:
-    branches: [main]
-    paths:
-      - web/packages/ui/**
-      - web/packages/tokens/**
-      - web/packages/i18n/**
-      - web/apps/*/src/**/*.stories.tsx
-      - web/apps/seller-center/src/components/ui/**
-      - web/apps/seller-center/src/app/globals.css
-      - web/apps/seller-center/src/i18n/**
-      - package.json
-      - pnpm-lock.yaml
-      - pnpm-workspace.yaml
-      - .github/workflows/storybook.yml
   workflow_dispatch:
     inputs:
       update_baselines:

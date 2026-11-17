@@ -5,7 +5,7 @@
 # passed CI on main): the single production has no uat to copy from (ADR 0004, ADR 0008). Each environment has its OWN pin file
 # (values-uat.yaml, values-trial.yaml, values-prod.yaml in the service's chart): promoting to the trial never edits the prod pin.
 name: promote
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
   workflow_dispatch:
     inputs:

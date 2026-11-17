@@ -22,7 +22,7 @@
 # Needs, as secrets of the GitHub Environment `ovh-vps`: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID.
 # The domain must be a zone in that Cloudflare account (Workers Custom Domains create their DNS records).
 name: ovh-web
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
   workflow_dispatch:
     inputs:

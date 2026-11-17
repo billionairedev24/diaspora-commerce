@@ -7,7 +7,7 @@
 #                      with a client-credentials token of the smoke client.
 # Runbook: docs/runbooks/carrier-sandboxes.md. Script: tools/smoke/carriers.sh.
 name: carrier-sandboxes
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
   workflow_dispatch:
     inputs:

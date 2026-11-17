@@ -15,7 +15,7 @@
 # Needs, as secrets of the GitHub environment `trial`: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID.
 # MANUAL ONLY: never add push, pull_request or schedule triggers.
 name: trial
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
   workflow_dispatch:
     inputs:

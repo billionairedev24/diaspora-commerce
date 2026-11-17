@@ -2,13 +2,9 @@
 # nothing is deployed and no account is touched. Also fails when a workflow starts reading a secret or variable that the shared
 # catalogue (tools/deploy/catalogue.conf) does not list.
 name: deploy-guide
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
-  push:
-    branches: [main]
-    paths: [tools/deploy/**, tools/ovh/**, infra/helm/library/at-service/**, infra/ovh-vps/*.sh, infra/ovh-vps/terraform/locations.json, .github/workflows/ovh-*.yml, .github/workflows/deploy-guide.yml]
-  pull_request:
-    paths: [tools/deploy/**, tools/ovh/**, infra/helm/library/at-service/**, infra/ovh-vps/*.sh, infra/ovh-vps/terraform/locations.json, .github/workflows/ovh-*.yml, .github/workflows/deploy-guide.yml]
+  workflow_dispatch:
 
 permissions:
   contents: read

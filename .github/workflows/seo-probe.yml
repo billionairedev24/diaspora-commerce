@@ -6,12 +6,8 @@
 #                  prod sitemap URL count not below the floor (repository variable SEO_MIN_SITEMAP_URLS) = the "sitemap URL
 #                  count drop" alert. A failing run is the alert (GitHub notifies the workflow owner).
 name: seo-probe
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
-  pull_request:
-    paths: [tools/ci/seo_probe.py, tools/ci/test_seo_probe.py, infra/cloudflare/hosts.json, .github/workflows/seo-probe.yml]
-  schedule:
-    - cron: "17 6 * * *"
   workflow_dispatch:
     inputs:
       strict:

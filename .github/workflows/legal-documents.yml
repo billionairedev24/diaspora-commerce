@@ -4,17 +4,9 @@
 #                invalid (front matter, unknown key or placeholder, version below what the service seeds), and runs the
 #                loader's tests against a throwaway PostgreSQL.
 name: legal-documents
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
-  push:
-    branches: [main]
-    paths: [docs/legal/**, tools/legal/**, java/services/content/src/main/resources/db/migration/**,
-            java/services/content/src/main/java/com/afrotransact/content/domain/legal/LegalDocumentType.java,
-            .github/workflows/legal-documents.yml]
-  pull_request:
-    paths: [docs/legal/**, tools/legal/**, java/services/content/src/main/resources/db/migration/**,
-            java/services/content/src/main/java/com/afrotransact/content/domain/legal/LegalDocumentType.java,
-            .github/workflows/legal-documents.yml]
+  workflow_dispatch:
 
 permissions:
   contents: read

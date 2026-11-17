@@ -1,18 +1,8 @@
 # Contract-first gate for contracts/: OpenAPI 3.1 lint (Redocly + Spectral), breaking-change diff of every
 # changed spec against the base branch (oasdiff), AsyncAPI validation of events.yaml.
 name: contracts
-
+# MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:
-  pull_request:
-    paths:
-      - contracts/**
-      - .github/workflows/contracts.yml
-      - tools/contracts/**
-      - redocly.yaml
-  push:
-    branches: [main]
-    paths:
-      - contracts/**
   workflow_dispatch:
 
 permissions:
