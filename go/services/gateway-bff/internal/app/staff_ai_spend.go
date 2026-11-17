@@ -31,7 +31,9 @@ type staffAISpendImpl struct{ r *staffResolver }
 var _ StaffAISpendService = (*staffAISpendImpl)(nil)
 
 // NewStaffAISpendService returns the AI spend use case.
-func NewStaffAISpendService(d StaffDeps) StaffAISpendService { return &staffAISpendImpl{r: newStaffResolver(d)} }
+func NewStaffAISpendService(d StaffDeps) StaffAISpendService {
+	return &staffAISpendImpl{r: newStaffResolver(d)}
+}
 
 func (s *staffAISpendImpl) Today(ctx context.Context, c *domain.Caller) (map[string]any, error) {
 	sc, err := s.r.resolve(ctx, c)

@@ -31,7 +31,9 @@ type sellerProductTaxImpl struct{ r *orgResolver }
 var _ SellerProductTaxService = (*sellerProductTaxImpl)(nil)
 
 // NewSellerProductTaxService returns the SellerProductTaxService; d.ProductTax is catalog's client (nil answers 503).
-func NewSellerProductTaxService(d SellerDeps) SellerProductTaxService { return &sellerProductTaxImpl{r: newResolver(d)} }
+func NewSellerProductTaxService(d SellerDeps) SellerProductTaxService {
+	return &sellerProductTaxImpl{r: newResolver(d)}
+}
 
 var (
 	taxUUIDRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)

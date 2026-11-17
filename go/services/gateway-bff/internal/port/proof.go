@@ -5,15 +5,15 @@ import "context"
 // UpDeliveryProof is orders' DeliveryProof of a timeline entry: what the driver app recorded at the door. The photo and
 // the signature are media asset ids; the driver's GPS position is only in staff's view and is not read here.
 type UpDeliveryProof struct {
-	HandoverMethod   string `json:"handoverMethod"`
-	RecipientName    string `json:"recipientName"`
-	Relationship     string `json:"relationship"`
-	SafePlace        string `json:"safePlace"`
-	FailureReason    string `json:"failureReason"`
-	PhotoAssetID     string `json:"photoAssetId"`
+	HandoverMethod string `json:"handoverMethod"`
+	RecipientName  string `json:"recipientName"`
+	Relationship   string `json:"relationship"`
+	SafePlace      string `json:"safePlace"`
+	FailureReason  string `json:"failureReason"`
+	PhotoAssetID   string `json:"photoAssetId"`
 	// PhotoAssetIDs are every photo of the proof (staff may attach several); empty for a driver's single photo.
-	PhotoAssetIDs []string `json:"photoAssetIds"`
-	SignatureAssetID string `json:"signatureAssetId"`
+	PhotoAssetIDs    []string `json:"photoAssetIds"`
+	SignatureAssetID string   `json:"signatureAssetId"`
 }
 
 // ProofLinks turns proof-of-delivery asset ids into short-lived download links (media-service, with the BFF's own

@@ -253,16 +253,16 @@ type TimelineEntry struct {
 
 // SellerShipment is a shipment in the order sheet.
 type SellerShipment struct {
-	ShipmentID     string               `json:"shipmentId"`
-	Label          string               `json:"label"`
-	Status         string               `json:"status"`
-	StatusLabel    string               `json:"statusLabel"`
-	Fulfilment     string               `json:"fulfilment"`
+	ShipmentID  string `json:"shipmentId"`
+	Label       string `json:"label"`
+	Status      string `json:"status"`
+	StatusLabel string `json:"statusLabel"`
+	Fulfilment  string `json:"fulfilment"`
 	// FulfilmentMode is legacy_seller_shipped (history), afrotransact_delivery (from the seller's location),
 	// fulfilled_by_afrotransact, pickup or preorder_run.
 	FulfilmentMode string               `json:"fulfilmentMode"`
 	Perishable     bool                 `json:"perishable"`
-	Lines            []SellerShipmentLine `json:"lines"`
+	Lines          []SellerShipmentLine `json:"lines"`
 	ItemsMinor     int64                `json:"itemsMinor"`
 	ShippingMinor  int64                `json:"shippingMinor"`
 	TotalMinor     int64                `json:"totalMinor"`

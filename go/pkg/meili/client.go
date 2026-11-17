@@ -39,7 +39,9 @@ type Error struct {
 	Message string `json:"message"`
 }
 
-func (e *Error) Error() string { return fmt.Sprintf("meilisearch %d %s: %s", e.Status, e.Code, e.Message) }
+func (e *Error) Error() string {
+	return fmt.Sprintf("meilisearch %d %s: %s", e.Status, e.Code, e.Message)
+}
 
 // IsCode reports whether err is a Meilisearch error with the given code (for example "index_not_found").
 func IsCode(err error, code string) bool {

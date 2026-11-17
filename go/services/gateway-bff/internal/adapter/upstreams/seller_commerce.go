@@ -575,4 +575,3 @@ func (f *feesImpl) EffectiveKind(ctx context.Context, kind, category, orgID stri
 	_, err = call(ctx, f.c, httpclient.Request{Path: "/v1/fee-schedules/effective", Query: q, Bearer: t}, &out)
 	return out, err
 }
-

@@ -539,14 +539,14 @@ type SellerCoupon struct {
 
 // CreateSellerCoupon creates a seller-funded coupon (offers-service).
 type CreateSellerCoupon struct {
-	Code               string `json:"code"`
-	Description        string `json:"description"`
-	Type               string `json:"type"`
-	Value              int64  `json:"value"`
-	Currency           string `json:"currency,omitempty"`
-	Scope              string `json:"scope"`
-	ScopeRef           string `json:"scopeRef,omitempty"`
-	MinSpendMinor      int64  `json:"minSpendMinor"`
-	TotalLimit         int    `json:"totalLimit"`
-	PerCustomerLimit   int    `json:"perCustomerLimit"`
+	Code             string `json:"code"`
+	Description      string `json:"description"`
+	Type             string `json:"type"`
+	Value            int64  `json:"value"`
+	Currency         string `json:"currency,omitempty"`
+	Scope            string `json:"scope"`
+	ScopeRef         string `json:"scopeRef,omitempty"`
+	MinSpendMinor    int64  `json:"minSpendMinor"`
+	TotalLimit       int    `json:"totalLimit"`
+	PerCustomerLimit int    `json:"perCustomerLimit"`
 }

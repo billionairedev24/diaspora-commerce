@@ -556,7 +556,7 @@ func (u *Upstreams) shopperBookingRoutes(mux *http.ServeMux, st *shopperState, a
 		writeJSON(w, 200, map[string]any{"orgId": SellerOrgID, "slug": "ades-kitchen", "name": "Ade's Kitchen", "description": "Home-style Nigerian pantry.",
 			"logoUrl": nil, "brandColor": nil, "contactEmail": "ade@example.com", "publishedAt": "2026-11-10T10:00:00Z", "orgCreatedAt": "2025-02-01T10:00:00Z",
 			"config": map[string]any{"schemaVersion": 1, "theme": map[string]any{"preset": "warm-market", "accent": nil},
-				"hero": map[string]any{"style": "colour", "tagline": "Jollof and more", "bannerUrl": nil, "focalX": 50, "focalY": 50},
+				"hero":         map[string]any{"style": "colour", "tagline": "Jollof and more", "bannerUrl": nil, "focalX": 50, "focalY": 50},
 				"announcement": map[string]any{"text": "", "href": nil}, "grid": map[string]any{"columns": 3},
 				"sections": []any{}, "featured": []any{}, "categories": map[string]any{"mode": "auto", "chosen": []any{}},
 				"about": map[string]any{"heading": "", "body": "", "photoUrl": nil}, "policies": map[string]any{"shipping": "", "returns": ""},

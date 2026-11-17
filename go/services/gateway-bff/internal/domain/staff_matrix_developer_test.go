@@ -4,8 +4,8 @@ import "testing"
 
 func TestDeveloperDefaultMatrixOpensEveryStaffModule(t *testing.T) {
 	access := StaffAccess{
-		Roles: []string{"platform.developer"},
-		Matrix: DefaultPlatformMatrix,
+		Roles:       []string{"platform.developer"},
+		Matrix:      DefaultPlatformMatrix,
 		Permissions: []string{"users:read", PermNotificationsRead, PermNotificationsTemplatesWrite, PermPlansManage, PermSellerBilling, PermApplicationsReview, PermQuotesView, PermTaxRead},
 	}
 	for _, g := range StaffNav {
