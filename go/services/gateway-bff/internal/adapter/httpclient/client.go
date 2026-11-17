@@ -29,6 +29,9 @@ import (
 
 const maxBody = 4 << 20
 
+// maxPolicyRetries caps Policy.Retries: retries are bounded however a caller configures them.
+const maxPolicyRetries = 4
+
 // Request is one upstream call.
 type Request struct {
 	Method string
@@ -57,6 +60,21 @@ type Request struct {
 	// orders → payments → Stripe). Giving up earlier would report a failure for work that still completes, and
 	// the client would retry it.
 	Slow bool
+	// Policy overrides the upstream's timeout and retries for this one call (nil keeps the upstream's). It is for calls
+	// that are idempotent by design but depend on a slow third party (a Stripe account is created on first use): the
+	// per-attempt timeout is longer than the upstream's default, and transient failures are retried a bounded number of
+	// times with exponential backoff. A call with a Policy is retried even when it is not a GET.
+	Policy *Policy
+}
+
+// Policy is a per-call timeout and bounded retry with exponential backoff (Backoff, 2*Backoff, 4*Backoff, ...).
+type Policy struct {
+	// Timeout bounds each attempt (zero keeps the upstream's, or its SlowTimeout when the request is Slow).
+	Timeout time.Duration
+	// Retries is the number of extra attempts after a transient failure (timeout, network error, 5xx).
+	Retries int
+	// Backoff is the wait before the first retry (zero keeps the upstream's RetryBackoff).
+	Backoff time.Duration
 }
 
 // Response is a successful (2xx/3xx) upstream answer.
@@ -186,7 +204,13 @@ func (c *clientImpl) Do(ctx context.Context, req Request) (*Response, error) {
 		method = http.MethodGet
 	}
 	attempts := 1
-	if method == http.MethodGet || method == http.MethodHead || req.RetryUnsafe {
+	backoff := c.o.RetryBackoff
+	if req.Policy != nil {
+		attempts += max(0, min(req.Policy.Retries, maxPolicyRetries))
+		if req.Policy.Backoff > 0 {
+			backoff = req.Policy.Backoff
+		}
+	} else if method == http.MethodGet || method == http.MethodHead || req.RetryUnsafe {
 		attempts += max(0, c.o.Retries)
 	}
 	var lastErr error
@@ -195,7 +219,7 @@ func (c *clientImpl) Do(ctx context.Context, req Request) (*Response, error) {
 			select {
 			case <-ctx.Done():
 				return nil, unavailable(c.o.Name, ctx.Err())
-			case <-time.After(c.o.RetryBackoff * time.Duration(1<<(i-1))):
+			case <-time.After(backoff * time.Duration(1<<(i-1))):
 			}
 		}
 		if !c.breaker.Allow() {
@@ -225,6 +249,9 @@ func (c *clientImpl) once(ctx context.Context, method string, req Request) (*Res
 	timeout := c.o.Timeout
 	if req.Slow {
 		timeout = c.o.SlowTimeout
+	}
+	if req.Policy != nil && req.Policy.Timeout > 0 {
+		timeout = req.Policy.Timeout
 	}
 	actx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
