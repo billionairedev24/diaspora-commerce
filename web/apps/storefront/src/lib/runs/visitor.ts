@@ -4,7 +4,7 @@
 
 const VISITOR_KEY = 'at.visitor.v1';
 const VIEWED_KEY = 'at.adv.viewed.v1';
-const COUNTED_KEY = 'at.visit.counted.v1';
+const COUNTED_SLOT = 'at.visit.counted.v1';
 
 let memory: string | null = null;
 
@@ -50,9 +50,9 @@ export function firstVisit(key: string): boolean {
   if (counted.has(key)) return false;
   counted.add(key);
   try {
-    const seen: string[] = JSON.parse(sessionStorage.getItem(COUNTED_KEY) ?? '[]');
+    const seen: string[] = JSON.parse(sessionStorage.getItem(COUNTED_SLOT) ?? '[]');
     if (seen.includes(key)) return false;
-    sessionStorage.setItem(COUNTED_KEY, JSON.stringify([...seen, key].slice(-20)));
+    sessionStorage.setItem(COUNTED_SLOT, JSON.stringify([...seen, key].slice(-20)));
   } catch {
     // Storage is unavailable: the in-memory set still keeps it to one per page load.
   }
@@ -67,7 +67,7 @@ export function resetVisit(): void {
   try {
     sessionStorage.removeItem(VISITOR_KEY);
     sessionStorage.removeItem(VIEWED_KEY);
-    sessionStorage.removeItem(COUNTED_KEY);
+    sessionStorage.removeItem(COUNTED_SLOT);
   } catch {
     // nothing to clear
   }
