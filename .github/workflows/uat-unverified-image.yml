@@ -76,6 +76,7 @@ jobs:
             JAR_GLOB=afrotransact-core*.jar
           push: "true"
           verified: "false"
+          platforms: linux/amd64
           max-size-mb: "420"
           required-env: SPRING_PROFILES_ACTIVE=prod
       - name: Summary
@@ -113,6 +114,7 @@ jobs:
           dockerfile: go/Dockerfile.afrotransact-go
           push: "true"
           verified: "false"
+          platforms: linux/amd64
           max-size-mb: "120"
           required-env: APP_ENV=prod PORT=8080
       - name: Summary

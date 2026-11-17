@@ -32,6 +32,10 @@ inputs:
     description: Environment defaults the image must declare (space separated NAME=value), e.g. APP_ENV=prod.
     required: false
     default: ""
+  platforms:
+    description: Target platforms. Default builds amd64 and arm64 (arm64 runs under QEMU and is slow); OVH nodes are amd64.
+    required: false
+    default: linux/amd64,linux/arm64
   verified:
     description: >
       'true' (default): the image comes from a pipeline whose verify job passed. 'false' = the one-time manual UAT-only build
@@ -64,7 +68,8 @@ runs:
         echo "image=${image}" >> "$GITHUB_OUTPUT"
         echo "tag=${SHA}" >> "$GITHUB_OUTPUT"
 
-    - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
+    - if: contains(inputs.platforms, 'arm64')
+      uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
       with:
         platforms: arm64
 
@@ -111,7 +116,7 @@ runs:
         build-args: |
           VERSION=${{ steps.meta.outputs.tag }}
           ${{ inputs.build-args }}
-        platforms: linux/amd64,linux/arm64
+        platforms: ${{ inputs.platforms }}
         outputs: type=image,push=${{ inputs.push == 'true' }},rewrite-timestamp=true
         tags: ${{ steps.labels.outputs.tags }}
         labels: ${{ steps.labels.outputs.labels }}
