@@ -161,3 +161,62 @@ func TestSlowCallsUseTheSlowTimeout(t *testing.T) {
 		t.Fatalf("slow call without SlowTimeout: %v", err)
 	}
 }
+
+// TestPolicyRetriesAnIdempotentPostWithBackoffAndIsBounded: a call with a Policy (a Stripe session, idempotent per
+// organisation) survives transient 503s, never retries a 4xx, and never exceeds Policy.Retries extra attempts.
+func TestPolicyRetriesAnIdempotentPostWithBackoffAndIsBounded(t *testing.T) {
+	var calls atomic.Int32
+	var times []time.Time
+	c, _ := newClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		times = append(times, time.Now())
+		if calls.Add(1) < 3 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}, httpclient.Options{Timeout: time.Second, Retries: 0, BreakerFailures: 100})
+	res, err := c.Do(context.Background(), httpclient.Request{Method: http.MethodPost, Path: "/s", Policy: &httpclient.Policy{Retries: 2, Backoff: 20 * time.Millisecond}})
+	if err != nil || res.Status != 200 || calls.Load() != 3 {
+		t.Fatalf("res=%v err=%v calls=%d", res, err, calls.Load())
+	}
+	if d1, d2 := times[1].Sub(times[0]), times[2].Sub(times[1]); d1 < 18*time.Millisecond || d2 < 38*time.Millisecond {
+		t.Fatalf("backoff must double: %v then %v", d1, d2)
+	}
+
+	calls.Store(-100) // always 503
+	_, err = c.Do(context.Background(), httpclient.Request{Method: http.MethodPost, Path: "/s", Policy: &httpclient.Policy{Retries: 99, Backoff: time.Millisecond}})
+	if !errors.Is(err, domain.ErrUpstreamUnavailable) {
+		t.Fatalf("err = %v", err)
+	}
+	if n := calls.Load() + 100; n != 5 {
+		t.Fatalf("attempts = %d, want 1 + the maximum of 4 retries", n)
+	}
+}
+
+func TestPolicyDoesNotRetryAnAnswerThatIsNotTransient(t *testing.T) {
+	var calls atomic.Int32
+	c, _ := newClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = w.Write([]byte(`{"code":"seller.stripe-rejected","detail":"no"}`))
+	}, httpclient.Options{Timeout: time.Second})
+	_, err := c.Do(context.Background(), httpclient.Request{Method: http.MethodPost, Path: "/s", Policy: &httpclient.Policy{Retries: 2}})
+	if p, ok := port.AsUpstreamProblem(err); !ok || p.Status != 422 || calls.Load() != 1 {
+		t.Fatalf("err=%v calls=%d", err, calls.Load())
+	}
+}
+
+// TestPolicyTimeoutOutlastsTheUpstreamDefault: first use creates the Stripe account, slower than the upstream's 3s default.
+func TestPolicyTimeoutOutlastsTheUpstreamDefault(t *testing.T) {
+	c, _ := newClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(80 * time.Millisecond)
+		_, _ = w.Write([]byte(`{}`))
+	}, httpclient.Options{Timeout: 20 * time.Millisecond, BreakerFailures: 100})
+	if _, err := c.Do(context.Background(), httpclient.Request{Method: http.MethodPost, Path: "/s"}); !errors.Is(err, domain.ErrUpstreamUnavailable) {
+		t.Fatalf("default timeout must trip: %v", err)
+	}
+	if _, err := c.Do(context.Background(), httpclient.Request{Method: http.MethodPost, Path: "/s", Policy: &httpclient.Policy{Timeout: time.Second}}); err != nil {
+		t.Fatalf("policy timeout: %v", err)
+	}
+}
