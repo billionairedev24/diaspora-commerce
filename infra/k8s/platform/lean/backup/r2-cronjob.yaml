@@ -36,25 +36,41 @@ spec:
         spec:
           restartPolicy: Never
           automountServiceAccountToken: false
+          # Pull secret "ghcr" is optional: not needed when the backup-tools package is public (docs/runbooks/read-only-root-first-boot.md).
+          imagePullSecrets:
+            - name: ghcr
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 70       # "postgres" user of the Alpine postgres image the tools image is built from
+            runAsGroup: 70
+            fsGroup: 70
+            seccompProfile: {type: RuntimeDefault}
           containers:
             - name: backup
-              image: alpine:3.22
+              # Tools image (infra/ops/backup-tools/Dockerfile, built by .github/workflows/backup-tools-image.yml): pg client, rclone, age, curl
+              # are baked in, so nothing is installed at run time and the container needs no root.
+              image: ghcr.io/billionairedev24/diaspora-commerce/backup-tools:1.0.0
               command: ["/bin/sh", "/scripts/r2-backup.sh"]
+              env:
+                - {name: SKIP_APK, value: "1"}   # the tools are in the image
               envFrom:
                 - secretRef: {name: r2-backup}
               resources:
                 requests: {cpu: 100m, memory: 128Mi}
                 limits: {memory: 512Mi}
               securityContext:
-                # Root with the default capabilities ONLY because `apk add` (rclone, age, curl) needs chown, as in pg-backup; a pre-built
-                # tools image would allow runAsNonRoot and drop ALL (follow-up).
                 allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true   # KSV-0014. Writable: /work (dumps, scratch) and /tmp (HOME, rclone cache)
+                runAsNonRoot: true
+                capabilities: {drop: [ALL]}
                 seccompProfile: {type: RuntimeDefault}
               volumeMounts:
                 - {name: scripts, mountPath: /scripts, readOnly: true}
                 - {name: work, mountPath: /work}
+                - {name: tmp, mountPath: /tmp}
           volumes:
             - name: scripts
               configMap: {name: r2-backup-script, defaultMode: 0555}
             - name: work
               emptyDir: {sizeLimit: 2Gi}
+            - {name: tmp, emptyDir: {sizeLimit: 128Mi}}
