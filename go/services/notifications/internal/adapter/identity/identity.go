@@ -6,7 +6,8 @@
 //	GET /v1/internal/users/{userId}/contact → contactResponse
 //	GET /v1/internal/orgs/{orgId}/owners    → {"orgId": "...", "ownerUserIds": ["..."]}
 //
-// 404 means the user or organisation is unknown (domain.ErrRecipientNotFound); every other failure is transient.
+// 404 means the user or organisation is unknown (domain.ErrRecipientNotFound). Any other non-200 answer is a
+// *domain.UpstreamError: 5xx, 408 and 429 are transient, other 4xx (403: the token lacks users:read) are permanent.
 package identity
 
 import (
@@ -112,10 +113,22 @@ func (r *resolverImpl) get(ctx context.Context, path string, out any) error {
 		return domain.ErrRecipientNotFound
 	case res.StatusCode != http.StatusOK:
 		body, _ := io.ReadAll(io.LimitReader(res.Body, 512))
-		return fmt.Errorf("identity %s: status %d: %s", path, res.StatusCode, strings.TrimSpace(string(body)))
+		return &domain.UpstreamError{Service: "identity", Path: path, Status: res.StatusCode, Code: problemCode(body),
+			Detail: string(body)}
 	}
 	if err := json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(out); err != nil {
 		return fmt.Errorf("identity %s: decode: %w", path, err)
 	}
 	return nil
+}
+
+// problemCode reads the "code" member of an RFC 9457 problem body (identity.service-lookup-only), "" when absent.
+func problemCode(body []byte) string {
+	var p struct {
+		Code string `json:"code"`
+	}
+	if json.Unmarshal(body, &p) != nil {
+		return ""
+	}
+	return p.Code
 }
