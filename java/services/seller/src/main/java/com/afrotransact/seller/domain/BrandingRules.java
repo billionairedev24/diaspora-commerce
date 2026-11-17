@@ -8,6 +8,8 @@ import java.util.Map;
 public final class BrandingRules {
 
     public static final int MAX_DESCRIPTION = 500;
+    public static final String COLOUR_MESSAGE = "Choose a colour from the list, or enter a hex code like #1a7f4b";
+    public static final String LOGO_MESSAGE = "We couldn't use this logo. Remove it and upload it again, or continue without a logo";
 
     private BrandingRules() {
     }
@@ -22,13 +24,13 @@ public final class BrandingRules {
         if (description != null && description.length() > MAX_DESCRIPTION) {
             errors.put("description", "At most " + MAX_DESCRIPTION + " characters");
         }
-        String color = trim(in.brandColor());
-        if (color != null && !color.matches("^#[0-9a-fA-F]{6}$")) {
-            errors.put("brandColor", "Use a colour like #1a7f4b");
+        String color = normaliseColour(in.brandColor());
+        if (color == null && trim(in.brandColor()) != null) {
+            errors.put("brandColor", COLOUR_MESSAGE);
         }
         String logo = trim(in.logoUrl());
-        if (logo != null && !logo.matches("^https://\\S+$")) {
-            errors.put("logoUrl", "Upload your logo again");
+        if (logo != null && !LogoUrlRules.accepts(logo)) {
+            errors.put("logoUrl", LOGO_MESSAGE);
         }
         if (!errors.isEmpty()) {
             throw new SellerRuleViolation("seller.invalid-branding", "The page details are not valid", errors);
@@ -36,7 +38,25 @@ public final class BrandingRules {
         if (description == null && color == null && logo == null) {
             return null;
         }
-        return new BusinessSection.Branding(description, color == null ? null : color.toLowerCase(Locale.ROOT), logo);
+        return new BusinessSection.Branding(description, color, logo);
+    }
+
+    /** #rrggbb (lower case) from #rgb, rgb, #rrggbb or rrggbb in any case; null when it is none of those. */
+    public static String normaliseColour(String raw) {
+        String c = trim(raw);
+        if (c == null) {
+            return null;
+        }
+        if (c.startsWith("#")) {
+            c = c.substring(1);
+        }
+        if (!c.matches("^[0-9a-fA-F]{3}$|^[0-9a-fA-F]{6}$")) {
+            return null;
+        }
+        if (c.length() == 3) {
+            c = "" + c.charAt(0) + c.charAt(0) + c.charAt(1) + c.charAt(1) + c.charAt(2) + c.charAt(2);
+        }
+        return "#" + c.toLowerCase(Locale.ROOT);
     }
 
     private static String trim(String s) {
