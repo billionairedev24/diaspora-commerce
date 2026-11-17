@@ -58,10 +58,45 @@ func seededTemplatesRender(t *testing.T, pool *pgxpool.Pool) {
 	}
 }
 
+// notificationsForEvent returns every notification the event produced, whoever the recipient is (the invitee, a guest
+// subscriber and a gift-card recipient have addresses no fixed list would know).
+func notificationsForEvent(t *testing.T, ctx context.Context, e *env, eventID string) []domain.Notification {
+	t.Helper()
+	rs, err := e.pool.Query(ctx, `SELECT DISTINCT address FROM notification WHERE event_id = $1`, eventID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rs.Close()
+	var addrs []string
+	for rs.Next() {
+		var a string
+		if err := rs.Scan(&a); err != nil {
+			t.Fatal(err)
+		}
+		addrs = append(addrs, a)
+	}
+	if err := rs.Err(); err != nil {
+		t.Fatal(err)
+	}
+	var rows []domain.Notification
+	for _, addr := range addrs {
+		got, err := e.store.List(ctx, domain.ListFilter{Recipient: addr, Limit: 100})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, r := range got {
+			if r.EventID == eventID {
+				rows = append(rows, r)
+			}
+		}
+	}
+	return rows
+}
+
 func producerEvents(t *testing.T, pool *pgxpool.Pool) {
 	e := newEnv(t, pool)
 	ctx := context.Background()
-	ing := app.NewIngest(e.notifier, app.IngestConfig{Resolver: identityStub{}, Audience: app.SampleAudience(),
+	ing := app.NewIngest(e.notifier, app.IngestConfig{Resolver: identityStub{}, Audience: app.SampleAudience(), Locations: app.SampleLocationAudience(),
 		Links: app.Links{Storefront: "https://afrotransact.com", SellerCenter: "https://seller.afrotransact.com",
 			ProviderHub: "https://provider.afrotransact.com"}}, discard)
 	producerFixtures := app.SampleEvents(app.Links{Storefront: "https://afrotransact.com", SellerCenter: "https://seller.afrotransact.com"}) // contract-shaped payloads, one per rule (shared with the template gallery)
@@ -82,20 +117,7 @@ func producerEvents(t *testing.T, pool *pgxpool.Pool) {
 			if err := ing.Handle(ctx, ev); err != nil {
 				t.Fatalf("%s[%d]: %v", typ, i, err)
 			}
-			var rows []domain.Notification
-			for _, addr := range []string{"otp@example.com", "u-1@example.com", "ada@example.com", "cust-1@example.com",
-				"applicant-1@example.com", "owner-1@example.com", "owner-2@example.com", "kofi@example.com", "news@example.com",
-				"invitee@example.com", "+15550001111", "+15550002222"} {
-				got, err := e.store.List(ctx, domain.ListFilter{Recipient: addr, Limit: 100})
-				if err != nil {
-					t.Fatal(err)
-				}
-				for _, r := range got {
-					if r.EventID == ev.ID {
-						rows = append(rows, r)
-					}
-				}
-			}
+			rows := notificationsForEvent(t, ctx, e, ev.ID)
 			if len(rows) == 0 {
 				t.Errorf("%s[%d]: no email rendered (missing template field?)", typ, i)
 				continue
