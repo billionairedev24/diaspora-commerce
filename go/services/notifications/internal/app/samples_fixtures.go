@@ -34,7 +34,7 @@ func SampleEvents(l Links) map[string][]map[string]any {
 			"recipient": map[string]any{"id": nil, "email": "invitee@example.com", "phone": nil}, "transactional": true}},
 		"identity.staff-invitation.created": {{"invitationId": "7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f", "email": "newstaff@afrotransact.com",
 			"firstName": "Ada", "lastName": "Obi", "roleKey": "platform.customer_support", "roleName": "Customer Support",
-			"acceptUrl": "https://admin.afrotransact.com/invite#token=sample-token", "expiresAt": "2026-10-13T10:00:00Z", "expiresInHours": 72,
+			"acceptUrl": "http://localhost:3002/invite#token=sample-token", "expiresAt": "2026-10-13T10:00:00Z", "expiresInHours": 72,
 			"resent": false, "invitedBy": "u-1", "inviterName": "Ifeoma Okafor",
 			"recipient": map[string]any{"id": nil, "email": "newstaff@afrotransact.com", "phone": nil}, "transactional": true}},
 		"identity.user.registered": {{"userId": "u-1", "email": "ada@example.com", "firstName": "Ada", "lastName": "Obi",
