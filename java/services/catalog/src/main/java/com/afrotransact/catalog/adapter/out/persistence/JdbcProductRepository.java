@@ -391,6 +391,28 @@ class JdbcProductRepository implements ProductRepository {
     }
 
     @Override
+    public List<Product> findLiveByNameWords(List<String> words, int limit) {
+        if (words.isEmpty() || limit < 1) {
+            return List.of();
+        }
+        StringBuilder hits = new StringBuilder();
+        Map<String, Object> params = new HashMap<>();
+        for (int i = 0; i < words.size(); i++) {
+            String w = words.get(i).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+            hits.append(i == 0 ? "" : " + ").append("(case when title ilike :w").append(i)
+                    .append(" or attributes ->> 'brand' ilike :w").append(i).append(" then 1 else 0 end)");
+            params.put("w" + i, "%" + w + "%");
+        }
+        params.put("need", words.size() > 2 ? words.size() - 1 : words.size());
+        params.put("limit", limit);
+        String sql = "select * from (" + SELECT.replace("from product", ", (" + hits + ") as hits from product")
+                + " where status = 'LIVE'"
+                + " and not exists (select 1 from org_listing_suppression s where s.org_id = product.owner_org and s.hidden)"
+                + ") q where hits >= :need order by hits desc, length(title), atin limit :limit";
+        return withVariants(jdbc.sql(sql).params(params).query(this::mapProduct).list());
+    }
+
+    @Override
     public Optional<Product> findBySellerSku(String orgId, String sellerSku) {
         return one(SELECT + " where id = (select product_id from product_variant where owner_org = :org and seller_sku = :v)",
                 "org", orgId, sellerSku);

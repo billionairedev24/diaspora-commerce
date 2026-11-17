@@ -163,6 +163,14 @@ at:
       base-url: ${SELLER_URL:http://localhost:8106}
       timeout: ${SELLER_TIMEOUT:3s}
       selling-ttl: ${SELLER_SELLING_TTL:10s}
+    # "Is your product already on AfroTransact?": the public search-service query (GET /v1/search) recalls pages by name. The URL
+    # is SEARCH_URL like every other module's: the old fixed localhost:8201 was wrong in the monolith (search is
+    # afrotransact-go's /modules/search) and in every cluster, so sellers saw "We can't search right now". When the index cannot
+    # be asked or is empty, catalog matches on its own tables (catalog_candidates_fallback_total{reason}).
+    search:
+      base-url: ${SEARCH_URL:http://localhost:8201}
+      timeout: ${SEARCH_TIMEOUT:3s}
+      market: ${CATALOG_SEARCH_MARKET:us}
     # S385: only a seller with an open offer on a page may suggest an edit to it (offers-service GET /v1/offers/presence).
     offers:
       base-url: ${OFFERS_URL:http://localhost:8102}

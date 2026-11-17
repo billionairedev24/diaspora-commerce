@@ -73,8 +73,18 @@ are all equal inside the category. Everything else is `SIMILAR`. Both need the c
 Eligibility (before ranking): the page is LIVE, has a real photo (`RealPhoto`: not a placeholder, in the rules of the main image),
 and nothing about another seller is returned: no name, price, stock, cost or offer. Sellers may sell in any category: there is no
 department gate. A brand needing a selling approval, a page not live yet, or an offer the seller already has is a plain `blocker`,
-and the page shows without a sell button. An unreachable index answers `searchUnavailable` with no suggestions, never a guess, and
-the seller can still add the product as new.
+and the page shows without a sell button.
+
+**Search outage never blocks the seller (fallback).** The recall URL is `SEARCH_URL` (`at.catalog.search.base-url`), like every other
+module's: in the monolith that is `<afrotransact-go>/modules/search` (search is mounted `prefixed`), in a cluster `http://search`. When the
+index cannot be asked (wrong URL, 5xx, timeout) or answers nothing (empty index, not yet built), catalog matches on its own tables
+(`ProductRepository.findLiveByNameWords`): LIVE pages whose title or brand holds every word of the name (all but one when more than two
+words; sizes, pack words and filler are not words, `NameTokens`), at most 30, pages of organisations hidden by listing enforcement left
+out. The same eligibility (live, real photo) and the same `CandidateRanker` then apply, so the answer has the same shape and the same
+rules. `catalog_candidates_fallback_total{reason}` counts it (`search_error`, `search_empty`, `both_failed`) and a WARN names the cause
+class (no query text). `searchUnavailable` is true only when both paths fail: no suggestions, never a guess, and the seller can still add
+the product as new. A steady `search_empty` or `search_error` rate means the index needs attention: `make reindex-search`
+([kafka-replay.md](../runbooks/kafka-replay.md) 5.1); `make seed` waits for the index and says so when it stays empty.
 
 Limits: 600 candidate searches per organisation per hour and 30 "None of these" answers per organisation per 24 hours
 (`catalog.match-rate-limited`). Keys are the organisation of the token, never the body.
@@ -119,10 +129,10 @@ found, none, too short, unavailable, rate limited, and the NONE_OF_THESE rate).
 
 | Where | What |
 |---|---|
-| Java unit (JDK 25) | `CandidateRankerTest` (weights, brand and size agreement, category, hidden part number, SAME_NAME versus SIMILAR, thresholds), `PackSizeTest`, `ProductNamesTest`, `RealPhotoTest`, `CandidateMatchServiceImplTest` (live-and-photo only, six at most, confirmation, not-shown refusal, none-of-these queueing, rate limits, index down), `OfferImportValidatorTest`, `CatalogMatchServiceImplTest`, `CatalogContractTest`, `ArchitectureTest`, `TaxGateArchitectureTest` |
+| Java unit (JDK 25) | `CandidateRankerTest` (weights, brand and size agreement, category, hidden part number, SAME_NAME versus SIMILAR, thresholds), `PackSizeTest`, `ProductNamesTest`, `RealPhotoTest`, `CandidateMatchServiceImplTest` (live-and-photo only, six at most, confirmation, not-shown refusal, none-of-these queueing, rate limits, index down: database fallback, index empty, both down, index ok so the database is not asked), `NameTokensTest`, `HttpCandidateRecallTest` (URL with and without the `/modules/search` prefix, no token, 5xx, 404 and a dead port are unavailable), `OfferImportValidatorTest`, `CatalogMatchServiceImplTest`, `CatalogContractTest`, `ArchitectureTest`, `TaxGateArchitectureTest` |
 | Go | gateway-bff contract conformance for both routes against `gateway-bff-seller.yaml`, validation, 429 and size problems, no `sellerOrgId` forwarded, Listings module gate |
 | vitest | api-client mock (ranking, size, never not-live, none-of-these record), Seller Center flow (search, chip, one-tap size, different size, not here, barcode shortcut, report paths), five-locale key parity, no part number copy, tour keys |
-| Not run | Docker Testcontainers ITs (the JDBC decision repository and the migration) and a real search engine against `HttpCandidateRecall` |
+| Not run | Docker Testcontainers ITs (the JDBC decision repository, the migration and `findLiveByNameWords`; its SQL was run by hand on PostgreSQL 16) and a real search engine against `HttpCandidateRecall` |
 
 ## 10. Owner decisions
 
