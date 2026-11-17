@@ -1,0 +1,34 @@
+name: Build the Go binary
+description: >
+  Compiles the afrotransact-go deployable on the runner (CGO off, -trimpath, -s -w, workspace build) with the Go module and build caches
+  kept by setup-go, and leaves it at go/dist/afrotransact-go, where go/Dockerfile.afrotransact-go reads it with --build-arg BIN_FROM=prebuilt.
+  Same flags as the Dockerfile's own compile step (a BuildKit cache mount is not exported by the gha cache, so building in Docker
+  recompiled every dependency on every run).
+inputs:
+  go-version:
+    description: Go toolchain (the repo pin, GO_VERSION in the workflow).
+    required: true
+  version:
+    description: Value of main.version (the image tag, the git sha).
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v7
+      with:
+        go-version: ${{ inputs.go-version }}
+        cache-dependency-path: |
+          go/**/go.sum
+    - name: go build (static, trimmed, stripped)
+      shell: bash
+      working-directory: go
+      env:
+        CGO_ENABLED: "0"
+        GOTOOLCHAIN: local
+        GOFLAGS: -trimpath -buildvcs=false
+        VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        mkdir -p dist
+        go build -ldflags="-s -w -X main.version=${VERSION}" -o dist/afrotransact-go ./apps/afrotransact-go/cmd/afrotransact-go
+        echo "binary: $(du -m dist/afrotransact-go | cut -f1) MB" >> "$GITHUB_STEP_SUMMARY"

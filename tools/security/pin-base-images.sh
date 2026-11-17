@@ -72,5 +72,5 @@ while IFS= read -r file; do
   done <"$file"
   if [ "$mode" != check ]; then cat "$tmp" >"$file"; fi
   rm -f "$tmp"
-done < <(find java go/services -maxdepth 2 -name Dockerfile | sort)
+done < <({ find java go/services -maxdepth 2 -name Dockerfile; ls go/Dockerfile.* 2>/dev/null; } | sort)
 exit $status

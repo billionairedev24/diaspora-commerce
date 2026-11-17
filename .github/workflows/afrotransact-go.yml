@@ -45,7 +45,7 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
           BEFORE: ${{ github.event.before }}
           SHA: ${{ github.sha }}
-          RELEVANT: '^(go/|contracts/openapi/|infra/helm/library/|infra/ops/postgres/|tools/ci/core_ci_db\.sh|tools/release/test_cutover_render\.sh|\.github/workflows/(afrotransact-go|_deploy)\.yml|\.github/actions/(publish-image|helm-check)/)'
+          RELEVANT: '^(go/|contracts/openapi/|infra/helm/library/|infra/ops/postgres/|tools/ci/core_ci_db\.sh|tools/release/test_cutover_render\.sh|\.github/workflows/(afrotransact-go|_deploy)\.yml|\.github/actions/(publish-image|go-binary|helm-check)/)'
         run: |
           case "$EVENT" in
             pull_request) git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"; files="$(git diff --name-only "origin/${BASE_REF}...HEAD")" ;;
@@ -180,15 +180,25 @@ jobs:
       digest: ${{ steps.publish.outputs.digest }}
     steps:
       - uses: actions/checkout@v7
+      # The binary is compiled here (module and build cache kept by setup-go) and only packaged by the Dockerfile.
+      - uses: ./.github/actions/go-binary
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          version: ${{ github.sha }}
       - id: publish
         uses: ./.github/actions/publish-image
         with:
           service: afrotransact-go
           context: go
           dockerfile: go/Dockerfile.afrotransact-go
+          build-args: |
+            BIN_FROM=prebuilt
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/release-1' }}
-          # A guard rail: distroless/static (~2 MB) + ONE static binary for seven modules (a service binary is ~15-25 MB). Tighten after the first build.
-          max-size-mb: "120"
+          # OVH nodes are amd64: no arm64 leg.
+          platforms: linux/amd64
+          # Measured 2026-11-17: distroless static 4.8 MB + one 94 MB static binary (seven modules and their cloud SDKs) = 98.6 MB.
+          # Budget = measured + ~4%.
+          max-size-mb: "103"
           required-env: APP_ENV=prod PORT=8080
 
   deploy-dev:

@@ -4,7 +4,16 @@
 # The deployable (go/apps/afrotransact-go) and the service modules it imports are modules of go/go.work; the build uses the workspace
 # (the per-service Dockerfiles use GOWORK=off because each service is a leaf). Same pins, base image and runtime as services/*/Dockerfile.
 # MAIN_PKG is the main package inside the deployable's module (go/apps/afrotransact-go/cmd/afrotransact-go).
-FROM golang:1.27.4@sha256:5e8afd493a7124a8586e134d9b532731161d4b9becf9dee5a5956b107426f93d AS build
+#
+# Image: distroless static (CA certificates, tzdata, no shell, no libc) + one static binary (CGO off, -trimpath, -s -w, no VCS stamp):
+# ~94 MB binary (measured 2026-11-17: 45 MB code, 31 MB function tables, AWS/Azure/Elasticsearch/Redis/excelize SDKs of the seven modules).
+# The binary can come from outside: `--build-arg BIN_FROM=prebuilt` takes go/dist/afrotransact-go (built by the workflow with a cached
+# module and build cache, see .github/actions/go-binary) instead of compiling in Docker (BuildKit cache mounts are not exported by the
+# gha cache, so every in-Docker build recompiled all dependencies). The default (`source`) compiles in Docker, as before.
+ARG BIN_FROM=source
+
+# --- 1a. compiled in Docker (default) -------------------------------------------------------------------------------------------------
+FROM golang:1.27.4@sha256:5e8afd493a7124a8586e134d9b532731161d4b9becf9dee5a5956b107426f93d AS build-source
 WORKDIR /src
 ENV CGO_ENABLED=0 GOFLAGS="-trimpath -buildvcs=false" GOTOOLCHAIN=local
 COPY . .
@@ -15,8 +24,18 @@ ARG VERSION=dev
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     go build -ldflags="-s -w -X main.version=${VERSION}" -o /out/afrotransact-go "${MAIN_PKG}"
 
+# --- 1b. compiled by the workflow ----------------------------------------------------------------------------------------------------
+FROM scratch AS build-prebuilt
+COPY dist/afrotransact-go /out/afrotransact-go
+
+FROM build-${BIN_FROM} AS bin
+
+# --- 2. runtime ---------------------------------------------------------------------------------------------------------------------------
 FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
-COPY --from=build /out/afrotransact-go /usr/local/bin/afrotransact-go
+LABEL org.opencontainers.image.description="AfroTransact Go deployable: one static binary on distroless static, non-root" \
+      org.opencontainers.image.base.name="gcr.io/distroless/static-debian12:nonroot" \
+      org.opencontainers.image.base.digest="sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab"
+COPY --from=bin /out/afrotransact-go /usr/local/bin/afrotransact-go
 USER nonroot:nonroot
 ENV APP_ENV=prod PORT=8080
 EXPOSE 8080

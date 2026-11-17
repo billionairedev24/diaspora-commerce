@@ -1,0 +1,16 @@
+# Build context of go/Dockerfile.afrotransact-go and go/services/*/Dockerfile is go/. The workspace needs go.work, go.work.sum, apps/, pkg/
+# and services/ (including config, migrations and data that //go:embed reads), so only what `go build` never reads is excluded.
+# Keep dist/ (the prebuilt binary of --build-arg BIN_FROM=prebuilt) in the context.
+**/*_test.go
+**/*.test
+**/.git
+**/.gitignore
+**/.idea
+**/.vscode
+**/.DS_Store
+**/*.log
+**/.env
+**/.env.*
+**/coverage.out
+**/bin
+**/node_modules

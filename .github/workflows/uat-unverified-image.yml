@@ -109,16 +109,23 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/go-binary
+        with:
+          go-version: "1.27.4"
+          version: ${{ github.sha }}
       - id: publish
         uses: ./.github/actions/publish-image
         with:
           service: afrotransact-go
           context: go
           dockerfile: go/Dockerfile.afrotransact-go
+          build-args: |
+            BIN_FROM=prebuilt
           push: "true"
           verified: "false"
           platforms: linux/amd64
-          max-size-mb: "120"
+          # Same budget as afrotransact-go.yml (measured 98.6 MB, +~4%).
+          max-size-mb: "103"
           required-env: APP_ENV=prod PORT=8080
       - name: Summary
         env:
