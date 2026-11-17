@@ -402,7 +402,26 @@ offset (with backoff).
 * `GET /v1/internal/orgs/{orgId}/owners` → `{orgId, ownerUserIds: [...]}`.
 
 Both with a client-credentials token (`notifications-service`, scope `users:read`, secret `NOTIFICATIONS_CLIENT_SECRET`).
-Until they exist, lookups return 404 and only payloads with addresses (OTP, bookings, content, generic) are delivered.
+The endpoints exist in identity and answer 403 `identity.service-lookup-only` to anything but a service token holding
+`users:read` (a user token or a token without the scope is refused). The client is registered with `users:read` and
+`delivery-runs:audience.read` in every profile (`application-{local,dev,uat,prod}.yml`); in core on the local profile
+(security off) identity verifies the bearer token itself, so the same token works in the monolith and in `STACK=services`.
+
+### Failed events (poison messages)
+
+One failing event must never stop the consumer. `app.NewResilientHandler` wraps the ingest:
+
+| Failure | Handling |
+|---|---|
+| Transient: 5xx, 408, 429, timeouts, connection and database errors | retried 4 times with exponential backoff (500 ms to 8 s); if it persists the consumer restarts and redelivers (the event stays in Kafka), up to 6 deliveries (about two minutes), then dead-lettered as `retries_exhausted` |
+| Permanent: another service's 4xx (403 missing scope, 400, 401 ...) or a request the notifier rejects | dead-lettered at once (`upstream_client_error` / `rejected`), never retried |
+| Identity 404 (deleted account) | not a failure: the recipient is skipped (debug log), the event carries on |
+
+Dead-lettering writes a row in `failed_event` (event id, type, reason, error class, upstream status and problem code,
+attempts, payload for replay), increments `notifications_events_failed_total{reason}`, logs a WARN
+(`event dead-lettered; offset committed, consumer continues`, no recipient data) and commits the offset. If the row cannot
+be written nothing is committed. Tune with `kafka.retry.{attempts,backoff,maxBackoff,maxRounds}` (env `KAFKA_RETRY_*`).
+Alert `NotificationsEventsFailed`, runbook `docs/runbooks/NotificationsEventsFailed.md` (triage and replay).
 
 ## Templates
 
