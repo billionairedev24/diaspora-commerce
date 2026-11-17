@@ -11,6 +11,7 @@ coverage.out
 # Node
 node_modules/
 node_modules
+.next
 .next/
 .open-next/
 .turbo/
