@@ -29,3 +29,5 @@ c985a5b352e5c7a585a09b260fc5cc40c6fdb6e8:java/services/identity/src/test/java/co
 c985a5b352e5c7a585a09b260fc5cc40c6fdb6e8:java/services/identity/src/test/java/com/afrotransact/identity/it/IdentityAdminIT.java:generic-api-key:351
 eca616a790ad83455c0b45f9ee416245cdd3c6f7:infra/ovh-vps/bootstrap.sh:generic-api-key:23
 167e7a81eb6a6d1041ab99b22d442be35b4212be:tools/ovh/api.sh:generic-api-key:21
+# Same notifications config test fixture, on another branch (re_test_key / whsec_ placeholders).
+706809200c9fb4a47c05424f9ec0f2a1c0c7cde3:go/services/notifications/internal/config/validate_test.go:generic-api-key:15
