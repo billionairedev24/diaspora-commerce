@@ -98,6 +98,7 @@ DELETE /v1/size-charts/{id} | ORG_OWNED | SizeChartServiceImpl.retire: owned(own
 POST /v1/catalog/matches | ORG_OWNED | CatalogMatchServiceImpl.match: org = actor.orgId unless staff/service; body sellerOrgId ignored | CatalogTenantIsolationTest
 POST /v1/catalog/matches/candidates | ORG_OWNED | CandidateMatchServiceImpl.organisation: org = actor.orgId unless staff/service; shows live pages only | CatalogTenantIsolationTest
 POST /v1/catalog/matches/decisions | ORG_OWNED | CandidateMatchServiceImpl.organisation: decision stored for actor org | CatalogTenantIsolationTest
+POST /v1/catalog/matches/size-requests | ORG_OWNED | CandidateMatchServiceImpl.organisation: request filed for actor org (service callers name the org) | CatalogTenantIsolationTest
 POST /v1/catalog/offer-eligibility | ORG_OWNED | OfferEligibilityServiceImpl.eligibility: org = actor.orgId unless staff/service | CatalogTenantIsolationTest
 GET /v1/identifiers/gtin/{code} | ORG_OWNED | IdentifierServiceImpl.check: check digit and prefix validation; the matching ATIN is returned only when GtinPageVisibility allows it (live page, own org, staff/service) | GtinPageVisibilityTest
 GET /v1/identifiers/gtin/{code}/prefill | ORG_OWNED | GtinPrefillServiceImpl.prefill: an existing page ATIN is returned only when GtinPageVisibility allows it (live page, the caller's own org, or staff/service); another seller's non-live page is treated as no match | GtinPageVisibilityTest

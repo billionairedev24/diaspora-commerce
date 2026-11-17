@@ -90,8 +90,16 @@ func (u *Upstreams) matchRoutes(mux *http.ServeMux) {
 			writeJSON(w, 200, map[string]any{"candidates": []map[string]any{{"parentAtin": "ATSHEA0001", "atin": "ATSHEAV001", "title": "Raw Shea Butter, 8 oz",
 				"brand": "Kente Naturals", "image": map[string]any{"url": "https://img.example/shea.webp", "width": 1600, "height": 1600},
 				"category": "Beauty > Skin care > Body butter", "sizeLabel": "8 oz", "variants": []map[string]any{{"atin": "ATSHEAV001", "options": map[string]string{"Size": "8 oz"}}},
-				"kind": "SAME_NAME", "likely": true, "canOffer": true, "blockers": []any{}}},
+				"kind": "SAME_NAME", "likely": true, "canOffer": true, "blockers": []any{}, "allowedConditions": []string{"NEW"}}},
 				"suggestedCategory": cat, "tooShort": false, "searchUnavailable": false})
+		case strings.Contains(q, "laptop"):
+			// A category where used and renewed items are real: the condition is asked.
+			writeJSON(w, 200, map[string]any{"candidates": []map[string]any{{"parentAtin": "ATLAPTOP01", "atin": "ATLAPTOPV1", "title": "Lagos Book 14 laptop",
+				"brand": "Kente Computing", "image": map[string]any{"url": "https://img.example/laptop.webp", "width": 1600, "height": 1600},
+				"category": "Electronics > Computers > Laptops", "variants": []map[string]any{{"atin": "ATLAPTOPV1", "options": map[string]string{}}},
+				"kind": "SIMILAR", "likely": false, "canOffer": true, "blockers": []any{},
+				"allowedConditions": []string{"NEW", "RENEWED", "USED_LIKE_NEW", "USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE"}}},
+				"suggestedCategory": nil, "tooShort": false, "searchUnavailable": false})
 		default:
 			writeJSON(w, 200, map[string]any{"candidates": []any{}, "tooShort": len(q) < 3, "searchUnavailable": false})
 		}
@@ -114,6 +122,39 @@ func (u *Upstreams) matchRoutes(mux *http.ServeMux) {
 			writeJSON(w, 200, map[string]any{"decisionId": "0d0d0d0d-0000-4000-8000-000000000002", "choice": "SELL_EXISTING", "atin": "ATSHEAV001", "canOffer": true, "blockers": []any{}, "possibleDuplicateQueued": false})
 		default:
 			problem(w, 422, "catalog.match-choice-missing", "Choose an answer.", nil)
+		}
+	})
+
+	// "My size is different": 8 oz is the page's own size (sell it), "big" is not a size, "red" is a page that varies by colour, anything
+	// else is asked for review. The same size twice is one request.
+	asked := map[string]string{}
+	mux.HandleFunc("POST /v1/catalog/matches/size-requests", func(w http.ResponseWriter, r *http.Request) {
+		var in map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		u.mu.Lock()
+		u.LastSizeRequest = in
+		u.mu.Unlock()
+		size, _ := in["size"].(string)
+		switch {
+		case in["atin"] != "ATSHEAV001" && in["atin"] != "ATSHEA0001":
+			problem(w, 422, "catalog.match-choice-not-shown", "That page was not in the list.", nil)
+		case strings.EqualFold(strings.ReplaceAll(size, " ", ""), "8oz"):
+			writeJSON(w, 200, map[string]any{"outcome": "ALREADY_ON_PAGE", "size": "8 oz", "existingAtin": "ATSHEAV001", "canOffer": true, "blockers": []any{}})
+		case strings.Contains(size, "big"):
+			problem(w, 422, "catalog.variant-size-invalid", "Type the size with its unit, like 1 kg, 500 ml or 6 pack.", nil)
+		case strings.Contains(size, "red"):
+			problem(w, 422, "catalog.variant-theme-unsupported", "This page has other options, like colour.", nil)
+		case strings.Contains(size, "many"):
+			problem(w, 422, "catalog.match-rate-limited", "You have many sizes waiting for review.", nil)
+		default:
+			u.mu.Lock()
+			defer u.mu.Unlock()
+			outcome := "REQUESTED"
+			if _, again := asked[size]; again {
+				outcome = "ALREADY_REQUESTED"
+			}
+			asked[size] = "0e0e0e0e-0000-4000-8000-000000000001"
+			writeJSON(w, 200, map[string]any{"outcome": outcome, "size": size, "requestId": asked[size], "reviewDueAt": "2026-11-19T09:00:00Z", "canOffer": false, "blockers": []any{}})
 		}
 	})
 

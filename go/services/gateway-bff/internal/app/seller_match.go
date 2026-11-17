@@ -29,6 +29,9 @@ type SellerMatchService interface {
 	Candidates(ctx context.Context, c *domain.Caller, in domain.CandidateInput) (domain.CandidateList, error)
 	// Decide is catalog POST /v1/catalog/matches/decisions: "This is my product" (size confirmed) or "Not here, add it as new".
 	Decide(ctx context.Context, c *domain.Caller, in domain.DecisionInput) (domain.MatchDecision, error)
+	// SizeRequest is catalog POST /v1/catalog/matches/size-requests: "my size is different". The seller's size is added to the page as a
+	// variant after catalogue staff check it, so nobody is stopped by a size and nobody has to create a duplicate page.
+	SizeRequest(ctx context.Context, c *domain.Caller, in domain.SizeRequestInput) (domain.SizeRequestResult, error)
 	// CreateOffer is offers POST /v1/offers for a page that exists; body is the request's JSON (page content is refused).
 	CreateOffer(ctx context.Context, c *domain.Caller, idempotencyKey string, body json.RawMessage) (domain.OfferOnlyResult, error)
 	// FileChangeRequest is catalog POST /v1/products/{atin}/change-requests.
@@ -98,6 +101,10 @@ var matchProblems = map[string]struct {
 	"catalog.wrong-match-open":          {http.StatusConflict, "WRONG_MATCH_OPEN"},
 	"catalog.match-rate-limited":        {http.StatusTooManyRequests, "RATE_LIMITED"},
 	"catalog.match-size-unconfirmed":    {http.StatusUnprocessableEntity, "SIZE_UNCONFIRMED"},
+	"catalog.variant-size-invalid":      {http.StatusUnprocessableEntity, "SIZE_INVALID"},
+	"catalog.variant-page-size-unknown": {http.StatusUnprocessableEntity, "SIZE_PAGE_UNKNOWN"},
+	"catalog.variant-theme-unsupported": {http.StatusUnprocessableEntity, "SIZE_NOT_ADDABLE"},
+	"catalog.variant-request-blocked":   {http.StatusUnprocessableEntity, "SIZE_REQUEST_BLOCKED"},
 	"catalog.match-choice-not-shown":    {http.StatusUnprocessableEntity, "CHOICE_NOT_SHOWN"},
 	"catalog.match-choice-missing":      {http.StatusUnprocessableEntity, domain.CodeValidationFailed},
 	"catalog.change-request-exists":     {http.StatusConflict, "CHANGE_REQUEST_EXISTS"},
@@ -164,6 +171,8 @@ type upstreamMatch struct {
 	CreateBlockers []domain.Blocker      `json:"createBlockers"`
 	Suggestion     string                `json:"suggestion"`
 	Message        string                `json:"message"`
+	// AllowedConditions is what the page's category allows (NEW only where the condition is not asked).
+	AllowedConditions []string `json:"allowedConditions"`
 }
 
 func (s *sellerMatchImpl) Match(ctx context.Context, c *domain.Caller, in domain.MatchInput) (domain.CatalogMatch, error) {
@@ -198,7 +207,7 @@ func (s *sellerMatchImpl) Match(ctx context.Context, c *domain.Caller, in domain
 	out := domain.CatalogMatch{Result: m.Result, Digits: strPtr(m.Digits), ATIN: strPtr(m.ATIN), ParentATIN: strPtr(m.ParentATIN),
 		ProductStatus: strPtr(m.ProductStatus), Title: strPtr(m.Title), Brand: strPtr(m.Brand), Category: strPtr(m.Category), VariantOptions: m.VariantOptions,
 		Variants: m.Variants, CanOffer: m.CanOffer, Blockers: m.Blockers, CanCreate: m.CanCreate, CreateBlockers: m.CreateBlockers,
-		Suggestion: strPtr(m.Suggestion), Message: strPtr(m.Message)}
+		Suggestion: strPtr(m.Suggestion), Message: strPtr(m.Message), AllowedConditions: conditionsOrNew(m.AllowedConditions)}
 	if m.Image != nil && m.Image.URL != "" {
 		out.Image = &domain.MatchImage{URL: m.Image.URL, Width: m.Image.Width, Height: m.Image.Height}
 	}
@@ -239,13 +248,14 @@ type upstreamCandidates struct {
 			Width  *int   `json:"width"`
 			Height *int   `json:"height"`
 		} `json:"image"`
-		Category  string                `json:"category"`
-		SizeLabel string                `json:"sizeLabel"`
-		Variants  []domain.MatchVariant `json:"variants"`
-		Kind      string                `json:"kind"`
-		Likely    bool                  `json:"likely"`
-		CanOffer  bool                  `json:"canOffer"`
-		Blockers  []domain.Blocker      `json:"blockers"`
+		Category          string                `json:"category"`
+		SizeLabel         string                `json:"sizeLabel"`
+		Variants          []domain.MatchVariant `json:"variants"`
+		Kind              string                `json:"kind"`
+		Likely            bool                  `json:"likely"`
+		CanOffer          bool                  `json:"canOffer"`
+		Blockers          []domain.Blocker      `json:"blockers"`
+		AllowedConditions []string              `json:"allowedConditions"`
 	} `json:"candidates"`
 	SuggestedCategory *domain.MatchCategory `json:"suggestedCategory"`
 	Category          *domain.MatchCategory `json:"category"`
@@ -289,7 +299,8 @@ func (s *sellerMatchImpl) Candidates(ctx context.Context, c *domain.Caller, in d
 			break
 		}
 		cand := domain.MatchCandidate{ParentATIN: x.ParentATIN, ATIN: strPtr(x.ATIN), Title: x.Title, Brand: strPtr(x.Brand), Category: strPtr(x.Category),
-			SizeLabel: strPtr(x.SizeLabel), Variants: x.Variants, Kind: x.Kind, Likely: x.Likely, CanOffer: x.CanOffer, Blockers: x.Blockers}
+			SizeLabel: strPtr(x.SizeLabel), Variants: x.Variants, Kind: x.Kind, Likely: x.Likely, CanOffer: x.CanOffer, Blockers: x.Blockers,
+			AllowedConditions: conditionsOrNew(x.AllowedConditions)}
 		if x.Image != nil && x.Image.URL != "" {
 			cand.Image = &domain.MatchImage{URL: x.Image.URL, Width: x.Image.Width, Height: x.Image.Height}
 		}
@@ -345,6 +356,70 @@ func (s *sellerMatchImpl) Decide(ctx context.Context, c *domain.Caller, in domai
 	var out domain.MatchDecision
 	if err := up.Call(ctx, c.BearerToken, port.StaffCall{Method: http.MethodPost, Path: "/v1/catalog/matches/decisions", Body: body}, &out); err != nil {
 		return domain.MatchDecision{}, matchErr("catalog", err)
+	}
+	if out.Blockers == nil {
+		out.Blockers = []domain.Blocker{}
+	}
+	return out, nil
+}
+
+// conditionsOrNew is the conditions catalog allows, NEW alone when it says nothing (an older catalog): the safe answer, because
+// a condition the category does not ask for is never offered to the seller.
+func conditionsOrNew(c []string) []string {
+	if len(c) == 0 {
+		return []string{"NEW"}
+	}
+	return c
+}
+
+// maxSizeText is the longest size a seller may type ("2 x 1.5 kg" is short; catalog reads it).
+const (
+	maxSizeText = 40
+	maxSizeNote = 500
+)
+
+func (s *sellerMatchImpl) SizeRequest(ctx context.Context, c *domain.Caller, in domain.SizeRequestInput) (domain.SizeRequestResult, error) {
+	in.Query, in.CategoryID, in.ATIN = strings.Join(strings.Fields(in.Query), " "), strings.TrimSpace(in.CategoryID), strings.ToUpper(strings.TrimSpace(in.ATIN))
+	in.Size, in.Note = strings.Join(strings.Fields(in.Size), " "), strings.TrimSpace(in.Note)
+	errs := map[string]string{}
+	if in.Query == "" || utf8.RuneCountInString(in.Query) > maxCandidateQuery {
+		errs["query"] = "Type what you are selling"
+	}
+	if in.CategoryID != "" && !uuidRe.MatchString(in.CategoryID) {
+		errs["categoryId"] = "Choose a category from the list"
+	}
+	if !atinRe.MatchString(in.ATIN) {
+		errs["atin"] = "Choose the product you are selling"
+	}
+	switch {
+	case in.Size == "":
+		errs["size"] = "Type your size, like 1 kg or 500 ml"
+	case utf8.RuneCountInString(in.Size) > maxSizeText:
+		errs["size"] = "At most 40 characters"
+	}
+	if utf8.RuneCountInString(in.Note) > maxSizeNote {
+		errs["note"] = "At most 500 characters"
+	}
+	if len(errs) > 0 {
+		return domain.SizeRequestResult{}, domain.ValidationProblem(errs)
+	}
+	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit); err != nil {
+		return domain.SizeRequestResult{}, err
+	}
+	up, err := s.catalog()
+	if err != nil {
+		return domain.SizeRequestResult{}, err
+	}
+	body := map[string]any{"query": in.Query, "atin": in.ATIN, "size": in.Size}
+	if in.CategoryID != "" {
+		body["categoryId"] = in.CategoryID
+	}
+	if in.Note != "" {
+		body["note"] = in.Note
+	}
+	var out domain.SizeRequestResult
+	if err := up.Call(ctx, c.BearerToken, port.StaffCall{Method: http.MethodPost, Path: "/v1/catalog/matches/size-requests", Body: body}, &out); err != nil {
+		return domain.SizeRequestResult{}, matchErr("catalog", err)
 	}
 	if out.Blockers == nil {
 		out.Blockers = []domain.Blocker{}
@@ -517,12 +592,13 @@ type upstreamChange struct {
 	DecidedAt   *time.Time     `json:"decidedAt"`
 	Reason      string         `json:"reason"`
 	Resolution  string         `json:"resolution"`
+	ResultATIN  string         `json:"resultAtin"`
 }
 
 func changeOf(u upstreamChange) domain.ChangeRequest {
 	return domain.ChangeRequest{ID: u.ID, ATIN: u.ATIN, Title: strPtr(u.Title), Type: u.Type, Field: strPtr(u.Field), Payload: u.Payload, Note: strPtr(u.Note),
 		Status: firstNonEmpty(strings.ToUpper(u.Status), "PENDING"), RequestedAt: u.RequestedAt, SLADueAt: u.SLADueAt, DecidedAt: u.DecidedAt,
-		Reason: strPtr(u.Reason), Resolution: strPtr(u.Resolution)}
+		Reason: strPtr(u.Reason), Resolution: strPtr(u.Resolution), ResultATIN: strPtr(u.ResultATIN)}
 }
 
 // payloadValueTypes are the types whose payload is {value}.

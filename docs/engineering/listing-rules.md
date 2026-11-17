@@ -59,6 +59,14 @@ Related: `docs/engineering/category-tax-design.md` (tax), `docs/engineering/ship
 - **Decision:** Hide Condition and fix it to New for food, beverage, beauty, health, baby feeding, pet food, car seats, clothing, jewelry, digital and gift cards. Show New, Renewed and Used for electronics, books, general goods and toys. Used clothing can be a later pre-owned programme with approval.
 - **Amazon standard:** Amazon allows used items in some categories (books, electronics, many home goods) and not in others such as grocery, beauty and health. Clothing used is restricted. This is my reading of public guidance.
 - **Why:** Removes a meaningless question from most listings, and keeps unsafe used goods out.
+- **Refined 17 Nov 2026 (owner feedback: "a grocery cannot be New, we do not need that"):** Condition is asked only where a used,
+  renewed or refurbished item is a real thing to sell, and it is **never required** (New is the answer when it is left alone; toys
+  went from "required or reason" to optional). It is shown for exactly 11 categories: computers and laptops, gaming, phones, TVs and
+  audio, printed books, magazines, toys and games, furniture and small appliances, kitchenware and cookware, sports goods, school and
+  office supplies. It is hidden, and the server stores New whatever is sent, for everything else, including the general-goods
+  categories that are consumables or hygiene items (hair accessories, wigs, cleaning and paper products, candles and decor, diapers and
+  wipes, bedding, pet grooming, handmade). The same data decides every place: the product form, the bulk template, the offer form for an
+  existing page (`allowedConditions` on the match answers) and offers' `offers.condition-not-allowed`. No UI file lists categories.
 
 ### D10. What replaces typed ingredients and allergens for groceries?
 
@@ -191,7 +199,7 @@ Kinds: `PKG` Packaged food and drink, `PER` Perishable food, `SFD` Food service 
 | At least one image | R | R | R | R | R | R | R | R | R | R | R | R | R | R | R | R |
 | Label photo | o | o | o | R | R | R | - | - | - | - | - | R | - | - | - | - |
 | **Offer** | | | | | | | | | | | | | | | | |
-| Condition | - | - | - | - | - | - | - | - | o | o | R* | - | o | - | - | - |
+| Condition | - | - | - | - | - | - | - | - | o | o | o | - | o | - | - | - |
 | Price | R | R | R | R | R | R | R | R | R | R | R | R | R | R | R | R |
 | Quantity | R | R | R | R | R | R | R | R | R | R | R | R | R | - | - | - |
 | Handling time (days) | R | R | R | R | R | R | R | R | R | R | R | R | R | - | - | - |
@@ -334,7 +342,13 @@ Clarifications this implementation made:
 - `fabrics-textiles` is in `rules.json` with `provisional: true` (kind FSH, open). It is not one of the 73 approved categories;
   consumers must skip provisional entries when they count.
 - A category can override a field of its kind (`overrides`). Car seats are `KID` with Condition hidden, so they are New only
-  while toys choose.
+  while toys choose. The audit of 17 Nov 2026 added these overrides (category: field becomes status), each a question that meant
+  nothing for the category: Condition hidden for hair accessories, wigs and extensions, cleaning and paper products, decor and
+  candles, diapers and wipes, pet grooming, handmade products and bedding; Model number hidden for those and for school and office
+  supplies, optional for sports goods and kitchenware; Material hidden for cleaning and paper products and diapers and wipes,
+  optional for school and office supplies, sports goods and pet grooming; Age grade hidden for adult clothing and footwear, bags
+  and purses and fabrics; Sizes optional for bags and purses; Servings hidden for medical devices, medicated skincare and first aid;
+  Net weight and Shelf life optional for medical devices. The kind-level matrix above is unchanged except Condition for toys.
 - Package length, width, height and weight are stored per variant (`product_variant.package_*`, migration V2, back-filled from the
   listing package where it was valid). `listing.packaging` stays as the default for variants without their own and is set to the
   first variant's package for readers that only know the listing. The event payload carries `packaging` per variant (falling back

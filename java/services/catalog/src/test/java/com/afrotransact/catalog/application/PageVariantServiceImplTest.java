@@ -109,6 +109,74 @@ class PageVariantServiceImplTest {
         verify(productEvents).publishTaxFactsChanged(eq(added.page()), any(), any(), eq(page.variants()), any());
     }
 
+    // ---- a seller's different size (SizeVariantRules) -------------------------------------------------------------
+
+    private static Map<String, Object> sellerSize(String size, String pageSize) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("source", "SELLER_SIZE");
+        payload.put("options", new LinkedHashMap<>(Map.of("Size", size)));
+        if (pageSize != null) {
+            payload.put("existingOptions", new LinkedHashMap<>(Map.of("Size", pageSize)));
+        }
+        return payload;
+    }
+
+    private Product plainRicePage(ProductStatus status) {
+        when(categories.findProductType("grocery")).thenReturn(Optional.of(SizingFixtures.SPICES));
+        return new Product(UUID.randomUUID(), new Atin("AT10000001"), new ListingOwner(ListingOwnerKind.SELLER, "org_a"),
+                dressNode, null, "grocery", "Tilda Basmati Rice 5kg", Map.of("brand", "Tilda"), List.of(), "",
+                List.of(variant("AT10000002", UPC, Map.of())), status, null, NOW.minusSeconds(900), NOW.minusSeconds(900), 2);
+    }
+
+    @Test
+    void aSellersDifferentSizeGivesAPageWithoutVariationsASizeVariationAndKeepsItsOwnSize() {
+        Product page = plainRicePage(ProductStatus.IN_REVIEW);
+
+        Added added = service.addVariant(request(page, sellerSize("1 kg", "5 kg")), page, false, NOW);
+
+        assertThat(added.page().variationTheme()).isEqualTo("Size");
+        assertThat(added.page().variants()).hasSize(2);
+        assertThat(added.page().variants().getFirst().options()).as("the page's own variant keeps its ATIN and takes its size")
+                .containsExactly(Map.entry("Size", "5 kg"));
+        assertThat(added.page().variants().getFirst().atin().value()).isEqualTo("AT10000002");
+        Variant created = added.page().variants().getLast();
+        assertThat(created.atin().value()).isEqualTo(added.atin());
+        assertThat(created.options()).containsExactly(Map.entry("Size", "1 kg"));
+    }
+
+    @Test
+    void aSellersDifferentSizeNeedsNoBarcodeEvenWhenThePagesVariantHasOne() {
+        Product page = plainRicePage(ProductStatus.IN_REVIEW);
+
+        Added added = service.addVariant(request(page, sellerSize("1 kg", "5 kg")), page, false, NOW);
+
+        Variant created = added.page().variants().getLast();
+        assertThat(created.gtin()).isNull();
+        assertThat(created.gtinExempt()).isTrue();
+    }
+
+    @Test
+    void aVariantRequestThatIsNotFromASellersSizeStillNeedsAThemeAndABarcode() {
+        Product page = plainRicePage(ProductStatus.IN_REVIEW);
+
+        assertThatThrownBy(() -> service.addVariant(newVariant(page, Map.of("Size", "1 kg"), null), page, false, NOW))
+                .isInstanceOfSatisfying(BusinessRuleException.class,
+                        e -> assertThat(e.code()).isEqualTo("catalog.change-request-variant-invalid"));
+        Product themed = pageWithTheme("Size", ProductStatus.IN_REVIEW, variant("AT10000002", UPC, Map.of("Size", "5 kg")));
+        assertThatThrownBy(() -> service.addVariant(request(themed, sellerSize("5 kg", null)), themed, false, NOW))
+                .as("the page already has this size").isInstanceOf(BusinessRuleException.class);
+    }
+
+    @Test
+    void aSellersSizeOnAPageWithNoRecordedSizeIsRefusedForStaffToReject() {
+        Product page = plainRicePage(ProductStatus.IN_REVIEW);
+
+        assertThatThrownBy(() -> service.addVariant(request(page, sellerSize("1 kg", null)), page, false, NOW))
+                .isInstanceOfSatisfying(BusinessRuleException.class,
+                        e -> assertThat(e.code()).isEqualTo("catalog.change-request-variant-invalid"));
+        verify(products, never()).updateWithVariants(any());
+    }
+
     @Test
     void aPageOnSaleDoesNotTakeAVariantWithoutATaxDecisionUnlessStaffAcceptTheHold() {
         Product page = page(ProductStatus.LIVE, dressNode, variant("AT10000002", UPC, Map.of("Size", "M")));

@@ -188,6 +188,8 @@ type Upstreams struct {
 	LastImageUpload map[string]any
 	// LastCandidateQuery is the body of catalog's last POST /v1/catalog/matches/candidates (query and categoryId only).
 	LastCandidateQuery map[string]string
+	// LastSizeRequest is the body of catalog's last POST /v1/catalog/matches/size-requests.
+	LastSizeRequest map[string]any
 	// LastOfferBody is the body of offers' last POST /v1/offers (S382).
 	LastOfferBody map[string]any
 
