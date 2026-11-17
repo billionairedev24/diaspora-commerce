@@ -39,9 +39,11 @@ spec:
     metadata:
       labels: {app.kubernetes.io/name: postgres}
     spec:
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 999
+        runAsGroup: 999
         fsGroup: 999
         seccompProfile: {type: RuntimeDefault}
       containers:
@@ -63,9 +65,15 @@ spec:
             limits: {memory: 1280Mi}
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true   # KSV-0014. Writable: PGDATA PVC, the unix socket + lock dir and /tmp
             capabilities: {drop: [ALL]}
           volumeMounts:
             - {name: data, mountPath: /var/lib/postgresql/data}
+            - {name: run, mountPath: /var/run/postgresql}   # unix_socket_directories default of the Debian image (socket + .s.PGSQL.5432.lock)
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: run, emptyDir: {medium: Memory, sizeLimit: 8Mi}}
+        - {name: tmp, emptyDir: {sizeLimit: 256Mi}}
   volumeClaimTemplates:
     - metadata:
         name: data

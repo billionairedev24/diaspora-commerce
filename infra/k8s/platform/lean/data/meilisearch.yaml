@@ -26,9 +26,11 @@ spec:
     metadata:
       labels: {app.kubernetes.io/name: meilisearch}
     spec:
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
+        runAsGroup: 1000
         fsGroup: 1000
         seccompProfile: {type: RuntimeDefault}
       containers:
@@ -53,9 +55,13 @@ spec:
             limits: {memory: 768Mi}
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true   # KSV-0014. Writable: the data PVC (index, ./dumps, ./snapshots, task queue) and /tmp
             capabilities: {drop: [ALL]}
           volumeMounts:
             - {name: data, mountPath: /meili_data}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: tmp, emptyDir: {sizeLimit: 256Mi}}
   volumeClaimTemplates:
     - metadata:
         name: data
