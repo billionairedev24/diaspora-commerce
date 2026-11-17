@@ -113,6 +113,15 @@ class CandidateRankerTest {
     }
 
     @Test
+    void aShortNameInsideALongerPageNameIsShownButNeverLikely() {
+        Page p = page("Ground Egusi (Melon Seeds)", null, RICE, RICE_PATH, null);
+        Score s = score("egusi", null, null, null, p);
+        assertThat(s.score()).isGreaterThanOrEqualTo(T.showMin()).isLessThan(T.likelyMin());
+        assertThat(s.kind()).isEqualTo(Kind.SIMILAR);
+        assertThat(score("melon", null, null, null, p).score()).isGreaterThanOrEqualTo(T.showMin());
+    }
+
+    @Test
     void scoresStayBetweenZeroAndOneHundred() {
         Page p = page("x", "Brand", SHOES, SHOES_PATH, null);
         int s = score("completely different thing", "Other", RICE, RICE_PATH, p).score();
