@@ -235,7 +235,9 @@ describe('Home preview', () => {
     await user.selectOptions(screen.getByRole('combobox', { name: 'Catalogue' }), '10000');
     await waitFor(() => expect(urls.some((u) => u.includes('/home/preview') && u.includes('locale=fr') && u.includes('catalog=10000'))).toBe(true));
     const list = within(await screen.findByTestId('preview-decisions'));
-    await waitFor(() => expect(within(list.getByRole('heading', { name: 'Shop by community' }).closest('li')!).getByText('Shown')).toBeInTheDocument());
+    // A 10,000 product catalogue qualifies more modules than the page holds (12): the departments rail is shown and the last to qualify are cut as "page is full".
+    await waitFor(() => expect(within(list.getByRole('heading', { name: 'Shop by department' }).closest('li')!).getByText('Shown')).toBeInTheDocument());
+    expect(within(list.getByRole('heading', { name: 'Shop by community' }).closest('li')!).getByText('The page is full')).toBeInTheDocument();
     interceptStaff(null);
   });
 
