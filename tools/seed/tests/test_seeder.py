@@ -756,3 +756,32 @@ class ServiceProvidersTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SearchIndexCheckTest(unittest.TestCase):
+    def setUp(self):
+        self.s = seeder()
+        self.lines = []
+        self.s.log = self.lines.append
+        now = [0.0]
+        self.s.clock = lambda: now[0]
+        self.s.sleep = lambda n: now.__setitem__(0, now[0] + n)
+
+    def test_found_when_the_indexer_has_caught_up(self):
+        answers = [{"hits": []}, {"hits": [{"atin": "AT00000001"}]}]
+        self.s.svc["search"].on("GET", "/v1/search", lambda *a: answers.pop(0))
+        self.s._check_search_index()
+        self.assertTrue(any("search index has the seeded products" in m for m in self.lines))
+        self.assertEqual(self.s.report.counts[("search index", "ready")], 1)
+
+    def test_empty_index_says_how_to_build_it_and_is_not_a_problem(self):
+        self.s.svc["search"].on("GET", "/v1/search", lambda *a: {"hits": []})
+        self.s._check_search_index()
+        self.assertTrue(any("make reindex-search" in m for m in self.lines))
+        self.assertEqual(self.s.report.counts[("search index", "empty")], 1)
+        self.assertEqual(self.s.report.problems, [])
+
+    def test_search_down_is_a_hint(self):
+        self.s.up["search"] = False
+        self.s._check_search_index()
+        self.assertTrue(any("make reindex-search" in m for m in self.lines))

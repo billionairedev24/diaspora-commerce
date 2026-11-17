@@ -122,6 +122,7 @@ RETAIL_OFFER_WAIT_FIRST = 120.0
 RETAIL_OFFER_WAIT_NEXT = 20.0
 RETAIL_OFFER_ERROR = ("offers did not create the Retail offer from catalog.product.created: check .local/logs/offers.log, "
                       "Kafka (docker ps | grep kafka) and run make seed again (it picks up where it stopped)")
+SEARCH_INDEX_WAIT = 30.0  # the indexer consumes catalog events (Kafka) a moment after the products went live
 TAX_REVIEW_WAIT = 60.0  # tax-returns classifies a variant from catalog.tax.facts.changed (Kafka), a moment after creation
 TAX_REVIEW_REASON = "Demo data approved by the seeder"
 
@@ -300,6 +301,7 @@ class Seeder:
         self.clock: Callable[[], float] = time.time
         self.retail_wait = float(env.get("SEED_RETAIL_OFFER_WAIT") or RETAIL_OFFER_WAIT_FIRST)
         self.tax_wait = float(env.get("SEED_TAX_REVIEW_WAIT") or TAX_REVIEW_WAIT)
+        self.search_wait = float(env.get("SEED_SEARCH_INDEX_WAIT") or SEARCH_INDEX_WAIT)
         self.retail_event_seen = False  # offers answered for one product: the Kafka path works
         self._tax_blocked: set[str] = set()  # ATINs reported as not approvable (once each)
         self.retail_event_lost = False  # a long wait timed out: do not spend it again on every other product
@@ -625,6 +627,34 @@ class Seeder:
             self.log(f"  ✓ {healed} existing product(s) had images gone from the object store: uploaded again")
         self._review_tax()
         self.library.save()
+        self._check_search_index()
+
+    def _check_search_index(self) -> None:
+        """The shop's search (and the seller's "is it already on AfroTransact?" step) reads the search index, which the indexer
+        fills from catalog events. Wait a bounded time for one seeded product to be searchable; when it is not, say how to build
+        the index (the seller step still answers from the catalogue database meanwhile). Never an error: the seed itself is done."""
+        if not D.PRODUCTS:
+            return
+        if not self.up.get("search"):
+            self.log("  ! search is not running: the shop search and the index stay empty. Start it, then: make reindex-search")
+            return
+        probe = D.PRODUCTS[0].title
+        deadline = self.clock() + self.search_wait
+        while True:
+            try:
+                page = self.svc["search"].get("/v1/search", params={"q": probe, "market": "us", "size": 1, "track": "false"})
+            except ApiError:
+                page = None
+            if (page or {}).get("hits"):
+                self.log(f"  ✓ search index has the seeded products (\"{probe}\" is found)")
+                self.report.add("search index", "ready")
+                return
+            if self.clock() > deadline:
+                self.report.add("search index", "empty")
+                self.log(f"  ! the search index does not have \"{probe}\" yet: run  make reindex-search  (idempotent). Until then "
+                         "shop search is empty; the seller product match uses the catalogue database")
+                return
+            self.sleep(2)
 
     def _product(self, p: D.Product, cats: dict[str, Any], types: dict[str, Any]) -> None:
         cat = cats.get(p.path)

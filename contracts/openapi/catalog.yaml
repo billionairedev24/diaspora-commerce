@@ -3185,7 +3185,7 @@ paths:
         first, at most six, scored below the show threshold dropped. `SAME_NAME` is exact (the normalised name, brand and
         size are equal in the category); `SIMILAR` is fuzzy and is only a suggestion: both need the seller's click, and a
         page that states a size needs the one-tap size confirmation. Nothing about any seller is returned (no name, price,
-        stock or cost). An unreachable index answers `searchUnavailable` with no suggestions, never a guess. Limited per
+        stock or cost). When the search index cannot be asked or knows nothing, catalog matches on its own tables (live pages, same words) and counts `catalog_candidates_fallback_total{reason}`; only when that fails too is `searchUnavailable` true, with no suggestions, never a guess. Limited per
         organisation per hour (422 `catalog.match-rate-limited`). Needs catalog:write (sellers) or catalog:read.
       operationId: matchCandidates
       requestBody:
@@ -7786,7 +7786,7 @@ components:
           description: The name is too short to search yet
         searchUnavailable:
           type: boolean
-          description: The search index did not answer; no suggestions, the seller may still add the product
+          description: Neither the search index nor the catalogue database could answer (the database match runs when the index fails or is empty); no suggestions, the seller may still add the product
     MatchDecisionRequest:
       type: object
       required:

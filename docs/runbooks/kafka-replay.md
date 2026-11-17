@@ -298,6 +298,11 @@ Kafka history, so it works whatever the topics and outboxes still hold. It is id
 | any Kubernetes | `kubectl -n <ns> create job indexer-reindex-$(date +%s) --from=cronjob/indexer-reindex`, then `kubectl -n <ns> logs -f job/indexer-reindex-<ts>`. The CronJob is suspended and exists when the indexer chart has `reindex.enabled: true` (off by default; on for the OVH server). Flags: set `reindex.args` or patch the Job's `args`, as `deploy.sh reindex-search` does |
 | a container | `docker run --env-file <the indexer's env> <indexer image> reindex --dry-run` (the image's only binary has both roles) |
 
+`make seed` waits up to 30 s (`SEED_SEARCH_INDEX_WAIT`) for a seeded product to be searchable and prints `make reindex-search` when
+the index stays empty. Until the index is built, the seller's "Is your product already on AfroTransact?" step still works: catalog
+falls back to its own database (`catalog_candidates_fallback_total{reason="search_empty"}` rises), so a steady fallback rate after a
+seed or a deploy means "run the reindex".
+
 **What to run after switching the search engine** (`SEARCH_PROVIDER`): switch it on search *and* indexer, restart both,
 then `make reindex-search` (or the OVH action). The command creates the index and its settings first, then writes.
 `--dry-run` first if you like: it reads the catalog, prints how many products it would write and touches nothing.
