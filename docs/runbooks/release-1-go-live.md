@@ -121,6 +121,41 @@ cd <worktree of origin/release-1>
    Guard: `_deploy.yml` (used by promote) runs `tools/release/image_verdict.py` in a job BEFORE the environment's approval and again in the deploy job: for `prod` and `trial` an `unverified` digest, or an unannotated afrotransact-core / afrotransact-go digest, is refused; `uat` accepts it and writes `image.unverified: true` into `values-uat.yaml`. `check_launch_set.py --require-tags` fails if that marker is in `values-prod.yaml` / `values-trial.yaml`. Tests: `python3 tools/release/test_image_verdict.py` (part of `make release-1-check`).
    **Production needs an image from a fully green verify.** When verify is green, the normal pipeline publishes `<sha>` (replacing the unverified tag of the same sha only if you re-run uat-unverified-image on the same commit: do not) and promote `prod` with a sha built by `core` / `afrotransact-go`. Remove the unverified UAT pin by promoting a verified sha to uat. Remove `uat-unverified-image.yml` once verify is green.
 
+### Image size and build time (measured 2026-11-17; amd64 only for UAT and prod)
+
+| | afrotransact-core | afrotransact-go |
+|---|---|---|
+| Artifact | fat jar 293 MB, now 285 MB; extracted libraries 272 MB after stripping foreign natives | static binary 94 MB (45 MB code, 31 MB function tables) |
+| JRE (jlink) | 68 MB layer (61 MB `lib/modules` + libjvm) | none |
+| Base | distroless cc 37 MB | distroless static 4.8 MB |
+| **Image (layer sum, uncompressed)** | **369 MB**, budget 385 MB | **98.6 MB**, budget 103 MB |
+| Pull size (compressed) | about 300 MB cold; a code change re-pulls about 20 MB (own jars + app layer) | about 40 MB |
+
+Why the Java image is not smaller: the jars are already compressed, so gzip gains nothing, and the weight is real dependencies. Top of the core jar:
+`openai-java-core` 68.5 MB (178 MB of classes: 34,000 classes of the OpenAI SDK, pulled by Spring AI for `ai-gateway`), `stripe-java` 21.6 MB, Temporal
+client 12.8 MB, `grpc-netty-shaded` 10.9 MB, `kafka-clients` 10.2 MB, `bcprov` 7.2 MB (identity), POI 12 MB (catalog imports). **Owner decisions, not taken here:**
+(1) build the UAT core without the AI modules (`-DnoAi`, or drop the `ai-modules` profile): about 85 MB less jar and a faster start (estimate from the
+jar listing, not measured); the modules stay switchable by `MODULE_AI_GATEWAY_ENABLED`; (2) `snappy-java`, `lz4-java` and `zstd-jni` (Kafka compression)
+stay: nothing in the repo sets a compression type, but a broker-side `compression.type` would make consumers need them; (3) Go: the 94 MB comes from
+seven modules with the AWS, Azure, Elasticsearch, Redis, excelize and arrow libraries; build tags per `SEARCH_PROVIDER` / storage provider would cut
+about 15 MB but is a code change.
+
+Removed (safe, behaviour on linux amd64/arm64 identical): macOS, Windows, BSD and other-CPU native libraries inside `zstd-jni`, `snappy-java`, `lz4-java`,
+`grpc-netty-shaded`, the netty QUIC/epoll jars (`java/tools/StripNatives.java` in the Dockerfile, plus `spring-boot-maven-plugin` excludes in
+`apps/core/pom.xml`), GraalVM `META-INF/native-image` metadata, and the Temporal test server (`temporal-testing`, `temporal-test-server`, `cron-utils`,
+pulled in by `temporal-spring-boot-starter`; only an optional, class-conditional auto-configuration uses it). Total: 293 MB to 272 MB of libraries.
+
+Build: the workflows compile on the runner (`.github/actions/java-jar`, `.github/actions/go-binary`: setup-java / setup-go caches) and the Dockerfiles only
+package (`--build-arg JAR_FROM=prebuilt` / `BIN_FROM=prebuilt`); local `docker build` without the arg still compiles inside Docker. Locally the Docker part
+(jdeps, jlink, layers) takes about 45 s with no cache; with a warm cache a code change only rebuilds the own-jars and app layers. Reproducible: two
+`--no-cache` builds with `rewrite-timestamp` give identical layer digests (core without AppCDS).
+
+AppCDS (optional, **off**): `--build-arg APPCDS=true` adds a class-data archive made by a start-up training run (the build has no database, so it
+archives what loads up to the first connection). Measured in the real distroless image, time to the first database connect: 8.2 s to 5.6 s (-31%); cost
++115 MB image (100 MB archive + 14.5 MB JDK base archive), re-pulled on every build, and the image is no longer byte-reproducible. A stale archive only loses
+the speed-up (the JVM prints a warning and starts normally). Turn it on in `build-args` if the 60 s startup budget proves tight on the OVH node, and raise `max-size-mb` to 500.
+Not verified: a `docker build` with the in-Docker Maven/Go compile path (needs network in the build; GitHub Actions is the first real run), the arm64 leg.
+
 ## 5. OVH cluster, Layerbase, Cloudflare edge (who: you; where: your machine)
 
 1. **OVH cluster**: `cd infra/tofu/bootstrap/ovh && tofu init && tofu apply ...` then `cd ../../envs/$ENV` (`cp terraform.tfvars.example terraform.tfvars`: `cloud = "ovh"`, `region = "US-EAST-VA-1"`, `ovh_endpoint = "ovh-us"`, `ovh_service_name = <project id>`, `admin_cidrs = [<your IP>/32]`, uat: `disposable = true`), `tofu plan -out plan.out && tofu apply plan.out`.
