@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
@@ -65,6 +66,12 @@ func (s *sellerFbaImpl) prepare(ctx context.Context, c *domain.Caller, r OpsRequ
 	rt, target, ok := matchIn(fbaRoutes, r)
 	if !ok {
 		return rt, port.StaffCall{}, domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "No such FBA route.")
+	}
+	if r.Method != http.MethodGet && strings.HasPrefix(r.Path, "/inbound") {
+		// Sending stock to AfroTransact is retired (owner decision): we keep no seller stock. Fulfilled by AfroTransact means we
+		// collect from the seller's pickup location and deliver to the customer.
+		return rt, port.StaffCall{}, domain.NewProblem(http.StatusGone, domain.CodeFbaInboundRetired, "Sending stock to AfroTransact has ended",
+			"AfroTransact does not keep sellers' stock. Fulfilled by AfroTransact means we collect orders from your pickup location and deliver them to your customers.")
 	}
 	q, err := passQuery(r.Query, rt.query...)
 	if err != nil {

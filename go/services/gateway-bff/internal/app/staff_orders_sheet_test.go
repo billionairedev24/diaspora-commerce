@@ -191,7 +191,7 @@ func TestLegacySellerShippedMenuSaysOnlyTheOverrideMovesIt(t *testing.T) {
 	got := shipmentTransitionsFor(s, "PICKED_UP", shipmentCaps{orders: true, delivery: true})
 	for _, step := range []string{"IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED", "DELIVERY_FAILED", "RETURNED"} {
 		d := stepFor(got, step)
-		if d.Allowed || d.Blocked == nil || *d.Blocked != blockedSellerUpdates || blockReason(d) != "Old seller-shipped order: use Override status" {
+		if d.Allowed || d.Blocked == nil || *d.Blocked != blockedSellerUpdates || blockReason(d) != "Updated by the seller: use Override status" {
 			t.Fatalf("%s: %+v", step, d)
 		}
 	}

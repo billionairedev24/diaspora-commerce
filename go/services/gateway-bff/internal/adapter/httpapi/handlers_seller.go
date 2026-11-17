@@ -41,6 +41,8 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("GET /v1/seller/orders", h.sellerOrders)
 	route("GET /v1/seller/orders/{orderNumber}", h.sellerOrder)
 	route("POST /v1/seller/orders/{orderNumber}/shipments/{shipmentId}/status", h.shipmentStatus)
+	route("GET /v1/seller/self-shipping", h.sellerSelfShipping)
+	route("PUT /v1/seller/self-shipping", h.setSellerSelfShipping)
 	route("POST /v1/seller/orders/{orderNumber}/shipments/{shipmentId}/rates", h.shippingRates)
 	route("POST /v1/seller/orders/{orderNumber}/shipments/{shipmentId}/labels", h.buyLabel)
 	route("GET /v1/seller/orders/{orderNumber}/shipments/{shipmentId}/label", h.downloadLabel)
@@ -387,13 +389,34 @@ func (h *handlersImpl) shipmentStatus(w http.ResponseWriter, r *http.Request) {
 	var b struct {
 		Status       string `json:"status"`
 		HandoverCode string `json:"handoverCode"`
+		// How a seller who ships it themselves sent it (Mark shipped): a tracking number, an optional courier name, or details.
+		// Only for the seller's own shipping, which exists only behind the staff switch (off by default).
+		ShipNote        string `json:"shipNote"`
+		TrackingNumber  string `json:"trackingNumber"`
+		TrackingCarrier string `json:"trackingCarrier"`
 	}
 	if err := decode(r, &b, false); err != nil {
 		h.reply(w, r, 0, nil, err)
 		return
 	}
 	v, err := h.s.SellerOrders.UpdateStatus(r.Context(), callerFrom(r.Context()), r.Header.Get("Idempotency-Key"),
-		r.PathValue("orderNumber"), r.PathValue("shipmentId"), b.Status, b.HandoverCode)
+		r.PathValue("orderNumber"), r.PathValue("shipmentId"), b.Status, b.HandoverCode,
+		domain.ShipDetails{Note: b.ShipNote, TrackingNumber: b.TrackingNumber, TrackingCarrier: b.TrackingCarrier})
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) sellerSelfShipping(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerOrders.SelfShipping(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) setSellerSelfShipping(w http.ResponseWriter, r *http.Request) {
+	var b domain.SellerSelfShippingInput
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerOrders.SetSelfShipping(r.Context(), callerFrom(r.Context()), b)
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

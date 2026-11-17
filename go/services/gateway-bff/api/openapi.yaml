@@ -5079,9 +5079,9 @@ components:
       properties:
         key:
           type: string
-          enum: [carrier, afrotransact_delivery, pickup, quote_required]
+          enum: [carrier, afrotransact_delivery, pickup, seller_ships, quote_required]
           description: |
-            Launch shipping (listing rules section 3): `afrotransact_delivery` (plain "Delivery": one flat fee set by staff), `pickup` ($0), `quote_required` (the address
+            Launch shipping (listing rules section 3): `afrotransact_delivery` ("Delivered by AfroTransact": AfroTransact collects from the seller and delivers; one flat fee set by staff, free for a member whose plan waives it), `pickup` ("Pick up", $0), `seller_ships` ("Shipped by the seller": only while the staff switch is on, off by default, and only for a seller that set its own flat per-order charge; the seller keeps it, no plan waives it), `quote_required` (the address
             is outside every delivery zone: "Too far for standard delivery. Ask us for a quote"; disabled for payment,
             the order cannot be placed with it) and `carrier` (retired with seller self-shipping: never offered, whatever
             the old staff switch says). There is no express. No label ever names a carrier.
@@ -6347,7 +6347,7 @@ components:
             required: [packageId, option]
             properties:
               packageId: {type: string}
-              option: {type: string, enum: [carrier, afrotransact_delivery, pickup], description: 'quote_required is refused (422 deliverySelections); carrier only while the staff switch is on'}
+              option: {type: string, enum: [carrier, afrotransact_delivery, pickup, seller_ships], description: 'quote_required is refused (422 deliverySelections); carrier is retired; seller_ships only while the staff switch is on (off by default) and the seller set a charge, else 422 SELF_SHIPPING_UNAVAILABLE on deliverySelections'}
               pickupPointId: {type: string}
               quoteId:
                 type: string
@@ -6901,8 +6901,8 @@ components:
               statusLabel: {type: string}
               items: {type: string}
               sellerName: {type: string}
-              deliveryMethod: {type: string, enum: [carrier, express, legacy_seller_shipped, afrotransact_delivery, pickup], description: 'An order the seller shipped themselves before self-shipping was retired is legacy_seller_shipped (history only, never produced for a new order)'}
-              fulfilmentMode: {type: string, enum: [legacy_seller_shipped, afrotransact_delivery, fulfilled_by_afrotransact, pickup, preorder_run], description: 'Who moves it. Two modes exist: Seller pickup and Fulfilled by AfroTransact (afrotransact_delivery from the seller''s location, fulfilled_by_afrotransact from AfroTransact stock); legacy_seller_shipped is history. The app says AfroTransact delivers, and shows delivery proof, only for afrotransact_delivery, fulfilled_by_afrotransact and preorder_run'}
+              deliveryMethod: {type: string, enum: [carrier, express, seller_ships, legacy_seller_shipped, afrotransact_delivery, pickup], description: 'An order the seller shipped themselves before self-shipping was retired is legacy_seller_shipped (history only, never produced for a new order)'}
+              fulfilmentMode: {type: string, enum: [seller_ships, legacy_seller_shipped, afrotransact_delivery, fulfilled_by_afrotransact, pickup, preorder_run], description: 'Who moves it. Two modes exist: Seller pickup and Fulfilled by AfroTransact (afrotransact_delivery from the seller''s location, fulfilled_by_afrotransact from AfroTransact stock); legacy_seller_shipped is history. The app says AfroTransact delivers, and shows delivery proof, only for afrotransact_delivery, fulfilled_by_afrotransact and preorder_run'}
               cancellable: {type: boolean, description: 'Cancel is offered: before the parcel is packed and inside the cancellation window'}
               cancellableUntil: {type: [string, 'null'], format: date-time, description: 'When Cancel stops being offered (the window''s end); null when it is not offered now'}
               carrier: {type: [string, 'null']}
@@ -6961,8 +6961,8 @@ components:
               label: {type: string}
               status: {type: string}
               eta: {type: [string, 'null']}
-              method: {type: string, enum: [carrier, express, legacy_seller_shipped, afrotransact_delivery, pickup]}
-              fulfilmentMode: {type: string, enum: [legacy_seller_shipped, afrotransact_delivery, fulfilled_by_afrotransact, pickup, preorder_run], description: 'Who moves it. Two modes exist: Seller pickup and Fulfilled by AfroTransact (afrotransact_delivery from the seller''s location, fulfilled_by_afrotransact from AfroTransact stock); legacy_seller_shipped is history. The app names AfroTransact as the deliverer, and shows proof, only for afrotransact_delivery, fulfilled_by_afrotransact and preorder_run'}
+              method: {type: string, enum: [carrier, express, seller_ships, legacy_seller_shipped, afrotransact_delivery, pickup]}
+              fulfilmentMode: {type: string, enum: [seller_ships, legacy_seller_shipped, afrotransact_delivery, fulfilled_by_afrotransact, pickup, preorder_run], description: 'Who moves it. Two modes exist: Seller pickup and Fulfilled by AfroTransact (afrotransact_delivery from the seller''s location, fulfilled_by_afrotransact from AfroTransact stock); legacy_seller_shipped is history. The app names AfroTransact as the deliverer, and shows proof, only for afrotransact_delivery, fulfilled_by_afrotransact and preorder_run'}
               proof: {$ref: '#/components/schemas/DeliveryProof'}
               handover: {type: [string, 'null'], enum: [hand, door, desk, null]}
               perishable: {type: boolean}
