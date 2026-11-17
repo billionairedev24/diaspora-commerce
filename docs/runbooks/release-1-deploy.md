@@ -6,6 +6,8 @@ PostgreSQL 16, the Argo CD emulation in `infra/argocd/scripts` with `kustomize` 
 `Chart.yaml` files were invalid YAML, so the helm jobs could not have passed until 2026-11-16). `tofu` was **not** run. The first run of `core.yml` and of the first
 cutover will find things: treat the trial (`ovh-production.md`, "Trial") as the rehearsal. Vendor facts are tagged **UNVERIFIED** as elsewhere in this repository.
 
+**Go-live (UAT dry run, then PROD, one parameterised ordered checklist): [release-1-go-live.md](release-1-go-live.md).**
+
 Decision and success criteria: [ADR 0011](../adr/0011-modular-monolith-release-1.md). Shape and inventory:
 [release-1-architecture.md](../engineering/release-1-architecture.md). Local run: [release-1-local.md](release-1-local.md).
 Production from zero: [ovh-production.md](ovh-production.md). Sizing and cost: [cloud-cost.md](../engineering/cloud-cost.md).

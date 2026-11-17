@@ -157,7 +157,7 @@ jobs:
     # PR previews also when tests fail (reviewers look at the change); production only when everything passed.
     # Fork PRs get no secrets, so they skip.
     if: >-
-      !cancelled() && needs.build.result == 'success'
+      !cancelled() && needs.build.result == 'success' && vars.STORYBOOK_HOST != 'vercel'   # owner decision: Storybook is hosted on Vercel (set the repository variable STORYBOOK_HOST=vercel; docs/runbooks/release-1-go-live.md)
       && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
       && (github.event_name == 'pull_request' || needs.test.result == 'success')
     runs-on: ubuntu-latest
