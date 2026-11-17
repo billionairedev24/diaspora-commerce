@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { HomeSchema, pickRailFill, type ProductSummary, RAIL_FILL_TARGET, type RailFill, type RailFillCandidate, RecentlyViewedSchema, railFillLabelKey } from '../src';
+import { HomeSchema, pickRailFill, type ProductSummary, RAIL_FILL_TARGET, type RailFill, type RailFillCandidate, railFillLabelKey,RecentlyViewedSchema } from '../src';
 import { applyMockRailFills, home, recentlyViewed, recentlyViewedFill, resetDb } from '../src/mocks';
 
 const card = (atin: string, department = 'Groceries'): ProductSummary =>

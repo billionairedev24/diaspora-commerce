@@ -17,6 +17,8 @@ export const siteQueries = {
   /** Departments, communities and Services availability from the live, eligible-only counts. A minute stale at most. */
   navigation: (api: ApiClient) => queryOptions({ queryKey: siteKeys.navigation(), queryFn: ({ signal }) => api.getNavigation(undefined, signal), staleTime: MINUTE }),
   /** The recently viewed rail: cards for the browser's remembered ATINs (most recent first). */
+  recentlyViewedRail: (api: ApiClient, atins: readonly string[]) =>
+    queryOptions({ queryKey: siteKeys.recentlyViewedRail(atins), queryFn: ({ signal }) => api.getRecentlyViewedRail(atins, signal), staleTime: MINUTE, enabled: atins.length > 0 }),
   recentlyViewed: (api: ApiClient, atins: readonly string[]) =>
     queryOptions({ queryKey: siteKeys.recentlyViewed(atins), queryFn: ({ signal }) => api.getRecentlyViewed(atins, signal), staleTime: MINUTE, enabled: atins.length > 0 }),
   deliveryLocation: (api: ApiClient) =>
