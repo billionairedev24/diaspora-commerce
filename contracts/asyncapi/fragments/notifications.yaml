@@ -11,12 +11,13 @@ channels:
   notificationsIdentityEvents:
     address: at.identity.events
     description: >-
-      identity → one-time codes and organisation invitations (payload recipient, never resolved through identity),
+      identity → one-time codes and organisation and staff invitations (payload recipient, never resolved through identity),
       the welcome email, and contact changes that drop the user's cached contact lookup.
     messages:
       notificationsIdentityVerificationRequested: {$ref: '#/components/messages/identityVerificationRequested'}
       notificationsIdentityUserRegistered: {$ref: '#/components/messages/identityUserRegistered'}
       notificationsIdentityInvitationCreated: {$ref: '#/components/messages/identityInvitationCreated'}
+      notificationsIdentityStaffInvitationCreated: {$ref: '#/components/messages/identityStaffInvitationCreated'}
       notificationsIdentityUserPhoneVerified: {$ref: '#/components/messages/identityUserPhoneVerified'}
       notificationsIdentityNotificationPreferencesUpdated: {$ref: '#/components/messages/identityNotificationPreferencesUpdated'}
       notificationsIdentityPasswordResetFederated: {$ref: '#/components/messages/identityPasswordResetFederated'}
@@ -124,7 +125,8 @@ operations:
       identity.password-reset.federated → identity.password_reset.federated (email: sign in with the linked
       provider); identity.password.changed → identity.password_changed (email);
       identity.invitation.created → org.invitation (email to recipient.email only, never resolved through identity:
-      the invitee may have no account); identity.user.registered → account.welcome (email; not for STAFF);
+      the invitee may have no account); identity.staff-invitation.created → account.staff_invitation (email to
+      recipient.email only, the link carries the single-use token in its fragment); identity.user.registered → account.welcome (email; not for STAFF);
       identity.user.phone-verified and identity.notification-preferences.updated send nothing and drop the user's
       cached contact lookup.
   consumeNotificationsOrderEvents:
