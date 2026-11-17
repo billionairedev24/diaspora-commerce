@@ -1,6 +1,6 @@
 'use client';
 
-import { DELIVERY_MAX_PHOTOS, type DeliveryProofView, deliveryPhotoProblem, isApiError } from '@afrotransact/api-client';
+import { DELIVERY_MAX_PHOTOS, deliveryPhotoProblem, type DeliveryProofView, isApiError } from '@afrotransact/api-client';
 import { Button, Dialog, DialogActions, Field, fieldStyles, TextField } from '@afrotransact/ui';
 import { MapPin, Trash } from '@phosphor-icons/react/ssr';
 import { useMutation } from '@tanstack/react-query';
@@ -154,7 +154,7 @@ export function ProofDialog({ open, onOpenChange, mode, orderNumber, existing, o
               {photos.map((p, i) => (
                 <li key={p.assetId} className="flex flex-col items-start gap-1" data-testid="proof-photo">
                   {p.url ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- a local preview or a short-lived signed link, never optimised
+                    // A local preview or a short-lived signed link, never optimised: a plain img.
                     <img src={p.url} alt={t('st.dlv.proof.photoAlt', { n: i + 1 })} className="h-24 w-32 rounded-sm object-cover" />
                   ) : (
                     <span className="flex h-24 w-32 items-center justify-center rounded-sm bg-surface-hover text-xs text-muted">{t('st.dlv.proof.photoSaved')}</span>

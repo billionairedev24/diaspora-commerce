@@ -1,6 +1,6 @@
 import { type BackOffice, type Me, MeSchema } from '@afrotransact/api-client';
 import { screen, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { AccountMenu } from '@/components/shell/AccountMenu';
 import { accountMenuModel } from '@/components/shell/accountMenuItems';

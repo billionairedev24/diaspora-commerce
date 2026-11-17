@@ -1,7 +1,7 @@
 import { defaultStoreConfig, type StoreConfig } from '@afrotransact/api-client';
 import { buildStorefront } from '@afrotransact/api-client/mocks';
 import { resolveTheme } from '@afrotransact/tokens';
-import { type StorefrontCommerce, type StorefrontModel, StorefrontView, type StorefrontQueryState } from '@afrotransact/ui';
+import { type StorefrontCommerce, type StorefrontModel, type StorefrontQueryState,StorefrontView } from '@afrotransact/ui';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import axe from 'axe-core';
 import { describe, expect, it, vi } from 'vitest';

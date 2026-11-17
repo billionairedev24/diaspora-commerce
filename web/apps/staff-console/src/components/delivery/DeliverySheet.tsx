@@ -186,7 +186,7 @@ export function DeliverySheet({ id, onClose }: { id: string | null; onClose: () 
                 {d.proof.photoUrls.map((u, i) =>
                   u ? (
                     <li key={d.proof?.photoAssetIds[i] ?? i}>
-                      {/* eslint-disable-next-line @next/next/no-img-element -- a short-lived signed link to a private photo */}
+                      {/* A short-lived signed link to a private photo: a plain img. */}
                       <img src={u} alt={t('st.dlv.proof.photoAlt', { n: i + 1 })} className="h-32 w-44 rounded-sm object-cover" data-testid="delivery-proof-photo" />
                     </li>
                   ) : (

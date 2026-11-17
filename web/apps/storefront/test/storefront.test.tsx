@@ -1,16 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { buildStorefront } from '@afrotransact/api-client/mocks';
 import { defaultStoreConfig, type StoreConfig } from '@afrotransact/api-client';
+import { buildStorefront } from '@afrotransact/api-client/mocks';
 import { resolveTheme } from '@afrotransact/tokens';
-import { StorefrontView, type StorefrontCommerce, type StorefrontModel } from '@afrotransact/ui';
+import { type StorefrontCommerce, type StorefrontModel,StorefrontView } from '@afrotransact/ui';
 import { fireEvent, screen, within } from '@testing-library/react';
 import axe from 'axe-core';
 import { describe, expect, it, vi } from 'vitest';
 
-import { storefrontRedirectPath } from '@/lib/store/redirects';
 import { storefrontJsonLd } from '@/lib/seo/jsonld';
+import { storefrontRedirectPath } from '@/lib/store/redirects';
 
 import { renderWithProviders } from './render';
 
