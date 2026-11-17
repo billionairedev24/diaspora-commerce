@@ -53,6 +53,9 @@ type CatalogMatch struct {
 	CreateBlockers []Blocker `json:"createBlockers"`
 	Suggestion     *string   `json:"suggestion"`
 	Message        *string   `json:"message"`
+	// AllowedConditions is what the page's category allows (listing rules D9): NEW alone where the condition is not asked, so Seller
+	// Center hides the field and the server uses NEW.
+	AllowedConditions []string `json:"allowedConditions,omitempty"`
 }
 
 // MatchInput is a barcode (UPC, EAN, GTIN, ISBN): the optional exact shortcut of "Add a product".
@@ -90,6 +93,8 @@ type MatchCandidate struct {
 	SellerCount *int      `json:"sellerCount"`
 	CanOffer    bool      `json:"canOffer"`
 	Blockers    []Blocker `json:"blockers"`
+	// AllowedConditions is what the page's category allows (listing rules D9): NEW alone where the condition is not asked.
+	AllowedConditions []string `json:"allowedConditions"`
 }
 
 // CandidateList is the answer to the search box: up to six pages, the category suggestion and whether the search could answer.
@@ -114,6 +119,34 @@ type DecisionInput struct {
 	CategoryID    string `json:"categoryId,omitempty"`
 	ATIN          string `json:"atin,omitempty"`
 	SizeConfirmed bool   `json:"sizeConfirmed"`
+}
+
+// SizeRequestInput is "my size is different": the seller sells another size, weight or pack of a page that was shown and asks for it to
+// be added as one more variant of the page (catalogue staff check it). It carries the same query and category the list was searched with.
+type SizeRequestInput struct {
+	Query      string `json:"query"`
+	CategoryID string `json:"categoryId,omitempty"`
+	ATIN       string `json:"atin"`
+	Size       string `json:"size"`
+	Note       string `json:"note,omitempty"`
+}
+
+// Outcomes of a size request.
+const (
+	SizeRequested        = "REQUESTED"
+	SizeAlreadyRequested = "ALREADY_REQUESTED"
+	SizeAlreadyOnPage    = "ALREADY_ON_PAGE"
+)
+
+// SizeRequestResult is catalog's answer: filed for review, already filed, or the page already has that size (sell that variant).
+type SizeRequestResult struct {
+	Outcome      string     `json:"outcome"`
+	Size         *string    `json:"size"`
+	RequestID    *string    `json:"requestId"`
+	ExistingATIN *string    `json:"existingAtin"`
+	ReviewDueAt  *time.Time `json:"reviewDueAt"`
+	CanOffer     bool       `json:"canOffer"`
+	Blockers     []Blocker  `json:"blockers"`
 }
 
 // MatchDecision is catalog's recorded answer.
@@ -196,6 +229,8 @@ type ChangeRequest struct {
 	DecidedAt   *time.Time     `json:"decidedAt"`
 	Reason      *string        `json:"reason"`
 	Resolution  *string        `json:"resolution"`
+	// ResultATIN is set when staff applied a NEW_VARIANT: the variant that now exists, so the seller can add price and stock to it.
+	ResultATIN *string `json:"resultAtin"`
 }
 
 // ChangeRequestPage is one page of the organisation's requests.

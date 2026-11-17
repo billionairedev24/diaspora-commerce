@@ -2046,7 +2046,7 @@ paths:
         seller types ("basmati rice 5kg"); name, brand and size are read from it and the category is the optional chip
         (`categoryId`). Up to six live pages with a real photo, best first, each with its photo, brand, size and the number of
         sellers (`sellerCount`, null when offers cannot be read). `kind` is `SAME_NAME` or `SIMILAR`; both always need the
-        seller's click. Nothing about any seller is returned. `searchUnavailable` means no suggestions, never a guess.
+        seller's click. Nothing about any seller is returned. `searchUnavailable` means neither the search index nor catalog's database match could answer: no suggestions, never a guess.
         429 `RATE_LIMITED` when the organisation searched too often.
       requestBody:
         required: true
@@ -2068,7 +2068,7 @@ paths:
       description: |
         catalog `POST /v1/catalog/matches/decisions` (Listings: EDIT). `SELL_EXISTING` names a page that was in the list and
         carries the one-tap size answer (`sizeConfirmed`, 422 `SIZE_UNCONFIRMED` when the page states a size and it is not
-        true; 422 `CHOICE_NOT_SHOWN` for a page that was not in the list); the answer says whether the seller may sell it
+        true; the seller whose size is different uses `POST /v1/seller/catalog/candidates/size-requests` instead of being stopped; 422 `CHOICE_NOT_SHOWN` for a page that was not in the list); the answer says whether the seller may sell it
         and the next step is the price, quantity and condition form. `NONE_OF_THESE` is recorded so staff can review likely
         duplicates and never blocks adding the product.
       requestBody:
@@ -2076,6 +2076,34 @@ paths:
         content: {application/json: {schema: {$ref: '#/components/schemas/DecisionRequest'}}}
       responses:
         '200': {description: Recorded, content: {application/json: {schema: {$ref: '#/components/schemas/MatchDecision'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/catalog/candidates/size-requests:
+    post:
+      tags: [Matching]
+      operationId: matchSizeRequest
+      security: [{sessionCookie: []}]
+      summary: Sell a different size, weight or pack of a page that exists
+      description: |
+        catalog `POST /v1/catalog/matches/size-requests` (Listings: EDIT). For the seller who says "No, a different size" on
+        a candidate: their size (`size`, nothing but the size, "1 kg", "500 ml", "6 pack") is asked for as one more variant of
+        the page, which catalogue staff check like any new variant; nobody is stopped by a size and nobody creates a duplicate
+        page. Send the same `query` and `categoryId` the list was searched with. `outcome` is `REQUESTED` (filed, answer
+        within `reviewDueAt`), `ALREADY_REQUESTED` (the same size is already waiting) or `ALREADY_ON_PAGE` (the page already
+        has that size: sell `existingAtin`, which is never shown). When staff apply it, the request in
+        `GET /v1/seller/change-requests` carries `resultAtin` and the seller adds price and stock with `POST /v1/seller/offers`.
+        422 `SIZE_INVALID` (not a size with a unit), `SIZE_PAGE_UNKNOWN` (the page states no size), `SIZE_NOT_ADDABLE` (the page
+        varies by something else, add the product as new), `SIZE_REQUEST_BLOCKED` (the seller may not sell on the page yet),
+        `CHOICE_NOT_SHOWN`; 429 `RATE_LIMITED` when too many sizes are waiting.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/SizeRequestInput'}}}
+      responses:
+        '200': {description: The answer, content: {application/json: {schema: {$ref: '#/components/schemas/SizeRequestResult'}}}}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
@@ -6495,6 +6523,7 @@ components:
         sellerCount: {type: [integer, 'null'], description: How many sellers list the page (null when not known)}
         canOffer: {type: boolean}
         blockers: {type: array, items: {$ref: '#/components/schemas/Blocker'}}
+        allowedConditions: {type: array, items: {$ref: '#/components/schemas/OfferCondition'}, description: 'What the page category allows (listing rules D9). NEW alone where the condition is not asked (groceries, food, beauty, health, baby, pets, clothing, jewelry, consumables); more only where used or renewed items are real (electronics, books, toys, furniture, kitchenware, sports and office goods). The offer form shows the condition field only when more than NEW is listed.'}
     CandidateList:
       type: object
       required: [candidates, tooShort, searchUnavailable]
@@ -6503,7 +6532,7 @@ components:
         suggestedCategory: {oneOf: [{$ref: '#/components/schemas/MatchCategory'}, {type: 'null'}]}
         category: {oneOf: [{$ref: '#/components/schemas/MatchCategory'}, {type: 'null'}]}
         tooShort: {type: boolean, description: The name is too short to search yet}
-        searchUnavailable: {type: boolean, description: The search did not answer; the seller may still add the product as new}
+        searchUnavailable: {type: boolean, description: Neither the search index nor the catalogue database answered; the seller may still add the product as new}
     DecisionRequest:
       type: object
       required: [choice, query]
@@ -6524,6 +6553,27 @@ components:
         canOffer: {type: boolean}
         blockers: {type: array, items: {$ref: '#/components/schemas/Blocker'}}
         possibleDuplicateQueued: {type: boolean}
+    SizeRequestInput:
+      type: object
+      required: [query, atin, size]
+      additionalProperties: false
+      properties:
+        query: {type: string, minLength: 1, maxLength: 200}
+        categoryId: {type: string, format: uuid}
+        atin: {type: string, pattern: '^AT[0-9A-Z]{8}$', description: 'The page or one of its variants, as shown'}
+        size: {type: string, minLength: 1, maxLength: 40, example: 1 kg, description: 'Nothing but the size: 1 kg, 500 ml, 6 pack'}
+        note: {type: string, maxLength: 500, description: Optional words for the reviewer}
+    SizeRequestResult:
+      type: object
+      required: [outcome, canOffer, blockers]
+      properties:
+        outcome: {type: string, enum: [REQUESTED, ALREADY_REQUESTED, ALREADY_ON_PAGE]}
+        size: {type: [string, 'null'], description: 'The size as catalog spells it, for example 1 kg'}
+        requestId: {type: [string, 'null'], format: uuid}
+        existingAtin: {type: [string, 'null'], description: 'ALREADY_ON_PAGE: the variant that has the size (never shown)'}
+        reviewDueAt: {type: [string, 'null'], format: date-time}
+        canOffer: {type: boolean}
+        blockers: {type: array, items: {$ref: '#/components/schemas/Blocker'}}
     CatalogMatch:
       type: object
       required: [result, canOffer, blockers, canCreate, createBlockers, variants]
@@ -6549,6 +6599,7 @@ components:
         createBlockers: {type: array, items: {$ref: '#/components/schemas/Blocker'}}
         suggestion: {type: [string, 'null'], description: A corrected barcode when only the check digit is wrong}
         message: {type: [string, 'null'], description: Plain words for INVALID and RESTRICTED}
+        allowedConditions: {type: array, items: {$ref: '#/components/schemas/OfferCondition'}, description: 'What the page category allows (listing rules D9). NEW alone where the condition is not asked (groceries, food, beauty, health, baby, pets, clothing, jewelry, consumables); more only where used or renewed items are real (electronics, books, toys, furniture, kitchenware, sports and office goods). The offer form shows the condition field only when more than NEW is listed.'}
     OfferCondition: {type: string, enum: [NEW, RENEWED, USED_LIKE_NEW, USED_VERY_GOOD, USED_GOOD, USED_ACCEPTABLE]}
     OfferOnlyInput:
       type: object
@@ -6557,7 +6608,7 @@ components:
       additionalProperties: false
       properties:
         atin: {type: string, pattern: '^AT[0-9A-Z]{8}$', description: The matched variant}
-        sellerSku: {type: string, maxLength: 40, description: Generated when blank}
+        sellerSku: {type: string, maxLength: 40, description: 'Optional and not sent by Seller Center for a page that exists: the catalogue item (its ATIN) already identifies it. Generated when blank.'}
         condition: {$ref: '#/components/schemas/OfferCondition'}
         conditionNote: {type: string, maxLength: 200, description: Required for any condition other than NEW}
         priceMinor: {type: integer, format: int64, minimum: 1}
@@ -6618,6 +6669,7 @@ components:
         decidedAt: {type: [string, 'null'], format: date-time}
         reason: {type: [string, 'null'], description: 'Staff reason, shown to the seller'}
         resolution: {type: [string, 'null']}
+        resultAtin: {type: [string, 'null'], description: 'NEW_VARIANT that staff applied: the variant that now exists on the page; the seller adds price and stock to it (never shown)'}
     ChangeRequestPage:
       type: object
       required: [items, total, page, size]
