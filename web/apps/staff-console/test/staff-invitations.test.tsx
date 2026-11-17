@@ -49,7 +49,7 @@ describe('Staff accounts: invitations', () => {
     await user.type(within(dialog).getByLabelText(/^Why/), reason);
     await user.click(send);
     // identity limits staff to the work domain: the answer lands on the field
-    expect(await within(dialog).findByText(/afrotransact.com address/)).toBeInTheDocument();
+    expect(await within(dialog).findByText(/company email address/)).toBeInTheDocument();
     await user.clear(within(dialog).getByLabelText(/^Work email/));
     await user.type(within(dialog).getByLabelText(/^Work email/), 'ada.obi@afrotransact.com');
     await user.click(within(dialog).getByRole('button', { name: 'Send invitation' }));
