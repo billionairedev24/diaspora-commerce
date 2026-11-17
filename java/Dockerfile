@@ -22,7 +22,8 @@ COPY . .
 RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -q -pl "${PROJECT}" -am package -DskipTests \
     && cp "$(ls ${PROJECT}/target/${JAR_GLOB} | grep -v -- '-plain.jar' | head -1)" /app.jar \
     && java -Djarmode=tools -jar /app.jar extract --destination /x \
-    && mv "/x/$(ls /x | grep -v '^lib$' | head -1)" /x/app.jar
+    && f="$(ls /x | grep -v '^lib$' | head -1)" \
+    && { [ "$f" = app.jar ] || mv "/x/$f" /x/app.jar; }
 
 # Modules the service needs: jdeps finds what its jars reference; the fixed list covers what Spring, JDBC, TLS, Kafka,
 # JMX/Micrometer and reflection-heavy libraries load at runtime without a static reference.
