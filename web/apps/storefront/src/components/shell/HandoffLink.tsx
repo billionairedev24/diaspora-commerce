@@ -3,7 +3,8 @@ import { type ComponentProps } from 'react';
 
 import { isHandoffHref } from '@/lib/sell/handoff';
 
-type Props = ComponentProps<typeof Link>;
+// 'key' is dropped: it is React's own attribute (never a prop) and its type differs between the two @types/react copies Next and the app can resolve.
+type Props = Omit<ComponentProps<typeof Link>, 'key'>;
 
 /**
  * A link that is a plain <a> where the address hands over to another app (/sell, /provide answer with a cross-origin
