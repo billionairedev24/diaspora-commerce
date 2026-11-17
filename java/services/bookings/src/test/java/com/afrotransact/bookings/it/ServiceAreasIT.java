@@ -133,7 +133,8 @@ class ServiceAreasIT extends BookingsIntegrationTest {
         String token = "dflt" + UUID.randomUUID().toString().substring(0, 8);
         // From Georgetown: Hutto ~9 mi, Austin ~28 mi. Hair default 20, catering default 40 (shop-type services).
         placed("78701", 5, token, "salon", "hair & beauty", 9_000, List.of("IN_PERSON"));
-        placed("78701", 5, token, "kitchen", "catering", 9_000, List.of("IN_PERSON"));
+        // catering providers declare at least 10 miles (AreaPolicy: 40 default, 10 to 100)
+        placed("78701", 10, token, "kitchen", "catering", 9_000, List.of("IN_PERSON"));
         JsonNode hair = ok(send("GET", "/v1/public/services/search?q=" + token + "&zip=78626&category=hair%20%26%20beauty",
                 null, null));
         assertThat(hair.path("radiusMiles").asInt()).isEqualTo(20);
