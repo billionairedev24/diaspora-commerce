@@ -11,3 +11,4 @@ export function cssVar(name: TokenName): `var(${TokenName})` {
   return `var(${name})`;
 }
 export * from './storefront-theme';
+export * from './brand-palette';

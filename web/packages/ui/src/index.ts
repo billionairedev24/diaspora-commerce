@@ -67,6 +67,7 @@ export {
   TextLinkButton,
   type TextLinkButtonProps,
   textLinkClassName} from './flat/FlatPage';
+export { type BrandColourLabels, BrandColourPicker, type BrandColourPickerProps, DEFAULT_BRAND_COLOUR_LABELS } from './form/BrandColourPicker';
 export { Checkbox, type CheckboxProps } from './form/Checkbox';
 export { ChipGroup, type ChipGroupProps } from './form/ChipGroup';
 export { Combobox, type ComboboxOption, type ComboboxProps } from './form/Combobox';
