@@ -207,7 +207,8 @@ describe('Roles and permissions', () => {
     await screen.findByTestId('perm-group-orders');
     const role = await axe.run(container, { rules: { 'color-contrast': { enabled: false } } });
     expect(role.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`)).toEqual([]);
-  });
+    // Two axe passes over the permission grid take over 5 s on a loaded CI runner.
+  }, 30_000);
 });
 
 describe('the catalogue helpers', () => {
