@@ -269,6 +269,16 @@ public record Product(UUID id, Atin atin, ListingOwner owner, UUID categoryId, U
                 preorderEligible, shipsNow, details);
     }
 
+    /**
+     * The same page varying by another theme, with its variants (a page without variations that is given a second size: staff
+     * approval, SizeVariantRules). The status is not touched.
+     */
+    public Product withVariationTheme(String newTheme, List<Variant> newVariants) {
+        return new Product(id, atin, owner, categoryId, categoryRequestId, productTypeCode, title, attributes,
+                images, newTheme, newVariants, status, moderationNote, createdAt, updatedAt, version,
+                preorderEligible, shipsNow, details);
+    }
+
     private Product withStatus(ProductStatus next, String note, Instant now) {
         return new Product(id, atin, owner, categoryId, categoryRequestId, productTypeCode, title, attributes,
                 images, variationTheme, variants, next, note, createdAt, now, version, preorderEligible, shipsNow,

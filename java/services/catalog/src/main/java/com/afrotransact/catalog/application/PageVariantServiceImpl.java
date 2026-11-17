@@ -25,6 +25,7 @@ import com.afrotransact.catalog.domain.ProductType;
 import com.afrotransact.catalog.domain.Variant;
 import com.afrotransact.catalog.domain.VariantDraft;
 import com.afrotransact.catalog.domain.VariantOptions;
+import com.afrotransact.catalog.domain.VariationTheme;
 import com.afrotransact.catalog.domain.tax.SellerSkus;
 import com.afrotransact.catalog.domain.tax.VariantTax;
 import com.afrotransact.catalog.port.CategoryRepository;
@@ -39,6 +40,8 @@ import org.springframework.stereotype.Component;
 class PageVariantServiceImpl implements PageVariantService {
 
     static final String INVALID = "catalog.change-request-variant-invalid";
+    /** The payload marker of a request a seller filed from "a different size" (SizeVariantRules). */
+    static final String SELLER_SIZE = "SELLER_SIZE";
 
     private final ProductRepository products;
     private final CategoryRepository categories;
@@ -65,10 +68,15 @@ class PageVariantServiceImpl implements PageVariantService {
     }
 
     @Override
-    public Added addVariant(ProductChangeRequest r, Product page, boolean holdPageForTax, Instant now) {
-        if (page.variants().isEmpty() || page.variationTheme().isBlank()) {
+    public Added addVariant(ProductChangeRequest r, Product requested, boolean holdPageForTax, Instant now) {
+        boolean sellerSize = SELLER_SIZE.equals(ChangeRequestPolicy.text(r.payload(), "source"));
+        Product page = requested;
+        if (page.variants().isEmpty() || (page.variationTheme().isBlank() && !sellerSize)) {
             throw invalid("This page has no sizes or colours to add to. Reject the request, or ask the page owner to add a "
                     + "variation theme first.");
+        }
+        if (page.variationTheme().isBlank()) {
+            page = givenSizeTheme(r, page);
         }
         CategoryNode node = node(page);
         ProductType type = categories.findProductType(page.productTypeCode())
@@ -87,7 +95,7 @@ class PageVariantServiceImpl implements PageVariantService {
         requireConsentWhenLive(page, holdPageForTax);
 
         Atin atin = ids.nextAtin();
-        String gtin = barcode(r, page);
+        String gtin = barcode(r, page, sellerSize);
         Variant added = new Variant(UUID.randomUUID(), atin, ownerSku(page.owner().orgId(), atin), gtin, gtin == null,
                 options, template.priceMinor(), template.currency(), 0, null, List.of(pictures), true,
                 tax.variants().getFirst(), template.packaging());
@@ -236,13 +244,34 @@ class PageVariantServiceImpl implements PageVariantService {
         return options;
     }
 
-    /** The barcode of the new variant: a valid one nobody else uses, or none on a page whose variants have none either. */
-    private String barcode(ProductChangeRequest r, Product page) {
+    /**
+     * A page without variations that is given a second size: it varies by "Size" from now on, and its only variant takes the
+     * size the page had (stored in the request when the seller filed it, {@code existingOptions}), so nothing else changes.
+     */
+    private Product givenSizeTheme(ProductChangeRequest r, Product page) {
+        Map<String, String> own = new LinkedHashMap<>();
+        if (r.payload().get("existingOptions") instanceof Map<?, ?> map) {
+            map.forEach((k, v) -> own.put(String.valueOf(k).strip(), String.valueOf(v).strip()));
+        }
+        if (own.isEmpty() || page.variants().size() != 1) {
+            throw invalid("This page states no size to add another one to. Reject the request, or ask the page owner to "
+                    + "state the size first.");
+        }
+        Variant first = page.variants().getFirst().withOptions(own);
+        return page.withVariationTheme(VariationTheme.SIZE.name(), List.of(first));
+    }
+
+    /**
+     * The barcode of the new variant: a valid one nobody else uses, or none on a page whose variants have none either. A
+     * seller's different size may have none whatever the page's other variants have (nobody is asked for a barcode they do not
+     * have; the variant is found by its ATIN and its size, and staff may add the barcode later).
+     */
+    private String barcode(ProductChangeRequest r, Product page, boolean sellerSize) {
         String typed = ChangeRequestPolicy.text(r.payload(), "gtin");
         boolean exempt = Boolean.parseBoolean(ChangeRequestPolicy.text(r.payload(), "gtinExempt"));
         boolean pageHasBarcodes = page.variants().stream().anyMatch(v -> v.gtin() != null && !v.gtin().isBlank());
         if (typed.isEmpty()) {
-            if (exempt && !pageHasBarcodes) {
+            if (sellerSize || (exempt && !pageHasBarcodes)) {
                 return null;
             }
             throw invalid(pageHasBarcodes ? "Give the barcode of the new variant: the other variants of this page have one"

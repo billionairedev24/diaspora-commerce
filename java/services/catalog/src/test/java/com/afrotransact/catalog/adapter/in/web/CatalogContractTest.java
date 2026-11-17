@@ -104,7 +104,8 @@ class CatalogContractTest {
         CandidateMatchService.Candidate candidate = new CandidateMatchService.Candidate("AT00000001", "AT00000002",
                 "Tilda Basmati Rice 5kg", "Tilda", new CandidateMatchService.CandidateImage("https://cdn.example/a.jpg", 1200, 1200),
                 "Grocery › Rice", "5 kg", List.of(new CandidateMatchService.CandidateVariant("AT00000002", Map.of())),
-                CandidateRanker.Kind.SAME_NAME, true, true, List.of(new Blocker("catalog.page-not-live", "Not on sale")));
+                CandidateRanker.Kind.SAME_NAME, true, true, List.of(new Blocker("catalog.page-not-live", "Not on sale")),
+                List.of(ItemCondition.NEW));
         CandidateMatchService.Category category = new CandidateMatchService.Category(UUID.randomUUID(), "Grocery › Rice");
         assertResponseMatches(CandidateDtos.CandidateResponse.of(new CandidateMatchService.CandidateResult(List.of(candidate),
                 category, category, false, false)), "CandidateSearchResult");
@@ -114,6 +115,10 @@ class CatalogContractTest {
         assertResponseMatches(CandidateDtos.CategoryDto.of(category), "MatchCategory");
         assertResponseMatches(CandidateDtos.DecisionResponse.of(new CandidateMatchService.DecisionResult(UUID.randomUUID(),
                 CandidateMatchService.Choice.SELL_EXISTING, "AT00000002", true, List.of(), false)), "MatchDecisionResult");
+        assertResponseMatches(CandidateDtos.SizeRequestResponse.of(new CandidateMatchService.SizeRequestResult(
+                CandidateMatchService.SizeRequestOutcome.REQUESTED, "1 kg", UUID.randomUUID(), null,
+                Instant.parse("2026-11-19T10:00:00Z"), false, List.of())), "SizeRequestResult");
+        assertRequestAccepts(CandidateDtos.SizeRequestRequest.class, "SizeRequestInput");
         assertRequestAccepts(CandidateDtos.CandidateRequest.class, "CandidateSearchRequest");
         assertRequestAccepts(CandidateDtos.DecisionRequest.class, "MatchDecisionRequest");
     }

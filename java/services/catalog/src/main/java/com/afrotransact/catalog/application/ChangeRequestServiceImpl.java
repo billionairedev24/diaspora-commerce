@@ -334,7 +334,26 @@ class ChangeRequestServiceImpl implements ChangeRequestService {
     private static ChangeRequestView view(ProductChangeRequest r, Product page, Instant now) {
         boolean overdue = r.open() && r.slaDueAt() != null && now.isAfter(r.slaDueAt());
         return new ChangeRequestView(r, page == null ? null : page.title(), overdue,
-                BusinessDays.hoursBetween(r.requestedAt(), now));
+                BusinessDays.hoursBetween(r.requestedAt(), now), resultAtin(r, page));
+    }
+
+    /** The variant a NEW_VARIANT request created: the one on the page with the options the request named. */
+    private static String resultAtin(ProductChangeRequest r, Product page) {
+        if (page == null || r.type() != ChangeRequestType.NEW_VARIANT || r.status() != ChangeRequestStatus.APPLIED
+                || !(r.payload().get("options") instanceof Map<?, ?> asked)) {
+            return null;
+        }
+        return page.variants().stream().filter(v -> sameOptions(v.options(), asked)).map(v -> v.atin().value())
+                .findFirst().orElse(null);
+    }
+
+    private static boolean sameOptions(Map<String, String> have, Map<?, ?> asked) {
+        if (have.size() != asked.size()) {
+            return false;
+        }
+        return asked.entrySet().stream().allMatch(e -> have.entrySet().stream()
+                .anyMatch(h -> h.getKey().equalsIgnoreCase(String.valueOf(e.getKey()).strip())
+                        && h.getValue().strip().equalsIgnoreCase(String.valueOf(e.getValue()).strip())));
     }
 
     private static Map<String, String> stringMap(Object value) {

@@ -58,14 +58,16 @@ final class ChangeRequestDtos {
                                  @Schema(description = "Staff reason, shown to the requester") String reason,
                                  @Schema(description = "CORRECT_GTIN, MOVE_VARIANT, SPLIT_VARIANT or MERGE when staff "
                                          + "resolved a WRONG_MATCH or DUPLICATE_PAGE") String resolution,
-                                 long version) {
+                                 long version,
+                                 @Schema(description = "NEW_VARIANT that staff applied: the ATIN of the variant that now exists on the page, "
+                                         + "so the seller can add price and stock to it; null otherwise") String resultAtin) {
 
         static ChangeRequestResponse of(ChangeRequestView v) {
             ProductChangeRequest r = v.request();
             return new ChangeRequestResponse(r.id(), r.atin(), r.productId(), v.title(), r.type(),
                     r.field().isEmpty() ? null : r.field(), r.payload(), r.note(), r.status(), r.requestedByOrg(),
                     r.requestedBy(), r.requestedAt(), r.slaDueAt(), v.overdue(), v.ageHours(), r.decidedBy(),
-                    r.decidedAt(), r.reason(), r.resolution(), r.version());
+                    r.decidedAt(), r.reason(), r.resolution(), r.version(), v.resultAtin());
         }
     }
 

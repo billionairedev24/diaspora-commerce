@@ -110,7 +110,7 @@ class CatalogMatchServiceImpl implements CatalogMatchService {
                 p.status().name(), p.title(), p.attributes().get(BrandKeys.NAME),
                 image == null ? null : new PageImage(image.url(), image.width(), image.height()),
                 node == null ? null : node.path(), p.categoryId(), v.options(), siblings,
-                e.canOffer(), e.blockers(), false, create, null, null);
+                e.canOffer(), e.blockers(), false, create, null, null, e.allowedConditions());
     }
 
     private MatchResult noMatch(GtinReader.Reading reading) {

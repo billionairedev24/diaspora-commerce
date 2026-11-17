@@ -4,6 +4,8 @@ import com.afrotransact.catalog.adapter.in.web.CandidateDtos.CandidateRequest;
 import com.afrotransact.catalog.adapter.in.web.CandidateDtos.CandidateResponse;
 import com.afrotransact.catalog.adapter.in.web.CandidateDtos.DecisionRequest;
 import com.afrotransact.catalog.adapter.in.web.CandidateDtos.DecisionResponse;
+import com.afrotransact.catalog.adapter.in.web.CandidateDtos.SizeRequestRequest;
+import com.afrotransact.catalog.adapter.in.web.CandidateDtos.SizeRequestResponse;
 import com.afrotransact.catalog.adapter.in.web.MatchDtos.EligibilityRequest;
 import com.afrotransact.catalog.adapter.in.web.MatchDtos.EligibilityResponse;
 import com.afrotransact.catalog.adapter.in.web.MatchDtos.MatchRequest;
@@ -64,6 +66,21 @@ class MatchController {
     @PostMapping("/v1/catalog/matches/decisions")
     DecisionResponse decision(@Valid @RequestBody DecisionRequest request) {
         return DecisionResponse.of(candidates.decide(request.toCommand()));
+    }
+
+    @Operation(operationId = "matchSizeRequest",
+            summary = "Sell a different size of a page that exists: ask for it to be added as a variant",
+            description = "For a seller whose product is on the page but in another size, weight or pack. Files a "
+                    + "NEW_VARIANT request that catalogue staff check like any new variant (own ATIN under the page); "
+                    + "no duplicate page is created and the page is not changed by this call. A size the page already has "
+                    + "answers ALREADY_ON_PAGE with the variant to sell; the same size asked twice answers "
+                    + "ALREADY_REQUESTED. 422 catalog.variant-size-invalid, catalog.variant-page-size-unknown, "
+                    + "catalog.variant-theme-unsupported, catalog.variant-request-blocked, catalog.match-choice-not-shown, "
+                    + "catalog.match-rate-limited (too many waiting). The seller adds price and stock once the request is "
+                    + "applied (the variant ATIN is on the request).")
+    @PostMapping("/v1/catalog/matches/size-requests")
+    SizeRequestResponse sizeRequest(@Valid @RequestBody SizeRequestRequest request) {
+        return SizeRequestResponse.of(candidates.requestSize(request.toCommand()));
     }
 
     @Operation(operationId = "offerEligibility",

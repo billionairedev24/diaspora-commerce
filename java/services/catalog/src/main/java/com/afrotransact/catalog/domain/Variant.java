@@ -51,6 +51,12 @@ public record Variant(UUID id, Atin atin, String sellerSku, String gtin, boolean
                 false, null);
     }
 
+    /** The same variant with other options (a page without variations that is given a second size). */
+    public Variant withOptions(Map<String, String> next) {
+        return new Variant(id, atin, sellerSku, gtin, gtinExempt, next, priceMinor, currency, quantity,
+                compareAtMinor, images, sellerSkuGenerated, tax, packaging);
+    }
+
     /** The same variant with another tax state. */
     public Variant withTax(VariantTax next) {
         return new Variant(id, atin, sellerSku, gtin, gtinExempt, options, priceMinor, currency, quantity,
