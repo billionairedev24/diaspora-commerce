@@ -69,7 +69,33 @@ func NewIngest(notifier Notifier, cfg IngestConfig, log *slog.Logger) Ingest {
 	if cfg.AudiencePageSize <= 0 {
 		cfg.AudiencePageSize = 500
 	}
+	if cfg.Resolver != nil {
+		cfg.Resolver = goneRecipientLogger{next: cfg.Resolver, log: log}
+	}
 	return &ingestImpl{notifier: notifier, cfg: cfg, log: log}
+}
+
+// goneRecipientLogger notes (debug, no ids) that identity does not know a recipient or organisation (404: deleted or
+// never existed). The ingest skips such recipients: it is not an error and never retried.
+type goneRecipientLogger struct {
+	next port.RecipientResolver
+	log  *slog.Logger
+}
+
+func (g goneRecipientLogger) Contact(ctx context.Context, userID string) (port.Contact, error) {
+	c, err := g.next.Contact(ctx, userID)
+	if errors.Is(err, domain.ErrRecipientNotFound) {
+		g.log.DebugContext(ctx, "recipient not found in identity (deleted account); skipped")
+	}
+	return c, err //nolint:wrapcheck // passes domain.ErrRecipientNotFound and upstream errors through unchanged
+}
+
+func (g goneRecipientLogger) OrgOwners(ctx context.Context, orgID string) ([]string, error) {
+	owners, err := g.next.OrgOwners(ctx, orgID)
+	if errors.Is(err, domain.ErrRecipientNotFound) {
+		g.log.DebugContext(ctx, "organisation not found in identity; skipped")
+	}
+	return owners, err //nolint:wrapcheck // see Contact
 }
 
 // Handle returns an error only for infrastructure failures (so the event is redelivered); malformed, unmappable or

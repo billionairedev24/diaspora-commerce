@@ -11,6 +11,9 @@ import (
 	"time"
 	_ "time/tzdata" // recipient time zones for quiet hours, independent of the base image
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/auth"
 	pkgconfig "github.com/billionairedev24/diaspora-commerce/go/pkg/config"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/events"
@@ -149,6 +152,9 @@ func build(host Deps, ctx context.Context, closers *module.Closers) (Module, err
 	if err != nil {
 		return Module{}, fmt.Errorf("config: %w", err)
 	}
+	registry := prometheus.NewRegistry()
+	registry.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	failures := newFailureCounter(registry)
 	var resolver port.RecipientResolver
 	var contactCache port.ContactInvalidator
 	if c := recipientResolver(cfg, local, log); c != nil {
@@ -171,6 +177,12 @@ func build(host Deps, ctx context.Context, closers *module.Closers) (Module, err
 	ingest := app.NewIngest(notifier, app.IngestConfig{Resolver: resolver, Links: links, StockAlerts: stockAlerts,
 		Contacts: contactCache, Audience: preorders, Locations: locationAudience, Rules: eventRules(cfg, log)}, log)
 
+	// One failing event must not wedge the consumer: transient errors are retried within bounds, permanent ones (and
+	// exhausted ones) go to the failed_event table and the offset moves on.
+	eventHandler := app.NewResilientHandler(ingest, postgres.NewFailedEventStore(pool), failures,
+		app.RetryPolicy{Attempts: cfg.Kafka.Retry.Attempts, Backoff: cfg.Kafka.Retry.Backoff,
+			MaxBackoff: cfg.Kafka.Retry.MaxBackoff, MaxRounds: cfg.Kafka.Retry.MaxRounds}, log)
+
 	twilioV, resendV, sendGridV, err := verifiers(cfg)
 	if err != nil {
 		return Module{}, err
@@ -189,12 +201,13 @@ func build(host Deps, ctx context.Context, closers *module.Closers) (Module, err
 		return Module{}, fmt.Errorf("read openapi: %w", err)
 	}
 	srv := httpserver.New(httpserver.Options{
-		Name:    "Notifications API",
-		Addr:    ":" + strconv.Itoa(cfg.Port),
-		OpenAPI: openapi,
-		DocsOn:  cfg.DocsEnabled,
-		Checks:  []httpserver.ReadinessCheck{readiness{store: store}},
-		Logger:  log,
+		Registry: registry,
+		Name:     "Notifications API",
+		Addr:     ":" + strconv.Itoa(cfg.Port),
+		OpenAPI:  openapi,
+		DocsOn:   cfg.DocsEnabled,
+		Checks:   []httpserver.ReadinessCheck{readiness{store: store}},
+		Logger:   log,
 	})
 	authMW := auth.Middleware(verifier, false)
 	authn := func(h http.Handler) http.Handler { return authMW(contacts.Capture(h)) }
@@ -210,7 +223,9 @@ func build(host Deps, ctx context.Context, closers *module.Closers) (Module, err
 	}
 	bg.GoQuiet(func(ctx context.Context) { purgeStockAlerts(ctx, stockAlerts, cfg.StockAlerts.PurgeEvery, log) })
 	if cfg.Kafka.Enabled {
-		bg.GoQuiet(func(ctx context.Context) { consume(ctx, cfg.Kafka.Brokers, app.TopicAddresses(topics), ingest, log) })
+		bg.GoQuiet(func(ctx context.Context) {
+			consume(ctx, cfg.Kafka.Brokers, app.TopicAddresses(topics), eventHandler, log)
+		})
 	}
 	closers.Add(bg.Wait)
 	m := module.FromServer(Name, srv, log, loader.Env(), module.Telemetry{OTLPEndpoint: cfg.Telemetry.OTLPEndpoint,
@@ -368,8 +383,26 @@ func purgeStockAlerts(ctx context.Context, alerts app.StockAlerts, every time.Du
 	}
 }
 
-// consume runs the Kafka consumer group. When a handler fails the consumer is closed and recreated so the group
-// resumes from the last committed offset and the failed event is redelivered.
+// failureCounter counts events set aside by the consumer: notifications_events_failed_total{reason}.
+type failureCounter struct{ failed *prometheus.CounterVec }
+
+var _ port.FailureCounter = failureCounter{}
+
+func newFailureCounter(reg *prometheus.Registry) port.FailureCounter {
+	c := prometheus.NewCounterVec(prometheus.CounterOpts{Name: "notifications_events_failed_total",
+		Help: "Consumed events set aside in failed_event (offset committed) by reason."}, []string{"reason"})
+	reg.MustRegister(c)
+	for _, r := range []string{app.ReasonUpstreamClientError, app.ReasonRejected, app.ReasonRetriesExhausted} {
+		c.WithLabelValues(r) // export zero so rate() and absent() alerts work before the first failure
+	}
+	return failureCounter{failed: c}
+}
+
+func (f failureCounter) EventFailed(reason string) { f.failed.WithLabelValues(reason).Inc() }
+
+// consume runs the Kafka consumer group. The handler absorbs per-event failures (see app.NewResilientHandler); what
+// still stops the consumer is infrastructure: Kafka errors, or a transient failure still within its retry rounds. Then
+// the consumer is closed and recreated so the group resumes from the last committed offset and the event is redelivered.
 func consume(ctx context.Context, brokers, topics []string, h events.Handler, log *slog.Logger) {
 	backoff := time.Second
 	log.InfoContext(ctx, "consuming", "group", app.ConsumerGroup, "topics", topics)

@@ -602,3 +602,27 @@ func TestPostgresIntegration(t *testing.T) {
 	t.Run("stock alerts: subscribe once, claim once per restock", func(t *testing.T) { stockAlerts(t, pool) })
 	t.Run("retail purchase-order request: supplier email with the PDF attached", func(t *testing.T) { retailPurchaseOrder(t, pool) })
 }
+
+func TestFailedEventsAreRecordedOncePerEventAndNeverBlockTheNext(t *testing.T) {
+	pool := startPostgres(t)
+	ctx := context.Background()
+	store := postgres.NewFailedEventStore(pool)
+	f := domain.FailedEvent{Consumer: app.ConsumerGroup, EventID: "d3a264e4", EventType: "OrderPlaced", AggregateID: "o-1",
+		Reason: app.ReasonUpstreamClientError, ErrorClass: "permanent", Status: 403, Code: "identity.service-lookup-only",
+		Attempts: 1, Payload: []byte(`{"orderId":"o-1"}`), FailedAt: time.Now()}
+	for range 2 { // a redelivered poison event updates its row
+		if err := store.RecordFailedEvent(ctx, f); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var n int
+	var status int
+	var payload []byte
+	if err := pool.QueryRow(ctx, `SELECT count(*), max(upstream_status), (array_agg(payload))[1] FROM failed_event WHERE event_id = 'd3a264e4'`).
+		Scan(&n, &status, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 || status != 403 || string(payload) != `{"orderId":"o-1"}` {
+		t.Fatalf("rows=%d status=%d payload=%s", n, status, payload)
+	}
+}
