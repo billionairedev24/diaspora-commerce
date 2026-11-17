@@ -53,6 +53,12 @@ public final class CheckoutCodes {
     /** A second identical late pre-order add (same customer, window, items) within the duplicate window (409). */
     public static final String LATE_ADD_DUPLICATE = "orders.late-add-duplicate";
 
+    /**
+     * The shopper chose the seller's own shipping but it is not available: the staff switch is off (the default), the seller has
+     * not opted in, or the package is not one the seller ships. 422.
+     */
+    public static final String SELF_SHIPPING_UNAVAILABLE = "orders.self-shipping-unavailable";
+
     private CheckoutCodes() {
     }
 }

@@ -99,6 +99,12 @@ class MatchedOfferGuardsTest {
                 2, new ShipFrom("Houston", "TX", "US", "77002"), note, box, Map.of(), unknown);
     }
 
+    /** AfroTransact Retail's own stock is the only stock AfroTransact holds, so only Retail may create a stock-held offer. */
+    private void asRetail() {
+        when(permissions.require(anyString())).thenReturn(new Actor("user_r", PrincipalType.SELLER_MEMBER,
+                Optional.of("org_retail"), Set.of(), Set.of(OffersPermissions.WRITE, OffersPermissions.READ)));
+    }
+
     private Offer stored() {
         ArgumentCaptor<Offer> captor = ArgumentCaptor.forClass(Offer.class);
         verify(offers).insert(captor.capture());
@@ -218,13 +224,42 @@ class MatchedOfferGuardsTest {
                         e -> assertThat(e.code()).isEqualTo("offers.package-not-allowed"));
         verify(offers, never()).insert(any());
 
+        asRetail();
         service.create(command(OfferCondition.NEW, null, box, Fulfilment.AFROTRANSACT, Set.of()));
 
         assertThat(stored().packaging()).isEqualTo(box);
     }
 
+    /** Owner decision: FBA means AfroTransact collects from the seller; it keeps no seller stock. */
+    @Test
+    void aMarketplaceSellerCannotCreateAnOfferForStockAfroTransactHolds() {
+        OfferPackage box = new OfferPackage(12, 8, 4, 2.5);
+
+        assertThatThrownBy(() -> service.create(command(OfferCondition.NEW, null, box, Fulfilment.AFROTRANSACT,
+                Set.of()))).isInstanceOfSatisfying(BusinessRuleException.class,
+                e -> assertThat(e.code()).isEqualTo("offers.seller-stock-not-held"));
+        verify(offers, never()).insert(any());
+    }
+
+    /** A product has no shipping charge of its own: any amount is refused, 0 is fine. */
+    @Test
+    void aProductCarriesNoShippingChargeOfItsOwn() {
+        CreateOfferCommand withShipping = new CreateOfferCommand(ATIN, null, null, "ANK-1", null, OfferCondition.NEW,
+                1299, null, "USD", 599, Fulfilment.SELLER, 5, 2, new ShipFrom("Houston", "TX", "US", "77002"), null,
+                null, Map.of(), Set.of());
+
+        assertThatThrownBy(() -> service.create(withShipping)).isInstanceOfSatisfying(OfferRuleViolation.class,
+                e -> assertThat(e.fieldErrors()).containsKey("shippingMinor"));
+        verify(offers, never()).insert(any());
+
+        service.create(command(OfferCondition.NEW, null, null, Fulfilment.SELLER, Set.of()));
+
+        assertThat(stored().shippingMinor()).isZero();
+    }
+
     @Test
     void aPackageLargerThanTheStaffLimitsIsRefused() {
+        asRetail();
         assertThatThrownBy(() -> service.create(command(OfferCondition.NEW, null, new OfferPackage(120, 8, 4, 2.5),
                 Fulfilment.AFROTRANSACT, Set.of()))).isInstanceOfSatisfying(OfferRuleViolation.class,
                 e -> assertThat(e.fieldErrors()).containsKey("packaging"));

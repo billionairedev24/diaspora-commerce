@@ -166,7 +166,7 @@ class InProcessCheckoutSagaFailureTest {
                 InProcessWiring.inventory(stock), InProcessWiring.offerInventory(offers),
                 InProcessWiring.payments(payments), cart, InProcessWiring.coupons(offers), orderCoupons, orders, placement,
                 mock(LocalDeliveryQuotes.class), mock(PickupPoints.class), preorders, runSlots,
-                mock(DeliveryFeeRules.class), InProcessWiring.benefits(benefits),
+                mock(DeliveryFeeRules.class), InProcessWiring.benefits(benefits), mock(SellerSelfShippingService.class),
                 new PreorderSettings(runs, runs, 100, 24, null, null), settings, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 

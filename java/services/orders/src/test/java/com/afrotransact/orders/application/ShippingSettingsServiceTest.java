@@ -50,7 +50,7 @@ class ShippingSettingsServiceTest {
 
     @Test
     void aChangeNeedsAReasonAndMakesAVersionWithAnAuditEntry() {
-        ShippingSettings saved = service.replace("USD", new ShippingSettingsCommand(699, 6000L, false, WHY), 1L);
+        ShippingSettings saved = service.replace("USD", new ShippingSettingsCommand(699, 6000L, false, false, WHY), 1L);
 
         assertThat(saved.version()).isEqualTo(2);
         assertThat(saved.flatFeeMinor()).isEqualTo(699);
@@ -65,7 +65,7 @@ class ShippingSettingsServiceTest {
 
     @Test
     void withoutAReasonNothingChanges() {
-        assertThatThrownBy(() -> service.replace("USD", new ShippingSettingsCommand(699, null, false, "  short "), 1L))
+        assertThatThrownBy(() -> service.replace("USD", new ShippingSettingsCommand(699, null, false, false, "  short "), 1L))
                 .isInstanceOf(OrdersRuleViolation.class).hasMessageContaining("Say why")
                 .extracting(e -> ((OrdersRuleViolation) e).code()).isEqualTo("orders.reason-required");
         verify(repo, never()).update(any());
@@ -74,14 +74,14 @@ class ShippingSettingsServiceTest {
 
     @Test
     void aStaleEditorIsToldToReload() {
-        assertThatThrownBy(() -> service.replace("USD", new ShippingSettingsCommand(699, null, false, WHY), 7L))
+        assertThatThrownBy(() -> service.replace("USD", new ShippingSettingsCommand(699, null, false, false, WHY), 7L))
                 .isInstanceOf(OrdersStateConflict.class).hasMessageContaining("Reload");
         verify(repo, never()).update(any());
     }
 
     @Test
     void aSaveThatChangesNothingMakesNoVersion() {
-        ShippingSettings same = service.replace("USD", new ShippingSettingsCommand(599, null, false, WHY), 1L);
+        ShippingSettings same = service.replace("USD", new ShippingSettingsCommand(599, null, false, false, WHY), 1L);
         assertThat(same.version()).isEqualTo(1);
         verify(repo, never()).update(any());
         verify(repo, never()).log(any());
@@ -89,7 +89,7 @@ class ShippingSettingsServiceTest {
 
     @Test
     void turningTheSellerCarrierSwitchOnIsAnAuditedChangeToo() {
-        ShippingSettings saved = service.replace("USD", new ShippingSettingsCommand(599, null, true, WHY), null);
+        ShippingSettings saved = service.replace("USD", new ShippingSettingsCommand(599, null, true, false, WHY), null);
         assertThat(saved.sellerCarrierShippingEnabled()).isTrue();
         verify(repo).update(saved);
     }

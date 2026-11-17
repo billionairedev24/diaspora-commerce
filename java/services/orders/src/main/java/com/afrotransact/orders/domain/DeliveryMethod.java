@@ -19,6 +19,12 @@ public enum DeliveryMethod {
      * still load (docs/engineering/delivery-fulfilment.md "Self-shipping retired").
      */
     SELLER_SHIPS,
+    /**
+     * The seller ships it themselves and charges their own flat per-order shipping (docs/engineering/seller-self-shipping-options.md,
+     * minimum rule). Only created while the staff switch {@code sellerSelfShippingEnabled} is on (off by default, off in uat and
+     * prod). Not the same as the {@link #SELLER_SHIPS} history value, so old rows stay read-only history.
+     */
+    SELLER_SELF_SHIPS,
     /** Collected by the customer at a pickup point, locker or the seller's shop. */
     PICKUP
 }

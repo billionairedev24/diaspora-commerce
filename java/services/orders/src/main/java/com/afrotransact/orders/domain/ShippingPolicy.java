@@ -3,8 +3,8 @@ package com.afrotransact.orders.domain;
 /** Shipping fee and fallback delivery estimate per delivery method. */
 public interface ShippingPolicy {
 
-    /** Whether seller-shipped carrier options are offered (staff switch, off at launch). */
-    boolean carrierEnabled();
+    /** Whether sellers may ship themselves and charge their own shipping (staff switch, off by default). */
+    boolean selfShippingEnabled();
 
     /** Shipping charged for one shipment whose items cost {@code itemsMinor}. */
     long fee(DeliveryMethod method, String serviceLevel, long itemsMinor);

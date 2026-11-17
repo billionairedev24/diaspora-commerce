@@ -40,3 +40,6 @@ POST /v1/deliveries/{shipmentId}/delivered | STAFF_ONLY | OrdersAccess.deliveryM
 POST /v1/deliveries/{shipmentId}/returned | STAFF_ONLY | OrdersAccess.deliveryManager; only after a failed delivery, a reason is required [principal-guard] | -
 POST /v1/deliveries/{shipmentId}/failed | STAFF_ONLY | OrdersAccess.deliveryManager; a reason is required [principal-guard] | -
 PUT /v1/deliveries/{shipmentId}/proof | STAFF_ONLY | OrdersAccess.deliveryManager; audited correction with a reason [principal-guard] | -
+GET /v1/seller/self-shipping | ORG_SCOPED_LIST | SellerSelfShippingServiceImpl.mine: OrdersAccess.sellerOrgToManage (token org for non-staff, staff must name it), one row by seller_org_id | SellerSelfShippingServiceTest
+PUT /v1/seller/self-shipping | ORG_SCOPED_LIST | SellerSelfShippingServiceImpl.replace: OrdersAccess.sellerOrgToManage, refused while the staff switch is off, writes only the caller's org row | SellerSelfShippingServiceTest
+GET /v1/public/self-shipping | PUBLIC | the flat shipping charge a seller shows the shopper at checkout (no personal data); empty while the staff switch is off | SellerSelfShippingServiceTest

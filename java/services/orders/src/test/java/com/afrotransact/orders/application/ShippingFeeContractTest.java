@@ -82,7 +82,7 @@ class ShippingFeeContractTest {
         ShippingPolicy policy = new DefaultShippingPolicy(settings::get, DefaultShippingPolicy.Rates.defaults());
         return new CheckoutActivitiesImpl(markets, catalog, promises, tax, policy, handover, null, null, null, null,
                 null, null, null, null, null, localDelivery, pickupPoints, eligibility,
-                mock(DeliveryRunSlots.class), mock(DeliveryFeeRules.class), benefits,
+                mock(DeliveryRunSlots.class), mock(DeliveryFeeRules.class), benefits, mock(SellerSelfShippingService.class),
                 new PreorderSettings(true, false, 100, 24, null, null), ordersSettings,
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }

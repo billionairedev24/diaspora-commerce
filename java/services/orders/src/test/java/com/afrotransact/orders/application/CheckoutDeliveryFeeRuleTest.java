@@ -69,7 +69,7 @@ class CheckoutDeliveryFeeRuleTest {
                 new DefaultShippingPolicy(() -> ShippingSettingsFixtures.of(599, null, true),
                         DefaultShippingPolicy.Rates.defaults()), handover, null, null, null, null,
                 null, null, null, null, null, null, null, mock(PreorderEligibility.class), mock(DeliveryRunSlots.class), rules,
-                mock(MemberBenefits.class), new PreorderSettings(true, 100, 24, null, null), settings, Clock.fixed(NOW, ZoneOffset.UTC));
+                mock(MemberBenefits.class), mock(SellerSelfShippingService.class), new PreorderSettings(true, 100, 24, null, null), settings, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     private static CheckoutPlan.Line line(String atin, String seller, long price, int qty) {

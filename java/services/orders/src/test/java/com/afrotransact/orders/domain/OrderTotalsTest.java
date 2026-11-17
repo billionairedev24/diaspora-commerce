@@ -79,7 +79,7 @@ class OrderTotalsTest {
         assertThat(p.fee(DeliveryMethod.AFROTRANSACT_DELIVERY, "local", 4999)).isEqualTo(599);
         assertThat(p.fee(DeliveryMethod.AFROTRANSACT_DELIVERY, "local", 5000)).isZero();
         assertThat(p.fee(DeliveryMethod.PICKUP, "pickup", 10)).isZero();
-        assertThat(p.carrierEnabled()).isFalse();
+        assertThat(p.selfShippingEnabled()).isFalse();
         assertThat(p.defaultServiceLevel(DeliveryMethod.AFROTRANSACT_DELIVERY)).isEqualTo("local");
     }
 

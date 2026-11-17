@@ -68,14 +68,15 @@ class ShippingSettingsServiceImpl implements ShippingSettingsService {
                     "The shipping settings changed since you opened them (now version " + seen + "). Reload and try "
                             + "again.");
         }
-        if (current != null && current.sameAs(c.flatFeeMinor(), c.freeAboveMinor(), c.sellerCarrierShippingEnabled())) {
+        if (current != null && current.sameAs(c.flatFeeMinor(), c.freeAboveMinor(), c.sellerCarrierShippingEnabled(),
+                c.sellerSelfShippingEnabled())) {
             return current;
         }
         ShippingSettings next = current == null
                 ? new ShippingSettings(code, c.flatFeeMinor(), c.freeAboveMinor(), c.sellerCarrierShippingEnabled(),
-                        1, now, actor.subject(), reason)
+                        c.sellerSelfShippingEnabled(), 1, now, actor.subject(), reason)
                 : current.next(c.flatFeeMinor(), c.freeAboveMinor(), c.sellerCarrierShippingEnabled(),
-                        actor.subject(), reason, now);
+                        c.sellerSelfShippingEnabled(), actor.subject(), reason, now);
         if (current == null) {
             settings.insert(next);
         } else {

@@ -115,6 +115,26 @@ class OrdersAccess {
         return org;
     }
 
+    /**
+     * The organisation whose own shipping charge is read or changed: the caller's own org (a seller who can update
+     * shipments), or the requested one for staff.
+     */
+    String sellerOrgToManage(String requested) {
+        Actor actor = permissions.require(OrdersPermissions.UPDATE_STATUS);
+        String org;
+        if (staff(actor)) {
+            if (requested == null || requested.isBlank()) {
+                throw new ForbiddenActionException("orders.org-required", "Staff must name the seller organisation");
+            }
+            org = requested.trim();
+        } else {
+            org = actor.orgId().orElseThrow(() -> new ForbiddenActionException("orders.no-org",
+                    "Only seller organisations ship their own orders"));
+        }
+        relationships.requireForOrg(OrdersPermissions.UPDATE_STATUS, OrdersRelations.ORG_VIEW, org);
+        return org;
+    }
+
     /** S272 on-behalf orders (late pre-order adds): SERVICE principals with orders:on-behalf, or a super admin. */
     Actor onBehalfCaller() {
         Actor actor = actors.current();

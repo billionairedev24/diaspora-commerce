@@ -13,7 +13,13 @@ public final class ShippingSettingsFixtures {
     }
 
     public static ShippingSettings of(long flatFeeMinor, Long freeAboveMinor, boolean carrierEnabled) {
-        return new ShippingSettings("USD", flatFeeMinor, freeAboveMinor, carrierEnabled, 1,
+        return new ShippingSettings("USD", flatFeeMinor, freeAboveMinor, carrierEnabled, false, 1,
                 Instant.parse("2026-11-01T00:00:00Z"), "staff-1", "Launch default");
+    }
+
+    /** The same settings with the seller self-shipping switch set (it is off in every other fixture). */
+    public static ShippingSettings withSelfShipping(long flatFeeMinor, Long freeAboveMinor, boolean selfShipping) {
+        return new ShippingSettings("USD", flatFeeMinor, freeAboveMinor, false, selfShipping, 1,
+                Instant.parse("2026-11-01T00:00:00Z"), "staff-1", "Test");
     }
 }
