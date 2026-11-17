@@ -13,6 +13,7 @@ import { type StepHandle } from '@/components/onboarding/WizardKit';
 import { Header } from '@/components/shell/Header';
 import { PortalShell } from '@/components/shell/PortalShell';
 import { sellerApi } from '@/lib/api';
+import { stripeRetry } from '@/lib/stripe-session';
 
 import { mockApi } from './mock-api';
 import { renderScreen, renderWithProviders } from './render';
@@ -62,6 +63,7 @@ describe('application wizard', () => {
     nav.pathname = '/onboarding';
     nav.push.mockReset();
     nav.replace.mockReset();
+    stripeRetry.delaysMs = [800, 2000];
     await started();
   });
 
@@ -208,8 +210,8 @@ describe('application wizard', () => {
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/onboarding/payouts'));
   });
 
-  it('Stripe verification: a form that can’t load says so in its place, with Try again', async () => {
-    const user = userEvent.setup();
+  it('Stripe verification: a first attempt that fails for a moment is retried automatically, with no error shown', async () => {
+    stripeRetry.delaysMs = [1, 1];
     await throughBusiness('SOLE_PROPRIETOR');
     await mockApi().saveOnboardingDetails({ legalFirstName: 'Titi', legalLastName: 'A', taxId: '123-45-6789', dateOfBirth: '1990-01-01', address: ADDRESS });
     let calls = 0;
@@ -218,9 +220,66 @@ describe('application wizard', () => {
       return { ...api, createOnboardingStripeSession: () => (++calls === 1 ? Promise.reject(new Error('offline')) : api.createOnboardingStripeSession()) };
     });
     await renderScreen(<OnboardingWizard slug="stripe-verification" />);
-    expect(await screen.findByText('Stripe is unavailable right now. Try again in a minute.')).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Local test verification' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Stripe is taking longer/)).not.toBeInTheDocument();
+    expect(calls).toBe(2);
+    vi.mocked(sellerApi).mockImplementation(() => mockApi());
+  });
+
+  it('Stripe verification: when Stripe stays unavailable the step says so kindly in the form’s place, with Try again', async () => {
+    stripeRetry.delaysMs = [1, 1];
+    const user = userEvent.setup();
+    await throughBusiness('SOLE_PROPRIETOR');
+    await mockApi().saveOnboardingDetails({ legalFirstName: 'Titi', legalLastName: 'A', taxId: '123-45-6789', dateOfBirth: '1990-01-01', address: ADDRESS });
+    let calls = 0;
+    vi.mocked(sellerApi).mockImplementation(() => {
+      const api = mockApi();
+      return { ...api, createOnboardingStripeSession: () => (++calls <= 3 ? Promise.reject(new Error('offline')) : api.createOnboardingStripeSession()) };
+    });
+    await renderScreen(<OnboardingWizard slug="stripe-verification" />);
+    expect(await screen.findByText('Stripe is taking longer than usual to answer. Nothing was lost; try again in a moment.')).toBeInTheDocument();
+    expect(calls).toBe(3);
     await user.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByRole('region', { name: 'Local test verification' })).toBeInTheDocument();
+    vi.mocked(sellerApi).mockImplementation(() => mockApi());
+  });
+
+  it('Stripe verification: opening the step creates one session, and Connect.js gets that secret first, then fresh ones', async () => {
+    await throughBusiness('SOLE_PROPRIETOR');
+    await mockApi().saveOnboardingDetails({ legalFirstName: 'Titi', legalLastName: 'A', taxId: '123-45-6789', dateOfBirth: '1990-01-01', address: ADDRESS });
+    let calls = 0;
+    vi.mocked(sellerApi).mockImplementation(() => {
+      const api = mockApi();
+      return {
+        ...api,
+        createOnboardingStripeSession: () => Promise.resolve({ accountId: 'acct_1', clientSecret: `secret_${++calls}`, publishableKey: 'pk_test_real', expiresAt: null, localTest: false })
+      };
+    });
+    let fetchSecret: (() => Promise<string>) | undefined;
+    const mounted: string[] = [];
+    window.StripeConnect = {
+      init: ({ fetchClientSecret }) => {
+        fetchSecret = fetchClientSecret;
+        return {
+          create: (c) => {
+            mounted.push(c);
+            const el = document.createElement('div') as HTMLElement & { setOnLoaderStart?: (f: () => void) => void };
+            el.setOnLoaderStart = (f) => f();
+            return el;
+          }
+        };
+      }
+    };
+    await renderScreen(<OnboardingWizard slug="stripe-verification" />);
+    await waitFor(() => expect(fetchSecret).toBeDefined());
+    expect(calls).toBe(1);
+    expect(await fetchSecret?.()).toBe('secret_1');
+    expect(calls).toBe(1);
+    expect(await fetchSecret?.()).toBe('secret_2');
+    // Mounted once and left alone: no automatic re-mount that could detach Stripe's sign-in window from the seller's click.
+    expect(mounted).toEqual(['account-onboarding']);
+    delete window.StripeConnect;
     vi.mocked(sellerApi).mockImplementation(() => mockApi());
   });
 

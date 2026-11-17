@@ -1,20 +1,21 @@
 'use client';
 
 import { type BusinessPageSettings, isApiError, sellerKeys, sellerQueries } from '@afrotransact/api-client';
-import { Button, buttonClassName, Field, fieldStyles, TextField, useToast } from '@afrotransact/ui';
+import { normaliseHex } from '@afrotransact/tokens';
+import { Button, buttonClassName, Field, fieldStyles, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
 import { OfferServices } from '@/components/account/OfferServices';
 import { LogoField } from '@/components/onboarding/steps/LogoField';
 import { SettingsPage } from '@/components/settings/SettingsShell';
+import { BrandColourField } from '@/components/ui/BrandColourField';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { sellerApi } from '@/lib/api';
 import { useStorefrontUrl } from '@/lib/runtime-config';
 import { useSeller } from '@/lib/session';
 
 const MAX_DESCRIPTION = 500;
-const COLOUR = /^#[0-9a-fA-F]{6}$/;
 
 interface Values {
   description: string;
@@ -27,7 +28,7 @@ const valuesOf = (p: BusinessPageSettings): Values => ({ description: p.descript
 export function validateBusinessPage(v: Values): Partial<Record<keyof Values, string>> {
   const e: Partial<Record<keyof Values, string>> = {};
   if (v.description.length > MAX_DESCRIPTION) e.description = `At most ${MAX_DESCRIPTION} characters`;
-  if (v.brandColor.trim() && !COLOUR.test(v.brandColor.trim())) e.brandColor = 'Use a colour like #rrggbb';
+  if (v.brandColor.trim() && normaliseHex(v.brandColor) === null) e.brandColor = 'Choose a colour from the list, or enter a hex code';
   return e;
 }
 
@@ -46,7 +47,7 @@ export function BusinessPageView() {
   }, [q.data, v]);
 
   const save = useMutation({
-    mutationFn: (input: Values) => api.updateBusinessPage({ description: input.description.trim(), brandColor: input.brandColor.trim(), logoUrl: input.logoUrl }),
+    mutationFn: (input: Values) => api.updateBusinessPage({ description: input.description.trim(), brandColor: normaliseHex(input.brandColor) ?? input.brandColor.trim(), logoUrl: input.logoUrl }),
     onSuccess: (page) => {
       qc.setQueryData(sellerKeys.businessPage(orgId), page);
       setV(valuesOf(page));
@@ -70,7 +71,7 @@ export function BusinessPageView() {
     if (Object.keys(e).length === 0) save.mutate(v);
   };
   const dirty = JSON.stringify(v) !== JSON.stringify(valuesOf(page));
-  const accent = COLOUR.test(v.brandColor.trim()) ? v.brandColor.trim() : null;
+  const accent = normaliseHex(v.brandColor);
   const href = page.slug ? `${storefront.replace(/\/+$/, '')}/b/${page.slug}` : null;
 
   return (
@@ -83,26 +84,8 @@ export function BusinessPageView() {
             submit();
           }}
         >
-          <LogoField value={v.logoUrl} onChange={(logoUrl) => patch({ logoUrl })} disabled={!editable} />
-          <div className="flex items-end gap-3">
-            <TextField
-              label="Brand colour"
-              placeholder="#rrggbb"
-              value={v.brandColor}
-              onChange={(e) => patch({ brandColor: e.target.value })}
-              error={errors.brandColor}
-              disabled={!editable}
-              className="flex-1"
-            />
-            <input
-              type="color"
-              aria-label="Pick a brand colour"
-              value={accent ?? ''}
-              onChange={(e) => patch({ brandColor: e.target.value })}
-              disabled={!editable}
-              className="mb-[calc(var(--at-space-1)+14px)] size-11 cursor-pointer rounded-sm border-0 bg-transparent p-0 sm:size-9"
-            />
-          </div>
+          <LogoField value={v.logoUrl} onChange={(logoUrl) => patch({ logoUrl })} error={errors.logoUrl} disabled={!editable} />
+          <BrandColourField value={v.brandColor} onChange={(brandColor) => patch({ brandColor })} error={errors.brandColor} disabled={!editable} />
           <Field label="What you sell or do" help={`A few sentences. ${v.description.length}/${MAX_DESCRIPTION}`} error={errors.description}>
             {(a11y) => (
               <textarea {...a11y} className={fieldStyles.control} rows={5} maxLength={MAX_DESCRIPTION} value={v.description} onChange={(e) => patch({ description: e.target.value })} disabled={!editable} />

@@ -15,7 +15,7 @@ describe('Business page settings', () => {
   });
 
   it('checks the colour and description before saving', () => {
-    expect(validateBusinessPage({ description: '', brandColor: 'green', logoUrl: '' })).toEqual({ brandColor: 'Use a colour like #rrggbb' });
+    expect(validateBusinessPage({ description: '', brandColor: 'green', logoUrl: '' })).toEqual({ brandColor: 'Choose a colour from the list, or enter a hex code' });
     expect(validateBusinessPage({ description: 'x'.repeat(501), brandColor: '', logoUrl: '' }).description).toBe('At most 500 characters');
     expect(validateBusinessPage({ description: 'Jollof', brandColor: '#aabbcc', logoUrl: '' })).toEqual({});
   });
@@ -23,8 +23,8 @@ describe('Business page settings', () => {
   it('saves a new colour and description and shows them in the preview', async () => {
     const user = userEvent.setup();
     await renderScreen(<BusinessPageView />);
-    const colour = await screen.findByLabelText('Brand colour');
-    await user.type(colour, '#aabbcc');
+    await user.click(await screen.findByRole('radio', { name: 'Custom' }));
+    await user.type(screen.getByLabelText('Hex code'), 'ABC');
     await user.type(screen.getByLabelText(/What you sell or do/), 'Jollof and more');
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
     expect(await screen.findByText('Your business page is updated.')).toBeInTheDocument();
@@ -32,11 +32,12 @@ describe('Business page settings', () => {
     expect(screen.getByRole('region', { name: 'Preview' })).toHaveTextContent('Jollof and more');
   });
 
-  it('refuses a colour that is not #rrggbb without calling the server', async () => {
+  it('refuses a colour that is not a hex code without calling the server', async () => {
     const user = userEvent.setup();
     await renderScreen(<BusinessPageView />);
-    await user.type(await screen.findByLabelText('Brand colour'), 'green');
+    await user.click(await screen.findByRole('radio', { name: 'Custom' }));
+    await user.type(screen.getByLabelText('Hex code'), 'green');
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
-    expect(await screen.findByText('Use a colour like #rrggbb')).toBeInTheDocument();
+    expect(await screen.findAllByText(/Choose a colour from the list/)).not.toHaveLength(0);
   });
 });

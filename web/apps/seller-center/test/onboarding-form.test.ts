@@ -125,7 +125,7 @@ describe('Your business', () => {
     expect(displayPhone('+447700900123')).toBe('+447700900123');
   });
 
-  it('needs offering, business type, store name, email and a US mobile; the brand colour must be #rrggbb', () => {
+  it('needs offering, business type, store name, email and a US mobile; the brand colour must be a hex code', () => {
     const v: BusinessValues = {
       offering: '',
       entityType: '',

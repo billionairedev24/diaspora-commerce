@@ -39,8 +39,8 @@ export const DEFAULT_BRAND_COLOUR_LABELS: BrandColourLabels = {
   custom: 'Custom',
   picker: 'Pick a custom colour',
   hex: 'Hex code',
-  hexHelp: 'For example #1a7f4b',
-  invalid: 'Enter a colour like #1a7f4b (3 or 6 letters and digits, with or without #)',
+  hexHelp: 'For example 1A7F4B',
+  invalid: 'Enter a hex code: 3 or 6 letters and digits, such as 1A7F4B (the # is optional)',
   preview: 'Preview',
   previewButton: 'Button',
   selected: (name, hex) => (hex ? `Selected: ${name} (${hex})` : `Selected: ${name}`),
@@ -129,6 +129,7 @@ export function BrandColourPicker({ value, onChange, labels: given, error, disab
         {l.help}
       </p>
       <div role="radiogroup" aria-label={l.label} aria-describedby={`${base}-help`} className={styles.grid}>
+        {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- the radio is inside; its name is the text of the chip span */}
         <label className={styles.option}>
           <input type="radio" name={radioName} className={styles.input} checked={group === 'default'} onChange={() => choose('')} />
           <span className={styles.chip}>
@@ -142,6 +143,7 @@ export function BrandColourPicker({ value, onChange, labels: given, error, disab
           </span>
         </label>
         {BRAND_PALETTE.map((s) => (
+          // eslint-disable-next-line jsx-a11y/label-has-associated-control -- the radio is inside; its name is the text of the chip span
           <label key={s.id} className={styles.option}>
             <input type="radio" name={radioName} className={styles.input} checked={group === s.id} onChange={() => choose(s.hex)} />
             <span className={styles.chip}>
@@ -152,6 +154,7 @@ export function BrandColourPicker({ value, onChange, labels: given, error, disab
             </span>
           </label>
         ))}
+        {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- the radio is inside; its name is the text of the chip span */}
         <label className={styles.option}>
           <input type="radio" name={radioName} className={styles.input} checked={group === 'custom'} onChange={() => choose(normal ?? '', true)} />
           <span className={styles.chip}>
@@ -166,6 +169,7 @@ export function BrandColourPicker({ value, onChange, labels: given, error, disab
       {custom ? (
         <div className={styles.custom}>
           <div className={styles.pickerWrap}>
+            { }
             <label htmlFor={`${base}-picker`} className={styles.small}>
               {l.picker}
             </label>
@@ -181,6 +185,7 @@ export function BrandColourPicker({ value, onChange, labels: given, error, disab
             />
           </div>
           <div className={styles.hexWrap}>
+            { }
             <label htmlFor={`${base}-hex`} className={styles.small}>
               {l.hex}
             </label>
