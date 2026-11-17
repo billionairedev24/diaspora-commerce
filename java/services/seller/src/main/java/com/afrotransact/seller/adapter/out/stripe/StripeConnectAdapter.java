@@ -28,10 +28,18 @@ public class StripeConnectAdapter implements StripeConnectGateway {
 
     private final StripeClient client;
     private final StripeJson json;
+    private final int retries;
+    private final long backoffMs;
 
     public StripeConnectAdapter(StripeClient client, JsonMapper mapper) {
+        this(client, mapper, StripeCalls.TRANSIENT_RETRIES, StripeCalls.TRANSIENT_BACKOFF_MS);
+    }
+
+    StripeConnectAdapter(StripeClient client, JsonMapper mapper, int retries, long backoffMs) {
         this.client = client;
         this.json = new StripeJson(mapper);
+        this.retries = retries;
+        this.backoffMs = backoffMs;
     }
 
     @Override
@@ -104,8 +112,10 @@ public class StripeConnectAdapter implements StripeConnectGateway {
         }
         AccountSessionCreateParams params = AccountSessionCreateParams.builder().setAccount(accountId)
                 .setComponents(c.build()).build();
-        var session = StripeCalls.call("account session",
-                () -> client.v1().accountSessions().create(params));
+        // The session call follows account creation by moments and Stripe may not show the new account yet (or be busy):
+        // a bounded retry, so the seller's first attempt does not fail.
+        var session = StripeCalls.callWithRetry("account session",
+                () -> client.v1().accountSessions().create(params), retries, backoffMs);
         return new AccountSession(accountId, session.getClientSecret(),
                 session.getExpiresAt() == null ? null : Instant.ofEpochSecond(session.getExpiresAt()), false);
     }
