@@ -276,7 +276,7 @@ class ImportListingRulesTest {
 
     @Test
     void theDangerousGoodsAnswerIsRequiredWhereAskedAndYesIsCarriedToTheProduct() {
-        ValidationResult missing = run(PLAIN, "decor-candles", k -> switch (k) {
+        ValidationResult missing = run(PLAIN, "furniture-small-appliances", k -> switch (k) {
             case "dangerous_goods" -> "";
             case "attr:material" -> "Wax";
             case "attr:model" -> "";
@@ -285,7 +285,7 @@ class ImportListingRulesTest {
         }, 1);
         assertThat(errors(missing, 0)).containsExactly("dangerous_goods: Answer yes or no: is it an aerosol, flammable, battery, candle or cleaner?");
 
-        ValidationResult yes = run(PLAIN, "decor-candles", k -> switch (k) {
+        ValidationResult yes = run(PLAIN, "furniture-small-appliances", k -> switch (k) {
             case "gtin_exempt" -> "Yes";
             case "dangerous_goods" -> "Yes";
             case "attr:material" -> "Wax";

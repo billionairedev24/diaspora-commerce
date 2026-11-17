@@ -50,6 +50,17 @@ class ListingNormaliserTest {
     }
 
     @Test
+    void groceriesBeverageAndHomeConsumablesAreNewWhateverIsSubmitted() {
+        for (String code : List.of("rice-grains", "plain-water", "fresh-produce", "cooking-oils", "diapers-wipes",
+                "decor-candles", "cleaning-paper-products", "wigs-extensions", "handmade-products")) {
+            assertThat(apply(code, Map.of(), List.of(IMAGE), List.of(variant()), details(ItemCondition.USED_GOOD))
+                    .details().condition()).as(code).isEqualTo(ItemCondition.NEW);
+        }
+        assertThat(apply("furniture-small-appliances", Map.of(), List.of(IMAGE), List.of(variant()),
+                details(ItemCondition.RENEWED)).details().condition()).isEqualTo(ItemCondition.RENEWED);
+    }
+
+    @Test
     void carSeatsAreNewOnlyEvenThoughToysChooseTheCondition() {
         assertThat(apply("car-seats", Map.of(), List.of(IMAGE), List.of(variant()), details(ItemCondition.USED_GOOD))
                 .details().condition()).isEqualTo(ItemCondition.NEW);
@@ -140,7 +151,7 @@ class ListingNormaliserTest {
 
         assertThat(kept.documents()).containsExactly(permit);
         assertThat(kept.exemptions()).isEmpty();
-        assertThat(apply("bedding-linens", Map.of(), List.of(IMAGE), List.of(variant()), d).details().exemptions())
+        assertThat(apply("furniture-small-appliances", Map.of(), List.of(IMAGE), List.of(variant()), d).details().exemptions())
                 .containsOnlyKeys("material", "model_number");
     }
 }

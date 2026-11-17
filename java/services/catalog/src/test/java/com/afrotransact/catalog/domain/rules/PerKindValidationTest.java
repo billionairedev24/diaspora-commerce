@@ -61,14 +61,14 @@ class PerKindValidationTest {
                 Arguments.of("HLT", "dietary-supplements", Set.of("description", "labelPhoto", "dangerousGoods",
                         "attributes.brand", "attributes.net_weight", "attributes.servings",
                         "attributes.shelf", "variants[0].gtin", "variants[0].packaging")),
-                Arguments.of("FSH", "adult-clothing-footwear", Set.of("description", "attributes.brand",
+                Arguments.of("FSH", "childrens-clothing", Set.of("description", "attributes.brand",
                         "attributes.material", "attributes.age_grade", "variants[0].gtin",
                         "variants[0].packaging")),
                 Arguments.of("JWL", "jewelry-accessories", Set.of("description", "attributes.brand",
                         "attributes.material", "variants[0].gtin", "variants[0].packaging")),
                 Arguments.of("ELC", "phones", Set.of("description", "dangerousGoods", "attributes.brand",
                         "attributes.model", "variants[0].gtin", "variants[0].packaging")),
-                Arguments.of("HOM", "bedding-linens", Set.of("description", "dangerousGoods", "attributes.brand",
+                Arguments.of("HOM", "furniture-small-appliances", Set.of("description", "dangerousGoods", "attributes.brand",
                         "attributes.material", "attributes.model", "variants[0].gtin",
                         "variants[0].packaging")),
                 Arguments.of("KID", "toys-games", Set.of("description", "dangerousGoods", "attributes.brand",
@@ -120,7 +120,7 @@ class PerKindValidationTest {
 
     @Test
     void aRequiredOrExemptionFieldAcceptsAReasonInsteadOfAnAnswer() {
-        CategoryRules rules = RulesFixtures.book().forCategory("bedding-linens").orElseThrow();
+        CategoryRules rules = RulesFixtures.book().forCategory("furniture-small-appliances").orElseThrow();
         ProductDraft draft = complete(rules);
         Map<String, String> attrs = new HashMap<>(draft.attributes());
         attrs.remove("material");
@@ -138,7 +138,7 @@ class PerKindValidationTest {
     @Test
     void aRequiredBarcodeCannotBeExemptedButARequiredOrExemptionOneCan() {
         CategoryRules electronics = RulesFixtures.book().forCategory("phones").orElseThrow();
-        CategoryRules general = RulesFixtures.book().forCategory("bedding-linens").orElseThrow();
+        CategoryRules general = RulesFixtures.book().forCategory("furniture-small-appliances").orElseThrow();
 
         assertThat(errors(electronics, withBarcode(complete(electronics), null, true)))
                 .containsEntry("variants[0].gtin", "A barcode is required for this kind of product");

@@ -275,4 +275,71 @@ func exerciseSellerCandidates(t *testing.T, bff *testkit.BFF, post func(string, 
 		r.json(t)["possibleDuplicateQueued"] != true || r.json(t)["canOffer"] != false {
 		t.Fatalf("none of these = %d %s", r.status, r.body)
 	}
+	exerciseSizeRequests(t, bff, post)
+	exerciseAllowedConditions(t, post)
+}
+
+// exerciseSizeRequests drives "my size is different" (catalog size-requests): the seller is never stopped by a size.
+func exerciseSizeRequests(t *testing.T, bff *testkit.BFF, post func(string, any) resp) {
+	t.Helper()
+	const path = "/v1/seller/catalog/candidates/size-requests"
+	ask := map[string]any{"query": "  shea   butter 8oz ", "atin": "atsheav001", "size": " 16   oz "}
+	r := post(path, ask)
+	j := r.json(t)
+	if r.status != 200 || j["outcome"] != "REQUESTED" || j["requestId"] == nil || j["reviewDueAt"] == nil || j["canOffer"] != false {
+		t.Fatalf("size request = %d %s", r.status, r.body)
+	}
+	if s := bff.Upstreams.LastSizeRequest; s["query"] != "shea butter 8oz" || s["atin"] != "ATSHEAV001" || s["size"] != "16 oz" || s["sellerOrgId"] != nil {
+		t.Fatalf("catalog saw %v", s)
+	}
+	if r := post(path, ask); r.status != 200 || r.json(t)["outcome"] != "ALREADY_REQUESTED" {
+		t.Fatalf("the same size twice = %d %s", r.status, r.body)
+	}
+	same := map[string]any{"query": "shea butter 8oz", "atin": "ATSHEAV001", "size": "8oz"}
+	if r := post(path, same); r.status != 200 || r.json(t)["outcome"] != "ALREADY_ON_PAGE" || r.json(t)["existingAtin"] != "ATSHEAV001" || r.json(t)["canOffer"] != true {
+		t.Fatalf("a size the page has = %d %s", r.status, r.body)
+	}
+	for size, code := range map[string]string{"a big bag": "SIZE_INVALID", "red 8oz": "SIZE_NOT_ADDABLE"} {
+		if r := post(path, map[string]any{"query": "shea", "atin": "ATSHEAV001", "size": size}); r.status != 422 || r.json(t)["code"] != code {
+			t.Fatalf("size %q = %d %s, want %s", size, r.status, r.body, code)
+		}
+	}
+	if r := post(path, map[string]any{"query": "shea", "atin": "ATSHEAV001", "size": "too many"}); r.status != 429 || r.json(t)["code"] != "RATE_LIMITED" {
+		t.Fatalf("too many waiting = %d %s", r.status, r.body)
+	}
+	if r := post(path, map[string]any{"query": "shea", "atin": "ATOTHER001", "size": "1 kg"}); r.status != 422 || r.json(t)["code"] != "CHOICE_NOT_SHOWN" {
+		t.Fatalf("not shown = %d %s", r.status, r.body)
+	}
+	calls := bff.Upstreams.CallCount("POST /v1/catalog/matches/size-requests")
+	mustStatus(t, post(path, map[string]any{"query": "shea", "atin": "ATSHEAV001"}), 422)
+	mustStatus(t, post(path, map[string]any{"query": "shea", "atin": "not-an-atin", "size": "1 kg"}), 422)
+	mustStatus(t, post(path, map[string]any{"query": " ", "atin": "ATSHEAV001", "size": "1 kg"}), 422)
+	mustStatus(t, post(path, map[string]any{"query": "shea", "atin": "ATSHEAV001", "size": strings.Repeat("1", 41)}), 422)
+	mustStatus(t, post(path, map[string]any{"query": "shea", "atin": "ATSHEAV001", "size": "1 kg", "categoryId": "not-a-uuid"}), 422)
+	mustStatus(t, post(path, map[string]any{"query": "shea", "atin": "ATSHEAV001", "size": "1 kg", "note": strings.Repeat("n", 501)}), 422)
+	if bff.Upstreams.CallCount("POST /v1/catalog/matches/size-requests") != calls {
+		t.Fatal("a request that does not validate must not reach catalog")
+	}
+	// The organisation is the session's, never the body's.
+	mustStatus(t, post(path, map[string]any{"query": "shea", "atin": "ATSHEAV001", "size": "32 oz", "sellerOrgId": "other"}), 200)
+}
+
+// exerciseAllowedConditions: the conditions a category allows reach the form (NEW alone where it is not asked).
+func exerciseAllowedConditions(t *testing.T, post func(string, any) resp) {
+	t.Helper()
+	cond := func(query string) []any {
+		r := post("/v1/seller/catalog/candidates", map[string]any{"query": query})
+		c, _ := r.json(t)["candidates"].([]any)
+		if r.status != 200 || len(c) != 1 {
+			t.Fatalf("candidates for %q = %d %s", query, r.status, r.body)
+		}
+		got, _ := c[0].(map[string]any)["allowedConditions"].([]any)
+		return got
+	}
+	if got := cond("shea butter"); len(got) != 1 || got[0] != "NEW" {
+		t.Fatalf("a body butter allows %v, want NEW only", got)
+	}
+	if got := cond("laptop"); len(got) != 6 || got[0] != "NEW" {
+		t.Fatalf("a laptop allows %v, want every condition", got)
+	}
 }

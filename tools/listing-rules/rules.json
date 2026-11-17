@@ -251,7 +251,7 @@
     "JWL": "hidden",
     "ELC": "optional",
     "HOM": "optional",
-    "KID": "required_or_exemption",
+    "KID": "optional",
     "PET": "hidden",
     "BOK": "optional",
     "DIG": "hidden",
@@ -994,7 +994,11 @@
    "taxStatus": "ACTIVE",
    "kind": "HOM",
    "approval": "open",
-   "note": ""
+   "note": "",
+   "overrides": {
+    "condition": "hidden",
+    "model_number": "hidden"
+   }
   },
   {
    "code": "haircare",
@@ -1012,7 +1016,10 @@
    "taxStatus": "ACTIVE",
    "kind": "HLT",
    "approval": "approval",
-   "note": "Amazon gates topicals. Drug Facts photo and documents."
+   "note": "Amazon gates topicals. Drug Facts photo and documents.",
+   "overrides": {
+    "servings": "hidden"
+   }
   },
   {
    "code": "perfumes-fragrances",
@@ -1039,7 +1046,11 @@
    "taxStatus": "ACTIVE",
    "kind": "HOM",
    "approval": "open",
-   "note": ""
+   "note": "",
+   "overrides": {
+    "condition": "hidden",
+    "model_number": "hidden"
+   }
   },
   {
    "code": "adult-clothing-footwear",
@@ -1048,7 +1059,10 @@
    "taxStatus": "ACTIVE",
    "kind": "FSH",
    "approval": "brand_gated",
-   "note": "Amazon gates Clothing and Accessories. We gate known brands and keep the category open."
+   "note": "Amazon gates Clothing and Accessories. We gate known brands and keep the category open.",
+   "overrides": {
+    "age_grade": "hidden"
+   }
   },
   {
    "code": "bags-purses",
@@ -1057,7 +1071,11 @@
    "taxStatus": "ACTIVE",
    "kind": "FSH",
    "approval": "brand_gated",
-   "note": ""
+   "note": "",
+   "overrides": {
+    "age_grade": "hidden",
+    "sizes": "optional"
+   }
   },
   {
    "code": "childrens-clothing",
@@ -1084,7 +1102,11 @@
    "taxStatus": "ACTIVE",
    "kind": "HOM",
    "approval": "open",
-   "note": ""
+   "note": "",
+   "overrides": {
+    "condition": "hidden",
+    "model_number": "hidden"
+   }
   },
   {
    "code": "cleaning-paper-products",
@@ -1093,7 +1115,12 @@
    "taxStatus": "REFINE_CODE",
    "kind": "HOM",
    "approval": "open",
-   "note": "Dangerous goods answer applies to cleaners."
+   "note": "Dangerous goods answer applies to cleaners.",
+   "overrides": {
+    "condition": "hidden",
+    "model_number": "hidden",
+    "material": "hidden"
+   }
   },
   {
    "code": "decor-candles",
@@ -1102,7 +1129,11 @@
    "taxStatus": "ACTIVE",
    "kind": "HOM",
    "approval": "open",
-   "note": "Candles ask the dangerous goods question."
+   "note": "Candles ask the dangerous goods question.",
+   "overrides": {
+    "condition": "hidden",
+    "model_number": "hidden"
+   }
   },
   {
    "code": "furniture-small-appliances",
@@ -1120,7 +1151,10 @@
    "taxStatus": "REFINE_CODE",
    "kind": "HOM",
    "approval": "open",
-   "note": ""
+   "note": "",
+   "overrides": {
+    "model_number": "optional"
+   }
   },
   {
    "code": "computers-laptops",
@@ -1201,7 +1235,10 @@
    "taxStatus": "ACTIVE",
    "kind": "HLT",
    "approval": "open",
-   "note": "Low risk items such as plasters and gauze. Staff can gate a product."
+   "note": "Low risk items such as plasters and gauze. Staff can gate a product.",
+   "overrides": {
+    "servings": "hidden"
+   }
   },
   {
    "code": "medical-devices",
@@ -1210,7 +1247,12 @@
    "taxStatus": "ACTIVE",
    "kind": "HLT",
    "approval": "approval",
-   "note": "FDA listing for the device class."
+   "note": "FDA listing for the device class.",
+   "overrides": {
+    "servings": "hidden",
+    "net_weight": "optional",
+    "shelf_life": "optional"
+   }
   },
   {
    "code": "otc-medicines",
@@ -1258,7 +1300,12 @@
    "taxStatus": "ACTIVE",
    "kind": "HOM",
    "approval": "open",
-   "note": ""
+   "note": "",
+   "overrides": {
+    "condition": "hidden",
+    "model_number": "hidden",
+    "material": "hidden"
+   }
   },
   {
    "code": "toys-games",
@@ -1276,7 +1323,12 @@
    "taxStatus": "REFINE_CODE",
    "kind": "HOM",
    "approval": "open",
-   "note": ""
+   "note": "",
+   "overrides": {
+    "condition": "hidden",
+    "model_number": "hidden",
+    "material": "optional"
+   }
   },
   {
    "code": "pet-food",
@@ -1429,7 +1481,11 @@
    "taxStatus": "REFINE_CODE",
    "kind": "HOM",
    "approval": "open",
-   "note": "Barcode exemption allowed. Brand \"Handmade\"."
+   "note": "Barcode exemption allowed. Brand \"Handmade\".",
+   "overrides": {
+    "condition": "hidden",
+    "model_number": "hidden"
+   }
   },
   {
    "code": "school-office-supplies",
@@ -1438,7 +1494,11 @@
    "taxStatus": "ACTIVE",
    "kind": "HOM",
    "approval": "open",
-   "note": ""
+   "note": "",
+   "overrides": {
+    "model_number": "hidden",
+    "material": "optional"
+   }
   },
   {
    "code": "sports-goods",
@@ -1447,7 +1507,11 @@
    "taxStatus": "ACTIVE",
    "kind": "HOM",
    "approval": "open",
-   "note": ""
+   "note": "",
+   "overrides": {
+    "model_number": "optional",
+    "material": "optional"
+   }
   },
   {
    "code": "fabrics-textiles",
@@ -1457,7 +1521,10 @@
    "kind": "FSH",
    "approval": "open",
    "provisional": true,
-   "note": "Provisional catalog category, not in the approved matrix: treated as Clothing, shoes, bags (FSH) and open until the owner decides."
+   "note": "Provisional catalog category, not in the approved matrix: treated as Clothing, shoes, bags (FSH) and open until the owner decides.",
+   "overrides": {
+    "age_grade": "hidden"
+   }
   }
  ]
 }

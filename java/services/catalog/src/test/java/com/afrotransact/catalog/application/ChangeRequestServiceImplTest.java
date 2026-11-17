@@ -251,6 +251,35 @@ class ChangeRequestServiceImplTest {
     }
 
     @Test
+    void anAppliedNewVariantTellsTheSellerWhichVariantToAddPriceAndStockTo() {
+        as(seller("org_b", CatalogPermissions.WRITE));
+        Variant fiveKg = new Variant(UUID.randomUUID(), new Atin("AT00000002"), "S-1", null, true, Map.of("Size", "5 kg"), 899,
+                "USD", 5);
+        Variant oneKg = new Variant(UUID.randomUUID(), new Atin("AT00000042"), "S-2", null, true, Map.of("Size", "1 kg"), 899,
+                "USD", 0);
+        Product themed = page.withVariationTheme("Size", List.of(fiveKg, oneKg));
+        when(products.findById(page.id())).thenReturn(Optional.of(themed));
+        ProductChangeRequest asked = ProductChangeRequest.filed(page.id(), "AT00000001", null, null,
+                ChangeRequestType.NEW_VARIANT, "MASS:100000:1",
+                Map.of("source", "SELLER_SIZE", "options", Map.of("Size", "1 KG")), null, "org_b", "user_b", NOW, NOW)
+                .applied("staff_1", "Checked", "NEW_VARIANT", NOW);
+        when(requests.findById(asked.id())).thenReturn(Optional.of(asked));
+
+        ChangeRequestView view = service.get(asked.id());
+
+        assertThat(view.resultAtin()).isEqualTo("AT00000042");
+    }
+
+    @Test
+    void aWaitingOrRejectedNewVariantHasNoResultAtinYet() {
+        as(seller("org_b", CatalogPermissions.WRITE));
+        ProductChangeRequest waiting = pending(ChangeRequestType.NEW_VARIANT, "org_b");
+        when(requests.findById(waiting.id())).thenReturn(Optional.of(waiting));
+
+        assertThat(service.get(waiting.id()).resultAtin()).isNull();
+    }
+
+    @Test
     void aNewVariantTheTaxGateRefusesLeavesTheRequestWaiting() {
         as(staff());
         ProductChangeRequest waiting = pending(ChangeRequestType.NEW_VARIANT, "org_b");

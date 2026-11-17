@@ -80,6 +80,46 @@ class ClasspathRulesRegistryTest {
     }
 
     @Test
+    void conditionIsAskedOnlyForTheCategoriesWhereAUsedOrRefurbishedItemIsRealAndNeverForFoodOrConsumables() {
+        List<String> shown = BOOK.categories().values().stream().filter(c -> !c.provisional())
+                .filter(c -> c.shown(RuleField.CONDITION)).map(CategoryRules::code).sorted().toList();
+
+        assertThat(shown).containsExactly("computers-laptops", "furniture-small-appliances", "gaming", "kitchenware-cookware",
+                "magazines", "phones", "printed-books", "school-office-supplies", "sports-goods", "toys-games",
+                "tvs-audio-accessories");
+        BOOK.categories().values().stream()
+                .filter(c -> List.of("Groceries & Food", "Beverages", "Beauty & Personal Care", "Health & Wellness",
+                        "Digital Products", "Services").contains(c.department()))
+                .forEach(c -> assertThat(c.status(RuleField.CONDITION)).as(c.code()).isEqualTo(FieldStatus.HIDDEN));
+    }
+
+    @Test
+    void conditionIsNeverRequiredAnywhereBecauseNewIsTheDefault() {
+        BOOK.categories().values().forEach(c -> assertThat(c.status(RuleField.CONDITION).expectsAnswer())
+                .as(c.code()).isFalse());
+    }
+
+    @Test
+    void questionsThatMeanNothingForACategoryAreNotAsked() {
+        // A model number for a candle, a nappy or a hair clip; an age grade for an adult's shoes; servings for a thermometer.
+        for (String code : List.of("decor-candles", "diapers-wipes", "hair-accessories", "wigs-extensions", "bedding-linens",
+                "handmade-products", "cleaning-paper-products", "pet-grooming-accessories", "school-office-supplies")) {
+            assertThat(BOOK.forCategory(code).orElseThrow().shown(RuleField.MODEL_NUMBER)).as(code).isFalse();
+        }
+        assertThat(BOOK.forCategory("furniture-small-appliances").orElseThrow().status(RuleField.MODEL_NUMBER))
+                .isEqualTo(FieldStatus.REQUIRED_OR_EXEMPTION);
+        assertThat(BOOK.forCategory("computers-laptops").orElseThrow().status(RuleField.MODEL_NUMBER))
+                .isEqualTo(FieldStatus.REQUIRED);
+        assertThat(BOOK.forCategory("adult-clothing-footwear").orElseThrow().shown(RuleField.AGE_GRADE)).isFalse();
+        assertThat(BOOK.forCategory("bags-purses").orElseThrow().shown(RuleField.AGE_GRADE)).isFalse();
+        assertThat(BOOK.forCategory("childrens-clothing").orElseThrow().shown(RuleField.AGE_GRADE)).isTrue();
+        assertThat(BOOK.forCategory("medical-devices").orElseThrow().shown(RuleField.SERVINGS)).isFalse();
+        assertThat(BOOK.forCategory("dietary-supplements").orElseThrow().status(RuleField.SERVINGS))
+                .isEqualTo(FieldStatus.REQUIRED);
+        assertThat(BOOK.forCategory("diapers-wipes").orElseThrow().shown(RuleField.MATERIAL)).isFalse();
+    }
+
+    @Test
     void packageIsAskedForEveryPhysicalKindAndNoOther() {
         BOOK.categories().values().forEach(c -> {
             boolean physical = !List.of("DIG", "GFT", "SRV").contains(c.kindCode());
@@ -151,7 +191,7 @@ class ClasspathRulesRegistryTest {
         }
     }
 
-    /** A category of each kind without a category override (car seats override the condition of toys). */
+    /** A category of each kind without an override of the kind's cells (see the overrides of rules.json). */
     private static String sampleOf(String kind) {
         return switch (kind) {
             case "PKG" -> "beans-pantry-sauces";
@@ -160,10 +200,10 @@ class ClasspathRulesRegistryTest {
             case "BBY" -> "baby-bottles";
             case "BEA" -> "skincare-cosmetics";
             case "HLT" -> "dietary-supplements";
-            case "FSH" -> "adult-clothing-footwear";
+            case "FSH" -> "childrens-clothing";
             case "JWL" -> "jewelry-accessories";
             case "ELC" -> "phones";
-            case "HOM" -> "bedding-linens";
+            case "HOM" -> "furniture-small-appliances";
             case "KID" -> "toys-games";
             case "PET" -> "pet-food";
             case "BOK" -> "printed-books";
