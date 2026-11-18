@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 
 import { sellerAddressSearch, STATE_OPTIONS } from '@/components/onboarding/WizardKit';
 import { Card } from '@/components/ui/Card';
+import { ControlRowAction } from '@/components/ui/ControlRowAction';
 import { Notice } from '@/components/ui/Notice';
 import { problemMessage } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
@@ -190,7 +191,7 @@ function AreaSheet({ view, onClose }: { view: ServiceAreaView; onClose: () => vo
               ))}
             </ul>
           ) : null}
-          <div className="grid items-end gap-2 sm:grid-cols-[140px_1fr_auto]">
+          <div className="grid gap-2 sm:grid-cols-[140px_minmax(0,1fr)_auto] sm:items-start sm:gap-x-3">
             <Select label={t('sc.svcArea.extraKind')} value={kind} onChange={(e) => { setKind(e.currentTarget.value as (typeof EXTRA_KINDS)[number]); setExtraValue(''); }}
               options={EXTRA_KINDS.map((k) => ({ value: k, label: t(`sc.svcArea.kind.${k}`) }))} />
             {kind === 'ZONE' ? (
@@ -198,7 +199,9 @@ function AreaSheet({ view, onClose }: { view: ServiceAreaView; onClose: () => vo
             ) : (
               <TextField label={t(`sc.svcArea.kind.${kind}`)} value={extraValue} inputMode={kind === 'ZIP' ? 'numeric' : undefined} maxLength={kind === 'ZIP' ? 5 : 60} onChange={(e) => setExtraValue(e.currentTarget.value)} />
             )}
-            <Button variant="neutral" onClick={addExtra}>{t('sc.svcArea.addExtra')}</Button>
+            <ControlRowAction>
+              <Button variant="neutral" className="max-sm:w-full" onClick={addExtra}>{t('sc.svcArea.addExtra')}</Button>
+            </ControlRowAction>
           </div>
           {kind === 'CITY' ? <Select label={t('sc.shipFrom.state')} value={extraState} onChange={(e) => setExtraState(e.currentTarget.value)} options={STATE_OPTIONS} /> : null}
           {errors.extra ?? errors.extraAreas ? <span role="alert" className="text-sm text-danger">{errors.extra ?? errors.extraAreas}</span> : null}
