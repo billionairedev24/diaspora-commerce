@@ -1321,7 +1321,10 @@
    "taxStatus": "REFINE_CODE",
    "kind": "KID",
    "approval": "open",
-   "note": "Age grade and CPSIA or ASTM F963 certificate. Amazon tightens this in the holiday season."
+   "note": "Age grade and CPSIA or ASTM F963 certificate. Amazon tightens this in the holiday season.",
+   "overrides": {
+    "brand": "required_or_exemption"
+   }
   },
   {
    "code": "pet-grooming-accessories",

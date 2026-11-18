@@ -347,14 +347,14 @@ describe('product form: the brand rule is decided per category (docs/engineering
     });
   });
 
-  it('electronics, regulated health and baby goods, toys and fragrance must name the brand and have no way out', () => {
-    ['phones', 'computers-laptops', 'baby-food-formula', 'dietary-supplements', 'otc-medicines', 'toys-games', 'car-seats', 'perfumes-fragrances'].forEach((c) => {
+  it('electronics, regulated health and baby goods, car seats and fragrance must name the brand and have no way out', () => {
+    ['phones', 'computers-laptops', 'baby-food-formula', 'dietary-supplements', 'otc-medicines', 'car-seats', 'perfumes-fragrances'].forEach((c) => {
       expect(modeOf(c), c).toBe('required');
     });
   });
 
-  it('fashion, jewelry, skin and hair care and household goods take a brand or No brand / Handmade', () => {
-    ['adult-clothing-footwear', 'bags-purses', 'jewelry-accessories', 'skincare-cosmetics', 'haircare', 'furniture-small-appliances', 'kitchenware-cookware'].forEach((c) => {
+  it('fashion, toys, jewelry, skin and hair care and household goods take a brand or No brand / Handmade', () => {
+    ['adult-clothing-footwear', 'bags-purses', 'toys-games', 'jewelry-accessories', 'skincare-cosmetics', 'haircare', 'furniture-small-appliances', 'kitchenware-cookware'].forEach((c) => {
       expect(modeOf(c), c).toBe('brand-or-reason');
     });
   });
@@ -374,7 +374,7 @@ describe('product form: the brand rule is decided per category (docs/engineering
       expect(Boolean(refused), `${c} (${mode})`).toBe(mode === 'required' || mode === 'brand-or-reason');
     });
     expect(approved()).toHaveLength(73);
-    expect(counts).toEqual({ optional: 34, required: 15, 'brand-or-reason': 12, hidden: 12 });
+    expect(counts).toEqual({ optional: 34, required: 14, 'brand-or-reason': 13, hidden: 12 });
   });
 
   it('a no-brand reason satisfies a brand-or-reason category, and never a required one', () => {
