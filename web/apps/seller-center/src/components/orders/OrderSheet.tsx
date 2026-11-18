@@ -29,7 +29,7 @@ export function OrderSheet({ orderNumber, onClose }: { orderNumber: string | nul
   const editable = can('orders');
   const q = useQuery({ ...sellerQueries.order(api, orgId, orderNumber ?? ''), enabled: orderNumber !== null });
   const status = useMutation({
-    mutationFn: ({ shipmentId, to, code }: { shipmentId: string; to: SellerStatusAction; code?: string }) => api.updateShipmentStatus(orderNumber ?? '', shipmentId, to, idempotencyKey(), code),
+    mutationFn: ({ shipmentId, to, code, ship }: { shipmentId: string; to: SellerStatusAction; code?: string; ship?: { shipNote?: string } }) => api.updateShipmentStatus(orderNumber ?? '', shipmentId, to, idempotencyKey(), code, ship),
     onSuccess: (o, v) => {
       qc.setQueryData(sellerKeys.order(orgId, o.orderNumber), o);
       void qc.invalidateQueries({ queryKey: sellerKeys.orders(orgId) });
@@ -97,7 +97,7 @@ export function OrderSheet({ orderNumber, onClose }: { orderNumber: string | nul
                   </Button>
                 </div>
               ) : null}
-              {s.fulfilment === 'AFROTRANSACT' ? <p className="m-0 text-xs text-muted">Fulfilled by AfroTransact — we pick, pack and ship this one.</p> : null}
+              {s.fulfilment === 'AFROTRANSACT' ? <p className="m-0 text-xs text-muted">Fulfilled by AfroTransact — we collect this one from you and deliver it.</p> : null}
               {s.localDelivery ? (
                 <div className="flex flex-col gap-1 rounded-md bg-success-bg p-3 text-sm" data-testid="local-delivery">
                   <span>{t('sc.local.shipment')}</span>
@@ -118,7 +118,7 @@ export function OrderSheet({ orderNumber, onClose }: { orderNumber: string | nul
                   ) : null}
                 </div>
               ) : null}
-              <ShipmentProgress shipment={s} editable={editable} loading={status.isPending} onMove={(to, code) => status.mutate({ shipmentId: s.shipmentId, to, code })} />
+              <ShipmentProgress shipment={s} editable={editable} loading={status.isPending} onMove={(to, code, ship) => status.mutate({ shipmentId: s.shipmentId, to, code, ship })} />
               {s.proof && deliveredByAfroTransact(s.fulfilmentMode) ? <ProofOfDelivery proof={s.proof} /> : null}
               {editable && s.canBuyLabel ? <LabelForm order={o} shipmentId={s.shipmentId} suggested={s.suggestedParcel} /> : null}
               <details className="text-xs text-muted">

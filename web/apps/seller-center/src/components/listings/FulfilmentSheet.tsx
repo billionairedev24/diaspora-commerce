@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { type FormEvent, useEffect, useState } from 'react';
 
+import { FulfilmentTip } from '@/components/ui/FulfilmentTip';
 import { Notice } from '@/components/ui/Notice';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
@@ -13,9 +14,9 @@ import { sellerApi } from '@/lib/api';
 import { money } from '@/lib/format';
 import { useSeller } from '@/lib/session';
 
-const CHOICES: FulfilmentKind[] = ['SELLER', 'AFROTRANSACT', 'AFROTRANSACT_DELIVERY'];
+const CHOICES: FulfilmentKind[] = ['SELLER', 'AFROTRANSACT_DELIVERY'];
 
-/** One offer: "I ship it", "Fulfilled by AfroTransact (FBA)" or "AfroTransact picks up from my store" with its pickup location. */
+/** One price and stock line: Pick up, or Fulfilled by AfroTransact (FBA, from one of your pickup locations). Each is explained in a tooltip. */
 function OfferFulfilment({ offer, locations, editable }: { offer: SellerOffer; locations: { id: string; label: string }[]; editable: boolean }) {
   const t = useT();
   const qc = useQueryClient();
@@ -66,16 +67,15 @@ function OfferFulfilment({ offer, locations, editable }: { offer: SellerOffer; l
       </p>
       <fieldset className="m-0 flex flex-col gap-2 border-0 p-0" disabled={!editable}>
         <legend className="mb-1 text-sm">{t('sc.ff.legend', { sku: offer.sellerSku })}</legend>
+        {offer.fulfilment === 'AFROTRANSACT' ? <p className="m-0 text-xs text-muted">{t('sc.ff.legacyStock')}</p> : null}
         {CHOICES.map((c) => (
           <div key={c} className="flex items-start gap-2 text-sm">
-            <input type="radio" id={`${name}-${c}`} name={name} value={c} checked={choice === c} onChange={() => setChoice(c)} className="mt-1 shrink-0" aria-describedby={`${name}-${c}-hint`} />
-            <span>
+            <input type="radio" id={`${name}-${c}`} name={name} value={c} checked={choice === c} onChange={() => setChoice(c)} className="mt-1 shrink-0" />
+            <span className="flex items-center">
               <label htmlFor={`${name}-${c}`} className="cursor-pointer font-semibold">
                 {t(`sc.ff.choice.${c}`)}
               </label>
-              <span id={`${name}-${c}-hint`} className="block text-xs text-muted">
-                {t(`sc.ff.choice.${c}.hint`)}
-              </span>
+              <FulfilmentTip mode={c === 'SELLER' ? 'pickup' : 'fba'} />
             </span>
           </div>
         ))}

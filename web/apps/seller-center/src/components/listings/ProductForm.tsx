@@ -465,7 +465,7 @@ export function ProductForm({ productId, start }: { productId?: string; start?: 
                     <TextField id={fieldId.price} label={t('sc.pf.field.priceUsd')} required inputMode="decimal" value={s.single.price} error={err(fieldId.price)} onChange={(e) => patch({ single: { ...s.single, price: e.target.value } })} />
                     <TextField id={fieldId.compareAt} label={t('sc.pf.field.compareAt')} help={t('sc.pf.compareAtHelp')} inputMode="decimal" value={s.single.compareAt} error={err(fieldId.compareAt)} onChange={(e) => patch({ single: { ...s.single, compareAt: e.target.value } })} />
                     {showQty ? (
-                      <TextField id={fieldId.qty} label={t('sc.pf.field.qty')} required inputMode="numeric" value={s.single.qty} error={err(fieldId.qty)} help={s.fulfilment === 'AFROTRANSACT' ? t('sc.pf.qtyFba') : undefined} onChange={(e) => patch({ single: { ...s.single, qty: e.target.value } })} />
+                      <TextField id={fieldId.qty} label={t('sc.pf.field.qty')} required inputMode="numeric" value={s.single.qty} error={err(fieldId.qty)} onChange={(e) => patch({ single: { ...s.single, qty: e.target.value } })} />
                     ) : null}
                     <TextField id={fieldId.sku} label={t('sc.pf.field.sku')} placeholder={t('sc.pf.sku.placeholder')} help={detail.data?.variants[0]?.sellerSkuGenerated ? t('sc.pf.sku.generated') : undefined} value={s.single.sku} error={err(fieldId.sku)} readOnly={live} onChange={(e) => patch({ single: { ...s.single, sku: e.target.value } })} />
                     {s.noGtin && idStatus !== 'required' || !showBarcode ? null : (
@@ -555,14 +555,7 @@ export function ProductForm({ productId, start }: { productId?: string; start?: 
 
           {type ? (
             <FormSection {...section('fulfilment')}>
-              {!rules || physical ? (
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-sm font-semibold">{t('sc.pf.fulfilment.how')}</span>
-                  <ChipGroup label={t('sc.pf.fulfilment.how')} value={s.fulfilment} onChange={(f) => patch({ fulfilment: f })}
-                    options={[{ value: 'SELLER', label: t('sc.pf.fulfilment.SELLER') }, { value: 'AFROTRANSACT', label: t('sc.pf.fulfilment.AFROTRANSACT') }]} />
-                  <span className="text-xs text-muted">{t(`sc.pf.fulfilment.${s.fulfilment}.hint` as MessageKey)}</span>
-                </div>
-              ) : null}
+              {/* How customers get the product (Pick up, Fulfilled by AfroTransact) is not asked here: it is set per pickup location and on each listing's Fulfilment. */}
               {s.fulfilment === 'SELLER' && (isShown(rules, 'ship_from') || isShown(rules, 'handling_days')) ? (
                 <div className={GRID}>
                   {isShown(rules, 'ship_from') ? (

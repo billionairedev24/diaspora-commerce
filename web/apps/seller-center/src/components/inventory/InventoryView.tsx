@@ -2,7 +2,7 @@
 
 import { sellerKeys, sellerQueries, type StockPosition, type StockReason } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
-import { AlertAction, Button, Dialog, PageStack, Select, StatStrip, Tabs, TextField, useToast } from '@afrotransact/ui';
+import { Button, Dialog, PageStack, Select, StatStrip, Tabs, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -16,7 +16,6 @@ import { idempotencyKey } from '@/lib/format';
 import { useSeller } from '@/lib/session';
 import { exportDataset, pollExport } from '@/lib/table-export';
 
-import { FbaLots, FbaShipments } from './FbaInbound';
 
 const columns: ColumnDef<StockPosition>[] = [
   { id: 'sku', accessorFn: (p) => p.sku, header: 'SKU', size: 220, meta: { kind: 'mono' }, cell: ({ row }) => <span className="font-mono text-xs">{row.original.sku}</span> },
@@ -55,9 +54,7 @@ export function InventoryView() {
         value={tab}
         onValueChange={(v) => router.replace(`${pathname}?tab=${encodeURIComponent(v)}`, { scroll: false })}
         items={[
-          { value: 'stock', label: 'Stock', content: tab === 'stock' ? <StockView adjusting={adjusting} setAdjusting={setAdjusting} /> : null },
-          { value: 'send', label: 'Send to AfroTransact', content: tab === 'send' ? <FbaShipments /> : null },
-          { value: 'lots', label: 'Lots & expiry', content: tab === 'lots' ? <FbaLots /> : null }
+          { value: 'stock', label: 'Stock', content: tab === 'stock' ? <StockView adjusting={adjusting} setAdjusting={setAdjusting} /> : null }
         ]}
       />
     </ModulePage>
@@ -67,7 +64,6 @@ export function InventoryView() {
 /** FBA stock by warehouse (inventory) and quantity adjustments for seller-shipped SKUs (offers). */
 function StockView({ adjusting: open, setAdjusting: setOpen }: { adjusting: boolean; setAdjusting: (v: boolean) => void }) {
   const api = sellerApi();
-  const router = useRouter();
   const qc = useQueryClient();
   const toast = useToast();
   const { orgId } = useSeller();
@@ -90,17 +86,8 @@ function StockView({ adjusting: open, setAdjusting: setOpen }: { adjusting: bool
   return (
     <PageStack>
       {t && t.lowStockSkus > 0 ? (
-        <Notice
-          tone="warning"
-          title={`${t.lowStockSkus} SKU${t.lowStockSkus === 1 ? ' is' : 's are'} running low on stock.`}
-          action={<AlertAction onClick={() => router.replace('/inventory?tab=send')}>Create inbound plan</AlertAction>}
-        >
-          Send stock to AfroTransact or adjust counted quantities to avoid stockouts on the storefront.
-        </Notice>
-      ) : null}
-      {t && t.inbound > 0 ? (
-        <Notice tone="info" title={`${t.inbound} unit${t.inbound === 1 ? ' is' : 's are'} currently inbound.`}>
-          Track arriving shipments in the “Send to AfroTransact” tab.
+        <Notice tone="warning" title={`${t.lowStockSkus} SKU${t.lowStockSkus === 1 ? ' is' : 's are'} running low on stock.`}>
+          Adjust the counted quantities to avoid stockouts on the storefront.
         </Notice>
       ) : null}
       {t ? (
@@ -115,11 +102,11 @@ function StockView({ adjusting: open, setAdjusting: setOpen }: { adjusting: bool
           ]}
         />
       ) : null}
-      <DataTable<StockPosition> id="seller.inventory" label="Stock by warehouse" columns={columns} data={q.data?.positions ?? []} getRowId={(p) => `${p.sku}@${p.nodeId}`}
+      <DataTable<StockPosition> id="seller.inventory" label="Stock AfroTransact holds" columns={columns} data={q.data?.positions ?? []} getRowId={(p) => `${p.sku}@${p.nodeId}`}
         rowLabel={(p) => `${p.sku} at ${p.nodeId}`} state={state} mode="client" loading={q.isPending} fetching={q.isFetching}
         error={q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : undefined}
         searchPlaceholder="Search SKU, warehouse, quantities, “low stock”…"
-        empty={<>No stock in AfroTransact fulfilment centres yet. <button type="button" className="font-semibold text-link underline" onClick={() => router.replace('/inventory?tab=send')}>Send stock to AfroTransact</button> to earn the “Fulfilled by AfroTransact” badge.</>}
+        empty={<>AfroTransact holds no stock for you. New stock is no longer sent to us: keep your own stock counts on each listing.</>}
         onExport={exportDataset} pollExport={pollExport} />
       <Dialog open={open} onOpenChange={setOpen} title="Adjust stock" description="Set the quantity you have for a seller-shipped SKU after counting it.">
         <form className="flex flex-col gap-2" onSubmit={(e) => {

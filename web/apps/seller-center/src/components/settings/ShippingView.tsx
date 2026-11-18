@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
 
+import { FulfilmentTip } from '@/components/ui/FulfilmentTip';
 import { Notice } from '@/components/ui/Notice';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { Switch } from '@/components/ui/Switch';
@@ -15,6 +16,7 @@ import { shortDate } from '@/lib/format';
 import { useSeller } from '@/lib/session';
 import { checkWeek, type DayRow, sameWeek, weekOf, windowsOf } from '@/lib/weekly-hours';
 
+import { SelfShippingSection } from './SelfShippingSection';
 import { SettingsPage, useSectionAccess } from './SettingsShell';
 import { WeeklyHours } from './WeeklyHours';
 
@@ -74,7 +76,10 @@ export function DriverPickupForm({ a, editable, sellerPickupOn = false }: { a: S
       aria-label={t('sc.pickup.title')}
     >
       <div className="flex flex-col">
-        <Switch id={`${a.id}-pickup-enabled`} checked={enabled} disabled={!editable || save.isPending} onChange={setEnabled} label={t('sc.pickup.toggle')} />
+        <div className="flex items-center">
+          <Switch id={`${a.id}-pickup-enabled`} checked={enabled} disabled={!editable || save.isPending} onChange={setEnabled} label={t('sc.pickup.toggle')} />
+          <FulfilmentTip mode="fba" />
+        </div>
         <p className="m-0 text-sm text-muted">
           {saved.zoneName ? t('sc.pickup.zone', { zone: saved.zoneName }) : t('sc.pickup.toggleHelp')}
           {saved.enabledAt ? ` · ${t('sc.pickup.since', { date: shortDate(saved.enabledAt) })}` : ''}
@@ -143,6 +148,7 @@ export function ShippingView() {
           </li>
         ))}
       </ul>
+      <SelfShippingSection editable={canEdit} />
     </SettingsPage>
   );
 }
