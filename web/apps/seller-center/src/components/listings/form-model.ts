@@ -297,8 +297,10 @@ export function brandOf(type: ProductTypeSchema | undefined, rules?: ListingRule
   const status = statusOf(rules, 'brand');
   if (status === 'hidden') return undefined;
   const base: AttributeDef = own ?? { key: 'brand', label: 'Brand', options: [], required: false, multiline: false, kind: 'BRAND', units: [], section: 'DETAILS', help: null, taxFact: false, evidence: false, optionLabels: {} };
-  // Where the rules show a brand, "No brand" and "Handmade" are always the ways to leave it out (with a reason).
-  return { ...base, kind: 'BRAND', required: status === 'required', options: ['UNBRANDED', 'HANDMADE'] };
+  // The category's rule decides: `required` must name a brand (no way out), `required_or_exemption` is a brand or a reason
+  // ("No brand", "Handmade"), `optional` may stay empty and also offers the reasons. The server applies the same rule.
+  const named = status === 'required';
+  return { ...base, kind: 'BRAND', required: named || status === 'required_or_exemption', options: named ? [] : ['UNBRANDED', 'HANDMADE'] };
 }
 
 /** Up to `limit` filled-in attributes for the shopper preview, brand / author first (what a search result line shows). */
@@ -861,7 +863,7 @@ export function toProductDraft(s: FormState, type: ProductTypeSchema | undefined
     if (f) return f.control === 'measure' && f.units.length && v.trim() ? `${v.trim()} ${s.units[k] || f.units[0]}` : v.trim();
     return attrValue(type?.attributes.find((a) => a.key === k), v, s.units[k]);
   };
-  const exemptions = Object.fromEntries(Object.entries(s.exemptions).filter(([id, why]) => why.trim() && statusOf(rules, id) === 'required_or_exemption').map(([id, why]) => [id, why.trim()]));
+  const exemptions = Object.fromEntries(Object.entries(s.exemptions).filter(([id, why]) => why.trim() && id !== 'brand' && statusOf(rules, id) === 'required_or_exemption').map(([id, why]) => [id, why.trim()]));
   const documents = ruleDocuments(rules).flatMap((f) => {
     const d = s.documents[f.id];
     return d?.url && d.status === 'ready' ? [{ kind: d.kind, url: d.url, fileName: d.fileName, contentType: d.contentType, bytes: d.bytes, ...(d.expiresOn ? { expiresOn: d.expiresOn } : {}) }] : [];

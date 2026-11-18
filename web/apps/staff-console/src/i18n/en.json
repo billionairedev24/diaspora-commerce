@@ -1973,6 +1973,7 @@
   "st.brand.col.products": "Products",
   "st.brand.col.scope": "Applies to",
   "st.brand.col.requested": "Requested",
+  "st.brand.col.similar": "Possible duplicate of",
   "st.brand.byStaff": "Added by staff",
   "st.brand.productsCount": "{n} products",
   "st.brand.scopeMore": "{first} +{n} more",

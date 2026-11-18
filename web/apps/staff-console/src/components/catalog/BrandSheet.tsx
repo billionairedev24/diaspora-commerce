@@ -388,6 +388,7 @@ function BrandDetails({ brand, canEdit, onMode }: { brand: StaffBrand; canEdit: 
         <Detail label={t('st.brand.col.status')}>{t(STATUS_LABEL[brand.status])}</Detail>
         <Detail label={t('st.brand.col.seller')}>{brand.createdByName ?? t('st.brand.byStaff')}</Detail>
         <Detail label={t('st.brand.col.requested')}>{when(brand.createdAt)}</Detail>
+        {brand.similarNames.length ? <Detail label={t('st.brand.col.similar')}>{brand.similarNames.join(', ')}</Detail> : null}
         <Detail label={t('st.brand.col.products')}>{t('st.brand.detail.usage', { n: brand.products, s: brand.sellers })}</Detail>
         <Detail label={t('st.brand.col.scope')}>
           <ul className="m-0 list-none p-0">

@@ -30,6 +30,8 @@ export interface ComboboxProps {
   /** Offers "Add “text”" for a name that is not in the list; the parent decides what adding means (and then sets the value). */
   onCreate?: (text: string) => void;
   createLabel?: (text: string) => string;
+  /** Called with what the person has typed (and '' once the list closes): a parent can look up suggestions for it. */
+  onQueryChange?: (text: string) => void;
   /** Typing then leaving the field empty clears the value (an optional field). */
   clearable?: boolean;
   placeholder?: string;
@@ -69,7 +71,7 @@ interface Row {
  * nothing is typed. Use a native Select for a handful of choices; this is for long lists.
  */
 export function Combobox({
-  label, options, value, onChange, recent = [], popular = [], onCreate, createLabel = (t) => `Add “${t}”`, clearable = false, placeholder, error, help, required, tip, id, name, disabled,
+  label, options, value, onChange, recent = [], popular = [], onCreate, createLabel = (t) => `Add “${t}”`, onQueryChange, clearable = false, placeholder, error, help, required, tip, id, name, disabled,
   limit = 50, recentLabel = 'Recent', popularLabel = 'Popular', allLabel = 'All', emptyLabel = 'No matches', resultsLabel = (n) => `${n} results`, listLabel, footerAction
 }: ComboboxProps) {
   const auto = useId().replace(/:/g, '');
@@ -139,6 +141,7 @@ export function Combobox({
     setOpen(false);
     setEditing(false);
     setQuery('');
+    onQueryChange?.('');
   };
   const choose = (row: Row | undefined) => {
     if (!row) return;
@@ -223,6 +226,7 @@ export function Combobox({
             onKeyDown={onKeyDown}
             onChange={(e) => {
               setQuery(e.target.value);
+              onQueryChange?.(e.target.value);
               setEditing(true);
               setOpen(true);
               setActive(0);

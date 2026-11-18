@@ -63,7 +63,7 @@ function complete(rules: ListingRules): FormState {
       if (f.units.length) units[f.attributeKey] = f.units[0] ?? '';
     }
   });
-  if (statusOf(rules, 'brand') === 'required') attrs.brand = 'Mama Kano';
+  if (statusOf(rules, 'brand') === 'required' || statusOf(rules, 'brand') === 'required_or_exemption') attrs.brand = 'Mama Kano';
   const code = rules.kind === 'BOK' ? '9780306406157' : '4006381333931';
   s = { ...s, attrs, units, description: 'Shopper description' };
   const idStatus = statusOf(rules, 'product_id');
@@ -80,8 +80,8 @@ const PKG = fieldId.rowPkg('');
 
 /** kind, a category of that kind, the field ids an otherwise valid but empty listing is refused for. */
 const KINDS: [string, string, string[]][] = [
-  ['PKG', 'beans-pantry-sauces', [fieldId.description, fieldId.brand, attr('net_weight'), attr('servings'), attr('shelf'), GTIN, PKG]],
-  ['PER', 'dairy-eggs', [fieldId.description, fieldId.brand, attr('net_weight'), attr('shelf'), attr('storage'), PKG]],
+  ['PKG', 'beans-pantry-sauces', [fieldId.description, attr('net_weight'), attr('servings'), attr('shelf'), GTIN, PKG]],
+  ['PER', 'dairy-eggs', [fieldId.description, attr('net_weight'), attr('shelf'), attr('storage'), PKG]],
   ['SFD', 'prepared-meals', [fieldId.description, attr('net_weight'), attr('servings'), attr('shelf'), attr('storage'), attr('ingredients'), attr('allergens'), PKG]],
   ['BBY', 'baby-bottles', [fieldId.description, fieldId.labelPhoto, fieldId.brand, attr('net_weight'), attr('servings'), attr('shelf'), attr('age'.concat('_grade')), GTIN, PKG]],
   ['BEA', 'skincare-cosmetics', [fieldId.description, fieldId.labelPhoto, fieldId.dangerous, fieldId.brand, attr('net_weight'), attr('ingredients'), attr('shelf'), GTIN, PKG]],
@@ -91,9 +91,9 @@ const KINDS: [string, string, string[]][] = [
   ['ELC', 'phones', [fieldId.description, fieldId.dangerous, fieldId.brand, attr('model'), GTIN, PKG]],
   ['HOM', 'furniture-small-appliances', [fieldId.description, fieldId.dangerous, fieldId.brand, attr('material'), attr('model'), GTIN, PKG]],
   ['KID', 'toys-games', [fieldId.description, fieldId.dangerous, fieldId.brand, attr('age_grade'), GTIN, PKG]],
-  ['PET', 'pet-food', [fieldId.description, fieldId.labelPhoto, fieldId.brand, attr('net_weight'), attr('shelf'), GTIN, PKG]],
+  ['PET', 'pet-food', [fieldId.description, fieldId.labelPhoto, attr('net_weight'), attr('shelf'), GTIN, PKG]],
   ['BOK', 'printed-books', [fieldId.description, GTIN, PKG]],
-  ['DIG', 'downloadable-ebooks', [fieldId.description, fieldId.brand]],
+  ['DIG', 'downloadable-ebooks', [fieldId.description]],
   ['GFT', 'gift-cards', [fieldId.description, fieldId.brand]],
   ['SRV', 'repairs', [fieldId.description]]
 ];
@@ -233,9 +233,9 @@ describe('product form follows the listing rules: specific rules', () => {
     const rules = rulesOf('beans-pantry-sauces');
     expect(attributesIn(grocery, 'FOOD', rules)).toEqual([]);
     expect(attributesIn(grocery, 'FOOD').length).toBeGreaterThan(0);
-    // The brand field follows the rules, not the product type: digital goods have a brand, books do not.
+    // The brand field follows the rules, not the product type: digital goods may have one, books do not.
     expect(brandOf(PRODUCT_TYPES.book as ProductTypeSchema, rulesOf('printed-books'))).toBeUndefined();
-    expect(brandOf(typeOf(), rulesOf('downloadable-ebooks'))).toMatchObject({ required: true, options: ['UNBRANDED', 'HANDMADE'] });
+    expect(brandOf(typeOf(), rulesOf('downloadable-ebooks'))).toMatchObject({ required: false, options: ['UNBRANDED', 'HANDMADE'] });
   });
 
   it('the required summary lists exactly the required items of the category with their state', () => {
@@ -330,5 +330,57 @@ describe('product form: server errors land on the field they name', () => {
     expect(serverFieldId('dangerousGoods')).toBe(fieldId.dangerous);
     expect(serverFieldId('attributes.material')).toBe(attr('material'));
     expect(serverFieldId('description')).toBe(fieldId.description);
+  });
+});
+
+describe('product form: the brand rule is decided per category (docs/engineering/listing-rules.md, D23)', () => {
+  const approved = () => LISTING_RULE_CATEGORIES.filter((c) => !rulesOf(c).provisional);
+  const modeOf = (code: string) => {
+    const def = brandOf(typeOf(), rulesOf(code));
+    return !def ? 'hidden' : !def.required ? 'optional' : def.options.length ? 'brand-or-reason' : 'required';
+  };
+
+  it('groceries, drinks and pet food never ask for a brand; "No brand" is a choice, not a duty', () => {
+    ['rice-grains', 'fresh-produce', 'spices-seasonings', 'plain-water', 'dairy-eggs', 'pet-food', 'candy-gum'].forEach((c) => {
+      expect(modeOf(c), c).toBe('optional');
+      expect(brandOf(typeOf(), rulesOf(c))?.options).toEqual(['UNBRANDED', 'HANDMADE']);
+    });
+  });
+
+  it('electronics, regulated health and baby goods, toys and fragrance must name the brand and have no way out', () => {
+    ['phones', 'computers-laptops', 'baby-food-formula', 'dietary-supplements', 'otc-medicines', 'toys-games', 'car-seats', 'perfumes-fragrances'].forEach((c) => {
+      expect(modeOf(c), c).toBe('required');
+    });
+  });
+
+  it('fashion, jewelry, skin and hair care and household goods take a brand or No brand / Handmade', () => {
+    ['adult-clothing-footwear', 'bags-purses', 'jewelry-accessories', 'skincare-cosmetics', 'haircare', 'furniture-small-appliances', 'kitchenware-cookware'].forEach((c) => {
+      expect(modeOf(c), c).toBe('brand-or-reason');
+    });
+  });
+
+  it('books, food service and services have no brand question; handmade and mostly unbranded goods are optional', () => {
+    ['printed-books', 'magazines', 'prepared-meals', 'bakery-products', 'repairs', 'event-tickets'].forEach((c) => expect(modeOf(c), c).toBe('hidden'));
+    ['handmade-products', 'hair-accessories', 'wigs-extensions', 'bedding-linens', 'sports-goods', 'school-office-supplies'].forEach((c) => expect(modeOf(c), c).toBe('optional'));
+  });
+
+  it('splits the 73 categories into the four modes and a listing is refused for a missing brand only where it is required', () => {
+    const counts: Record<string, number> = {};
+    approved().forEach((c) => {
+      const mode = modeOf(c);
+      counts[mode] = (counts[mode] ?? 0) + 1;
+      const rules = rulesOf(c);
+      const refused = validateForm({ ...complete(rules), attrs: { ...complete(rules).attrs, brand: '', brand_reason: '' } }, typeOf(), { rules })[fieldId.brand];
+      expect(Boolean(refused), `${c} (${mode})`).toBe(mode === 'required' || mode === 'brand-or-reason');
+    });
+    expect(approved()).toHaveLength(73);
+    expect(counts).toEqual({ optional: 34, required: 15, 'brand-or-reason': 12, hidden: 12 });
+  });
+
+  it('a no-brand reason satisfies a brand-or-reason category, and never a required one', () => {
+    const exempt = rulesOf('adult-clothing-footwear');
+    const withReason = { ...complete(exempt), attrs: { ...complete(exempt).attrs, brand: '', brand_reason: 'HANDMADE' } };
+    expect(validateForm(withReason, typeOf(), { rules: exempt })[fieldId.brand]).toBeUndefined();
+    expect(brandOf(typeOf(), rulesOf('phones'))?.options).toEqual([]);
   });
 });

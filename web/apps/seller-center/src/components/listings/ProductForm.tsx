@@ -427,7 +427,7 @@ export function ProductForm({ productId, start }: { productId?: string; start?: 
               onChange={(e) => patch({ title: e.target.value })} />
             {brandDef ? (
               <div className={GRID}>
-                <BrandField id={fieldId.brand} def={brandDef} categoryId={s.categoryId} productType={s.productType} keepId={detail.data?.attributes?.brand_id} error={err(fieldId.brand)}
+                <BrandField id={fieldId.brand} def={brandDef} categoryId={s.categoryId} productType={s.productType} keepId={detail.data?.attributes?.brand_id} gated={rules?.approval === 'brand_gated'} error={err(fieldId.brand)}
                   value={{ brand: s.attrs.brand ?? '', brand_id: s.attrs.brand_id ?? '', brand_reason: s.attrs.brand_reason ?? '' }}
                   onChange={(v) => update((prev) => ({ ...prev, attrs: { ...prev.attrs, brand: v.brand, brand_id: v.brand_id, brand_reason: v.brand_reason } }))} />
               </div>
