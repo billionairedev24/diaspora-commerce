@@ -45,6 +45,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 class OfferServiceImpl implements OfferService {
 
+    /** The field a refusal about the chosen location is reported on (the gateway maps it to the form's location field). */
+    static final String LOCATION_FIELD = "shipFrom.locationId";
+
     static final int MAX_SELLER_QUANTITY = 99_999;
 
     private final OfferRepository offers;
@@ -97,8 +100,11 @@ class OfferServiceImpl implements OfferService {
         requireNoPerProductShipping(cmd.shippingMinor(), 0);
         requireNoHeldSellerStock(cmd.fulfilment(), org);
         requireListingRoom(org);
-        ShipFrom shipFrom = cmd.fulfilment() == Fulfilment.AFROTRANSACT_DELIVERY
-                ? pickupShipFrom(org, cmd.shipFrom()) : cmd.shipFrom();
+        ShipFrom shipFrom = switch (cmd.fulfilment()) {
+            case AFROTRANSACT_DELIVERY -> pickupShipFrom(org, cmd.shipFrom());
+            case SELLER -> sellerShipFrom(org, cmd.shipFrom());
+            case AFROTRANSACT -> cmd.shipFrom();
+        };
 
         CatalogVariant variant = resolve(cmd);
         // The same checks the product writer applies to a listing: page on sale, brand, department, selling approval.
@@ -268,7 +274,10 @@ class OfferServiceImpl implements OfferService {
                     cmd.inventorySku() == null || cmd.inventorySku().isBlank() ? t.inventorySku()
                             : cmd.inventorySku().trim().toUpperCase(Locale.ROOT));
             if (proposed.fulfilment() == Fulfilment.SELLER) {
-                requireShipFrom(proposed.shipFrom(), new LinkedHashMap<>(), true);
+                // A named location is looked up again; the stored place of an unchanged offer is only checked for being there.
+                proposed = cmd.shipFrom() != null || t.fulfilment() != Fulfilment.SELLER
+                        ? withShipFrom(proposed, sellerShipFrom(o.sellerOrgId(), proposed.shipFrom()))
+                        : requireKept(proposed);
             }
             if (cmd.shippingMinor() != null) {
                 requireNoPerProductShipping(cmd.shippingMinor(), t.shippingMinor());
@@ -485,16 +494,15 @@ class OfferServiceImpl implements OfferService {
             errors.put("fulfilment", "Required");
         } else if (cmd.fulfilment() == Fulfilment.SELLER) {
             if (cmd.quantity() == null) {
-                errors.put("quantity", "Required for seller-fulfilled offers");
+                errors.put("quantity", "Enter how many you have");
             }
-            requireShipFrom(cmd.shipFrom(), errors, false);
         } else if (cmd.fulfilment() == Fulfilment.AFROTRANSACT_DELIVERY) {
             if (cmd.quantity() == null) {
-                errors.put("quantity", "Required for AfroTransact Delivery offers (the seller keeps the stock)");
+                errors.put("quantity", "Enter how many you have");
             }
             if (cmd.shipFrom() == null || cmd.shipFrom().locationId() == null
                     || cmd.shipFrom().locationId().isBlank()) {
-                errors.put("shipFrom.locationId", "AfroTransact Delivery offers name the pickup location");
+                errors.put(LOCATION_FIELD, "Choose the location AfroTransact collects from");
             }
         }
         if (!errors.isEmpty()) {
@@ -509,27 +517,59 @@ class OfferServiceImpl implements OfferService {
     private ShipFrom pickupShipFrom(String org, ShipFrom requested) {
         String locationId = requested == null || requested.locationId() == null ? "" : requested.locationId().trim();
         if (locationId.isEmpty()) {
-            throw new OfferRuleViolation("The offer is not valid", Map.of("shipFrom.locationId",
-                    "AfroTransact Delivery offers name the pickup location"));
+            throw new OfferRuleViolation("The offer is not valid", Map.of(LOCATION_FIELD,
+                    "Choose the location AfroTransact collects from"));
         }
         PickupLocation l = pickupLocations.find(locationId).filter(p -> org.equals(p.orgId()))
-                .orElseThrow(() -> new OfferRuleViolation("The offer is not valid", Map.of("shipFrom.locationId",
-                        "Not one of your ship-from locations")));
+                .orElseThrow(() -> new OfferRuleViolation("The offer is not valid", Map.of(LOCATION_FIELD,
+                        "That is not one of your locations")));
         if (!l.pickupEnabled()) {
-            throw new OfferRuleViolation("The offer is not valid", Map.of("shipFrom.locationId",
-                    "Enable AfroTransact pickup at this location first"));
+            throw new OfferRuleViolation("The offer is not valid", Map.of(LOCATION_FIELD,
+                    "Turn on Fulfilled by AfroTransact at this location first"));
         }
         return new ShipFrom(l.city(), l.region(), l.country() == null ? "US" : l.country(), l.postalCode(),
                 l.id() == null ? locationId : l.id());
     }
 
-    private static void requireShipFrom(ShipFrom shipFrom, Map<String, String> errors, boolean throwNow) {
-        if (shipFrom == null || shipFrom.country() == null || shipFrom.country().isBlank()) {
-            errors.put("shipFrom", "Seller-fulfilled offers need a ship-from location");
+    /**
+     * The pick-up place of a {@code SELLER} offer (the customer collects): one of the seller's own locations, named by id
+     * (the Seller Center form and the gateway send only {@code locationId}); its city, region, country and ZIP come from
+     * the location. A full address with a country and no id is still accepted from the other writers (catalog listings).
+     * What is missing is named: no choice, a location that is not the seller's, or a location without an address.
+     */
+    private ShipFrom sellerShipFrom(String org, ShipFrom requested) {
+        String locationId = requested == null || requested.locationId() == null ? "" : requested.locationId().trim();
+        if (locationId.isEmpty()) {
+            if (requested != null && requested.country() != null && !requested.country().isBlank()) {
+                return requested;
+            }
+            throw new OfferRuleViolation("The offer is not valid", Map.of(LOCATION_FIELD,
+                    "Choose where customers collect it"));
         }
-        if (throwNow && !errors.isEmpty()) {
-            throw new OfferRuleViolation("The offer is not valid", errors);
+        PickupLocation l = pickupLocations.find(locationId).filter(p -> org.equals(p.orgId()))
+                .orElseThrow(() -> new OfferRuleViolation("The offer is not valid", Map.of(LOCATION_FIELD,
+                        "That is not one of your locations")));
+        if (l.city() == null || l.city().isBlank()) {
+            throw new OfferRuleViolation("The offer is not valid", Map.of(LOCATION_FIELD,
+                    "Add the city to this location's address"));
         }
+        return new ShipFrom(l.city(), l.region(), l.country() == null || l.country().isBlank() ? "US" : l.country(),
+                l.postalCode(), l.id() == null ? locationId : l.id());
+    }
+
+    /** A stored place is kept as it is: it only has to be there (a country), not looked up again. */
+    private static Offer.Terms requireKept(Offer.Terms t) {
+        ShipFrom stored = t.shipFrom();
+        if (stored == null || stored.country() == null || stored.country().isBlank()) {
+            throw new OfferRuleViolation("The offer is not valid", Map.of(LOCATION_FIELD,
+                    "Choose where customers collect it"));
+        }
+        return t;
+    }
+
+    private static Offer.Terms withShipFrom(Offer.Terms t, ShipFrom shipFrom) {
+        return new Offer.Terms(t.condition(), t.priceMinor(), t.listPriceMinor(), t.shippingMinor(), t.fulfilment(),
+                t.sellerQuantity(), t.handlingDays(), shipFrom, t.inventorySku());
     }
 
     private CatalogVariant resolve(CreateOfferCommand cmd) {
