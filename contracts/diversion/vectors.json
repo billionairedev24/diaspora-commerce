@@ -1,0 +1,707 @@
+{
+ "_comment": "Golden vectors of the off-platform diversion detector. Used by go/pkg/diversion and java/libs/module-core (com.afrotransact.core.diversion). reject: the text must be refused; kind: one finding of this kind must be present; strict: the text is scanned with Options.Strict.",
+ "vectors": [
+  {
+   "text": "Visit https://mystore.com for more",
+   "reject": true,
+   "kind": "url",
+   "strict": false
+  },
+  {
+   "text": "see www.mystore.com",
+   "reject": true,
+   "kind": "url",
+   "strict": false
+  },
+  {
+   "text": "shop at mystore.com",
+   "reject": true,
+   "kind": "url",
+   "strict": false
+  },
+  {
+   "text": "MYSTORE.COM",
+   "reject": true,
+   "kind": "url",
+   "strict": false
+  },
+  {
+   "text": "order at mystore dot com",
+   "reject": true,
+   "kind": "url",
+   "strict": false
+  },
+  {
+   "text": "mystore (dot) com",
+   "reject": true,
+   "kind": "url",
+   "strict": false
+  },
+  {
+   "text": "mystore [dot] net",
+   "reject": true,
+   "kind": "url",
+   "strict": false
+  },
+  {
+   "text": "find us on bit.ly/abc",
+   "reject": true,
+   "kind": "url",
+   "strict": false
+  },
+  {
+   "text": "wa.me/17135551234",
+   "reject": true,
+   "kind": "url",
+   "strict": false
+  },
+  {
+   "text": "linktr.ee/mystore",
+   "reject": true,
+   "kind": "url",
+   "strict": false
+  },
+  {
+   "text": "my shop is mystore.co",
+   "reject": true,
+   "kind": "url",
+   "strict": false
+  },
+  {
+   "text": "go to my-shop.io today",
+   "reject": true,
+   "kind": "url",
+   "strict": false
+  },
+  {
+   "text": "kola.shop",
+   "reject": true,
+   "kind": "url",
+   "strict": false
+  },
+  {
+   "text": "our site: kolashop.ng",
+   "reject": true,
+   "kind": "url",
+   "strict": false
+  },
+  {
+   "text": "dot com",
+   "reject": true,
+   "kind": "url",
+   "strict": false
+  },
+  {
+   "text": "www . mystore . com",
+   "reject": true,
+   "kind": "url",
+   "strict": false
+  },
+  {
+   "text": "write to ada@example.com",
+   "reject": true,
+   "kind": "email",
+   "strict": false
+  },
+  {
+   "text": "ada at gmail",
+   "reject": true,
+   "kind": "email",
+   "strict": false
+  },
+  {
+   "text": "me at gmail dot com",
+   "reject": true,
+   "kind": "email",
+   "strict": false
+  },
+  {
+   "text": "ada(at)example.com",
+   "reject": true,
+   "kind": "email",
+   "strict": false
+  },
+  {
+   "text": "ada [at] yahoo",
+   "reject": true,
+   "kind": "email",
+   "strict": false
+  },
+  {
+   "text": "ADA.O@Hotmail.com",
+   "reject": true,
+   "kind": "email",
+   "strict": false
+  },
+  {
+   "text": "Call 713-555-1234",
+   "reject": true,
+   "kind": "phone",
+   "strict": false
+  },
+  {
+   "text": "(713) 555 1234",
+   "reject": true,
+   "kind": "phone",
+   "strict": false
+  },
+  {
+   "text": "713.555.1234",
+   "reject": true,
+   "kind": "phone",
+   "strict": false
+  },
+  {
+   "text": "+1 713 555 1234",
+   "reject": true,
+   "kind": "phone",
+   "strict": false
+  },
+  {
+   "text": "+234 803 123 4567",
+   "reject": true,
+   "kind": "phone",
+   "strict": false
+  },
+  {
+   "text": "0803 123 4567",
+   "reject": true,
+   "kind": "phone",
+   "strict": false
+  },
+  {
+   "text": "07123456789",
+   "reject": true,
+   "kind": "phone",
+   "strict": false
+  },
+  {
+   "text": "7135551234",
+   "reject": true,
+   "kind": "phone",
+   "strict": false
+  },
+  {
+   "text": "06 12 34 56 78",
+   "reject": true,
+   "kind": "phone",
+   "strict": false
+  },
+  {
+   "text": "555-1234",
+   "reject": true,
+   "kind": "phone",
+   "strict": false
+  },
+  {
+   "text": "713-5O5-1234",
+   "reject": true,
+   "kind": "phone",
+   "strict": false
+  },
+  {
+   "text": "٧١٣ ٥٥٥ ١٢٣٤",
+   "reject": true,
+   "kind": "phone",
+   "strict": false
+  },
+  {
+   "text": "７１３５５５１２３４",
+   "reject": true,
+   "kind": "phone",
+   "strict": false
+  },
+  {
+   "text": "+44 20 7946 0958",
+   "reject": true,
+   "kind": "phone",
+   "strict": false
+  },
+  {
+   "text": "713 555 123",
+   "reject": true,
+   "kind": "phone",
+   "strict": false
+  },
+  {
+   "text": "7 1 3 5 5 5 1 2 3 4",
+   "reject": true,
+   "kind": "spelled_digits",
+   "strict": false
+  },
+  {
+   "text": "seven one three",
+   "reject": true,
+   "kind": "spelled_digits",
+   "strict": false
+  },
+  {
+   "text": "call seven-one-three five five five",
+   "reject": true,
+   "kind": "spelled_digits",
+   "strict": false
+  },
+  {
+   "text": "Seven, One, Three",
+   "reject": true,
+   "kind": "spelled_digits",
+   "strict": false
+  },
+  {
+   "text": "five 5 5 one 2 3 4",
+   "reject": true,
+   "kind": "spelled_digits",
+   "strict": false
+  },
+  {
+   "text": "find me @mystore_ng",
+   "reject": true,
+   "kind": "handle",
+   "strict": false
+  },
+  {
+   "text": "insta: @kola.shop",
+   "reject": true,
+   "kind": "handle",
+   "strict": false
+  },
+  {
+   "text": "@ada",
+   "reject": true,
+   "kind": "handle",
+   "strict": false
+  },
+  {
+   "text": "WhatsApp me",
+   "reject": true,
+   "kind": "phrase",
+   "strict": false
+  },
+  {
+   "text": "whats app us",
+   "reject": true,
+   "kind": "phrase",
+   "strict": false
+  },
+  {
+   "text": "What's App",
+   "reject": true,
+   "kind": "phrase",
+   "strict": false
+  },
+  {
+   "text": "join my Telegram",
+   "reject": true,
+   "kind": "phrase",
+   "strict": false
+  },
+  {
+   "text": "DM me for prices",
+   "reject": true,
+   "kind": "phrase",
+   "strict": false
+  },
+  {
+   "text": "dm us",
+   "reject": true,
+   "kind": "phrase",
+   "strict": false
+  },
+  {
+   "text": "call me",
+   "reject": true,
+   "kind": "phrase",
+   "strict": false
+  },
+  {
+   "text": "Text us today",
+   "reject": true,
+   "kind": "phrase",
+   "strict": false
+  },
+  {
+   "text": "order direct and save",
+   "reject": true,
+   "kind": "phrase",
+   "strict": false
+  },
+  {
+   "text": "Order directly from me",
+   "reject": true,
+   "kind": "phrase",
+   "strict": false
+  },
+  {
+   "text": "cheaper off the site",
+   "reject": true,
+   "kind": "phrase",
+   "strict": false
+  },
+  {
+   "text": "cheaper outside the platform",
+   "reject": true,
+   "kind": "phrase",
+   "strict": false
+  },
+  {
+   "text": "pay with Zelle",
+   "reject": true,
+   "kind": "phrase",
+   "strict": false
+  },
+  {
+   "text": "send via CashApp",
+   "reject": true,
+   "kind": "phrase",
+   "strict": false
+  },
+  {
+   "text": "Venmo accepted",
+   "reject": true,
+   "kind": "phrase",
+   "strict": false
+  },
+  {
+   "text": "skip the fees",
+   "reject": true,
+   "kind": "phrase",
+   "strict": false
+  },
+  {
+   "text": "email me",
+   "reject": true,
+   "kind": "phrase",
+   "strict": false
+  },
+  {
+   "text": "inbox me",
+   "reject": true,
+   "kind": "phrase",
+   "strict": false
+  },
+  {
+   "text": "message me on instagram",
+   "reject": true,
+   "kind": "phrase",
+   "strict": false
+  },
+  {
+   "text": "contact me directly",
+   "reject": true,
+   "kind": "phrase",
+   "strict": false
+  },
+  {
+   "text": "buy direct",
+   "reject": true,
+   "kind": "phrase",
+   "strict": false
+  },
+  {
+   "text": "Contact us anytime",
+   "reject": true,
+   "kind": "phrase",
+   "strict": true
+  },
+  {
+   "text": "DM for price",
+   "reject": true,
+   "kind": "phrase",
+   "strict": true
+  },
+  {
+   "text": "one two",
+   "reject": true,
+   "kind": "spelled_digits",
+   "strict": true
+  },
+  {
+   "text": "call 7135551",
+   "reject": true,
+   "kind": "phone",
+   "strict": true
+  },
+  {
+   "text": "ig: mystore",
+   "reject": true,
+   "kind": "phrase",
+   "strict": true
+  },
+  {
+   "text": "Contact us anytime",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Message us through AfroTransact",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "one two",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "call 7135551",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Fresh palm oil, 5 kg tin",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Open 9 am to 5 pm, Monday to Friday",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Mon-Fri 9:00-17:00, Sat 10:00-14:00",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Mon 9-5, Tue 9-5, Wed 9-5, Thu 9-5, Fri 9-5",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Since 2019, family run",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "St. Ives apricot scrub 150 ml",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Dr. Teal's body wash",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Mr. Bean tee",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Sizes 38 40 42 44 46",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "2 for 15 dollars, 3 for 20",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "1234 Main St, Houston TX 77002",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Suite 100, 5555 Westheimer Rd, Houston, TX 77056-1234",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "$1,200.00 each, was $1,500.00",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Weight 2.5 kg, 3.5 lb",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Handmade in Lagos. It.Me is the best part",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Made with love. Visit our shop in person.",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "One of a kind, handmade in Kumasi",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Two or three days to ship",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Nine to five, Monday to Saturday",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Order by 3 pm for same day dispatch",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Pack of 12, 24 or 36",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Best before 12/2027, batch 20240115",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Ships in 1-2 business days",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Call of the Wild board game",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Text-book quality leather",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Direct trade cocoa from Ghana",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Order today, delivered in 3 to 5 days",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Tel Aviv style hummus",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Cocoa, e.g. 70% dark, i.e. bitter",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Mama's Kitchen: jollof, egusi and suya",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Open Tues. through Sat.",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Authentic Ankara fabric, 6 yards, 100% cotton",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Call to action button blue",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Gift boxes 10 x 20 x 30 cm",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Size 8.5, width 10.5",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Phone case for iPhone 14",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Email-free checkout, secure payment",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "We love questions. Ask a question on any product.",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Follow our story on Instagram",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "Tagline: Taste of home",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  },
+  {
+   "text": "   ",
+   "reject": false,
+   "kind": "",
+   "strict": false
+  }
+ ]
+}
