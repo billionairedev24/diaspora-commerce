@@ -265,7 +265,7 @@ describe('Add a product starts with one search box, the barcode is an optional s
     await user.click(await screen.findByRole('button', { name: 'Yes, sell this' }, LOOKUP));
     expect(await screen.findByRole('heading', { level: 1, name: 'Sell this product' })).toBeInTheDocument();
     const form = within(screen.getByRole('form', { name: 'Sell this product' }));
-    for (const label of ['Price (USD)', 'Compare-at price', 'Quantity', 'Ships from']) expect(form.getByLabelText(new RegExp(label.replace(/[()]/g, '\\$&')))).toBeInTheDocument();
+    for (const label of ['Price (USD)', 'Compare-at price', 'Quantity', 'Pickup location']) expect(form.getByLabelText(new RegExp(label.replace(/[()]/g, '\\$&')))).toBeInTheDocument();
     // A body butter is never sold used, so Condition is not asked; the page already has its own code, so no SKU is asked either.
     for (const gone of ['Condition', 'SKU']) expect(form.queryByLabelText(gone)).not.toBeInTheDocument();
     expect(form.getByTestId('catalog-code')).toHaveTextContent('ATSHEAV001');
@@ -468,6 +468,8 @@ describe('Seller A creates a page and seller B sells it by UPC without uploading
     await sellerCreatesPage(gtin);
     expect(getSellerDb().matching?.pages.some((p) => p.ownerOrg === SELLER_ORG && p.title === 'Things Fall Apart, paperback')).toBe(true);
 
+    // Pick up needs a place: this seller has one location, which is then the one shown and sent.
+    getSellerDb().shipFrom[MOCK_FOOD_ORG] = structuredClone(getSellerDb().shipFrom[SELLER_ORG] ?? []).slice(0, 1);
     await renderScreen(<AddProductFlow />, MOCK_FOOD_ORG);
     const user = await typeBarcode(gtin);
     // The page waits for review like the listing: the seller reads why, and cannot sell it yet.
@@ -497,5 +499,61 @@ describe('Seller A creates a page and seller B sells it by UPC without uploading
 
   it('keeps the barcode check digit honest: a made-up barcode with a wrong last digit is not a page', () => {
     expect(gtinWith('978030640615')).toBe('9780306406157');
+  });
+});
+
+describe('Pick up at a location (the owner’s case: an address exists and is selected)', () => {
+  async function openForm(): Promise<ReturnType<typeof userEvent.setup>> {
+    await renderScreen(<AddProductFlow />);
+    const user = await typeBarcode(MOCK_GTIN.live);
+    await user.click(await screen.findByRole('button', { name: 'Yes, sell this' }, LOOKUP));
+    await screen.findByRole('heading', { level: 1, name: 'Sell this product' });
+    return user;
+  }
+  const fill = async (user: ReturnType<typeof userEvent.setup>): Promise<void> => {
+    await user.type(screen.getByLabelText('Price (USD)'), '30');
+    await user.type(screen.getByLabelText('Compare-at price'), '45');
+    await user.type(screen.getByLabelText('Quantity'), '300');
+  };
+
+  it('sends the location that is shown selected, and the listing goes live', async () => {
+    const user = await openForm();
+    // The default location is shown selected, not a "default" stand-in the server cannot read.
+    const where = screen.getByLabelText('Pickup location') as HTMLSelectElement;
+    await waitFor(() => expect(where.selectedOptions[0]?.textContent).toBe('Warehouse · Houston, TX'));
+    await fill(user);
+    await user.click(screen.getByRole('button', { name: 'Start selling this product' }));
+    expect(await screen.findByTestId('offer-result')).toHaveAttribute('data-status', 'ACTIVE');
+    expect(getSellerDb().matching?.offers.find((o) => o.orgId === SELLER_ORG)).toMatchObject({ fulfilment: 'SELLER', shipFromLocationId: 'sfa-store' });
+  });
+
+  it('says exactly what is missing at the chosen location, next to the location, with a link to fix it, and never on the price', async () => {
+    const user = await openForm();
+    await fill(user);
+    await user.selectOptions(screen.getByLabelText('Pickup location'), 'sfa-katy');
+    await user.click(screen.getByRole('button', { name: 'Start selling this product' }));
+    const message = await screen.findByText('Turn on pickup at this location and add the hours you are open.');
+    expect(message).toBeInTheDocument();
+    expect(screen.getByLabelText('Pickup location')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText('Price (USD)')).not.toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByTestId('location-fix')).toHaveAttribute('href', '/settings/pickup');
+    expect(document.body.textContent).not.toMatch(/Seller-fulfilled|ship-from/i);
+    expect(screen.queryByTestId('offer-result')).not.toBeInTheDocument();
+    // Choosing the location that is ready is all it takes.
+    await user.selectOptions(screen.getByLabelText('Pickup location'), 'sfa-store');
+    expect(screen.queryByTestId('location-fix')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Start selling this product' }));
+    expect(await screen.findByTestId('offer-result')).toHaveAttribute('data-status', 'ACTIVE');
+  });
+
+  it('says what is missing for Fulfilled by AfroTransact at a location AfroTransact does not collect from yet', async () => {
+    const user = await openForm();
+    await fill(user);
+    await user.click(screen.getByRole('radio', { name: 'Fulfilled by AfroTransact (FBA)' }));
+    await user.selectOptions(screen.getByLabelText('AfroTransact collects from'), 'sfa-katy');
+    await user.click(screen.getByRole('button', { name: 'Start selling this product' }));
+    expect(await screen.findByText('Turn on Fulfilled by AfroTransact at this location first.')).toBeInTheDocument();
+    expect(screen.getByTestId('location-fix')).toHaveAttribute('href', '/settings/locations');
+    expect(screen.getByLabelText('Price (USD)')).not.toHaveAttribute('aria-invalid', 'true');
   });
 });
