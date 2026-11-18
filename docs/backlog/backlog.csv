@@ -2334,3 +2334,21 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Seller Center copy: no word offer, no fulfilment-centre wording, no optional shipping charge field, modes explained in tooltips
 - Customer apps say Pick up and Delivered by AfroTransact
 - Unit tests pass (Java, Go, vitest); Testcontainers ITs, mobile app tests and Playwright are not run here","E24","","High","8","fulfilment fba seller-center orders payments","seller-center","In Review"
+"S618","Story","Local stack: storefront and Seller Center build again; signed-in shoppers no longer get 401 from Go","make up left the UI down: the storefront order badge did not handle the new seller_ships mode, Seller Center typed its fulfilment choices to include the retired AFROTRANSACT kind (no label), and go/pkg/auth rejected tokens whose scope claim is a JSON array (Spring Authorization Server), so every signed-in BFF call such as the checkout summary answered 401. Fixed in 1a1981aa0.","- Storefront and Seller Center production builds pass type checking (pnpm build)
+- A seller_ships order shows the Shipped by the seller badge
+- Seller Center fulfilment sheet offers only Pick up and Fulfilled by AfroTransact
+- go/pkg/auth accepts scope as a string or a JSON array (TestVerifierAcceptsScopeAsStringOrArray)
+- Signed-in checkout summary answers 200 on the local stack (owner browser pass)","E01","","Highest","2","bug auth storefront seller-center","foundation","In Review"
+"S619","Story","Staff console: Avalara provider codes page loads (no null text on untouched rows)","Sales tax > Provider codes > Avalara showed Something went wrong: tax-returns leaves note, changedBy and changedAt null on rows nobody changed (every Avalara row at first) and the staff console schema and the contract take text. The BFF now sends empty text on the list and on save. Fixed in f6fca0fd5.","- The code map list and the save answer carry no null text fields (TestStaffTaxCodeMap with untouched Avalara rows)
+- Responses match the StaffTaxCodeMap contract
+- The Avalara tab lists all outcomes with No code yet on the local stack (owner browser pass)","E17","","High","1","bug tax avalara staff-console","returns","In Review"
+"S620","Story","Seller Center: Start selling this product works again (offer without a shipping charge)","Every new offer failed with Failed to read request: Seller Center no longer sends shippingMinor, and offers CreateOfferRequest held it as a primitive, which Spring Jackson 3 refuses when missing. shippingMinor is optional (absent = 0), priceMinor @NotNull. Fixed in a0f891841.","- An offer request without shippingMinor is read with Jackson defaults (OfferContractTest.aSellerOfferWithoutAShippingChargeIsReadWithJacksonDefaults)
+- Missing shipping means 0; the contract still requires only fulfilment and sellerSku
+- Start selling this product on an existing page creates a live or tax-held offer on the local stack (owner browser pass)","E24","","Highest","1","bug offers seller-center matching","seller-center","In Review"
+"S621","Story","Add a product: choose to sell a product already on AfroTransact or create a new one","Add a product forced a search first; Not here, add it as new appeared only after 3 letters and a search. The page now asks How do you want to add it? Sell a product already on AfroTransact (default, the search) or Create a new product (straight to the full form, no search, nothing recorded as none of these). Done in 510e92666.","- The choice shows first, with Sell a product already on AfroTransact selected
+- Create a new product opens the product form straight away, carrying what was typed and the category chip
+- No NONE_OF_THESE decision is recorded for a direct create
+- Search again comes back to the choice
+- Copy in en, fr, es, yo, ar; no banned words
+- Test in test/add-product.test.tsx; Seller Center suite green
+- Owner browser pass at 1280 and 390","E24","","High","2","seller-center matching i18n","seller-center","In Review"
