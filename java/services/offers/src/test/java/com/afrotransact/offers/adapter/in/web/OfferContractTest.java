@@ -132,4 +132,19 @@ class OfferContractTest {
         assertThat(command.packaging()).isEqualTo(new OfferPackage(12, 8, 4, 2.5));
         assertThat(command.sellerBehaviour()).containsEntry("sold_heated", false);
     }
+
+    @Test
+    void aSellerOfferWithoutAShippingChargeIsReadWithJacksonDefaults() {
+        // Spring's mapper keeps Jackson 3's FAIL_ON_NULL_FOR_PRIMITIVES; Seller Center no longer sends a shipping charge,
+        // and a primitive shippingMinor made every new offer fail with "Failed to read request".
+        CreateOfferRequest request = JsonMapper.builder().build().readValue("""
+                {"atin":"AT00000002","sellerSku":"ANK-1","condition":"NEW","priceMinor":3000,"listPriceMinor":4500,
+                 "currency":"USD","fulfilment":"SELLER","handlingDays":1,"quantity":300}
+                """, CreateOfferRequest.class);
+
+        CreateOfferCommand command = request.toCommand();
+
+        assertThat(command.shippingMinor()).isZero();
+        assertThat(command.priceMinor()).isEqualTo(3000);
+    }
 }

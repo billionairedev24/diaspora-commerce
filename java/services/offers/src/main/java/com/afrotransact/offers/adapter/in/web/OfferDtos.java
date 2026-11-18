@@ -84,11 +84,12 @@ final class OfferDtos {
             @Size(max = 40) @Schema(description = "inventory-service SKU for Fulfilled by AfroTransact stock "
                     + "(defaults to sellerSku)") String inventorySku,
             @Schema(defaultValue = "NEW") OfferCondition condition,
-            @Positive @Schema(example = "899") long priceMinor,
+            @NotNull @Positive @Schema(example = "899") Long priceMinor,
             @Positive @Schema(description = "Strike-through list price, ≥ price") Long listPriceMinor,
             @Pattern(regexp = "[A-Za-z]{3}") @Schema(example = "USD", defaultValue = "USD") String currency,
-            @PositiveOrZero @Schema(description = "Shipping charge added to the price (landed price)")
-            long shippingMinor,
+            @PositiveOrZero @Schema(description = "Shipping charge added to the price (landed price); absent means 0. "
+                    + "Boxed because Jackson 3 refuses a missing primitive, and sellers no longer send one")
+            Long shippingMinor,
             @NotNull Fulfilment fulfilment,
             @PositiveOrZero @Schema(description = "Seller-declared stock (required for SELLER fulfilment)")
             Integer quantity,
@@ -108,7 +109,7 @@ final class OfferDtos {
 
         CreateOfferCommand toCommand() {
             return new CreateOfferCommand(atin, gtin, sellerOrgId, sellerSku, inventorySku, condition, priceMinor,
-                    listPriceMinor, currency, shippingMinor, fulfilment, quantity, handlingDays,
+                    listPriceMinor, currency, shippingMinor == null ? 0 : shippingMinor, fulfilment, quantity, handlingDays,
                     shipFrom == null ? null : shipFrom.toDomain(), conditionNote,
                     packaging == null ? null : packaging.toDomain(), sellerBehaviour, Set.copyOf(unknown.keySet()));
         }
