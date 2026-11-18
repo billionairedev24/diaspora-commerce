@@ -125,6 +125,7 @@ func newResolver(d SellerDeps) *orgResolver {
 	if d.Location == nil {
 		d.Location = time.UTC
 	}
+	d.Clock = d.clock()
 	if d.MatrixTTL <= 0 {
 		d.MatrixTTL = time.Minute
 	}
