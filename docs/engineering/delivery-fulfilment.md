@@ -148,6 +148,21 @@ Rules enforced by the state machine (`DefaultShipmentTransitionPolicy`):
 - Pinned by payments splitter tests: `FulfilledByAfroTransactMoneyTest` (FBA: fee customer-paid to platform revenue, seller payable unaffected, no pickup fee;
   staff-set fees apply only when configured; pickup: no fee; commission identical in every mode) and `FulfilmentModeSplitTest`.
 
+## The location of a listing (Add a product, root cause fixed, S622)
+
+The seller's listing form names where the product is collected from with one id, `shipFromLocationId` (offers: `shipFrom.locationId`).
+
+- **Pick up** is the wire value `SELLER`. The location must be the seller's own, with an address; offers takes the city, region, country and ZIP from it.
+  The gateway also needs customer pickup switched on with opening hours at that location (carrier-gateway pickup location, the same facts checkout reads).
+- **Fulfilled by AfroTransact** is the wire value `AFROTRANSACT_DELIVERY`. The location must be the seller's own with AfroTransact pickup on (hours, delivery area).
+- The form shows the default (or only) location selected and sends it. It never sends an empty "default" stand-in.
+- A refusal is always about the location field, with the exact missing thing and a link to where it is fixed: `PICKUP_NOT_ON`, `PICKUP_HOURS_MISSING`
+  (Pickup settings), `FBA_LOCATION_NOT_ON`, `OFFER_LOCATION_UNKNOWN` (Locations). offers' own `shipFrom` / `shipFrom.locationId` refusals are renamed to the same field.
+  Nothing about a place is ever shown on the price.
+
+Why it broke: after the rework the form's Pick up value was `SELLER`, whose rule still read the old "ships from the seller" way (it wanted a country and never looked up the
+location id), and the form's field-name map sent any name it did not know to the price.
+
 ## Delivery module (staff console)
 
 Sidebar link **Delivery** (`/delivery`). Server-driven table with search and filters (status, assignee, seller city, customer city),
