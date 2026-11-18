@@ -257,8 +257,8 @@ describe('Add a product starts with one search box, the barcode is an optional s
     // A body butter is never sold used, so Condition is not asked; the page already has its own code, so no SKU is asked either.
     for (const gone of ['Condition', 'SKU']) expect(form.queryByLabelText(gone)).not.toBeInTheDocument();
     expect(form.getByTestId('catalog-code')).toHaveTextContent('ATSHEAV001');
-    expect(form.getByText('Who ships it?')).toBeInTheDocument();
-    expect(form.getByRole('radio', { name: 'I ship it' })).toBeChecked();
+    expect(form.getByText('How do customers get it?')).toBeInTheDocument();
+    expect(form.getByRole('radio', { name: 'Pick up' })).toBeChecked();
     for (const gone of ['Product title', 'Category', 'Description', 'Brand']) expect(screen.queryByLabelText(gone)).not.toBeInTheDocument();
     expect(screen.queryByTestId('image-input')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Photos' })).not.toBeInTheDocument();
@@ -313,9 +313,8 @@ describe('Add a product starts with one search box, the barcode is an optional s
     await user.selectOptions(screen.getByLabelText('Condition'), 'USED_GOOD');
     expect(screen.getByLabelText('Describe the condition')).toBeInTheDocument();
     await user.click(screen.getByRole('radio', { name: 'Fulfilled by AfroTransact (FBA)' }));
-    expect(screen.queryByLabelText('Quantity')).not.toBeInTheDocument();
-    expect(screen.getByText('Package size and weight')).toBeInTheDocument();
-    await user.click(screen.getByRole('radio', { name: 'I ship it' }));
+    expect(screen.queryByLabelText(/Shipping charge/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('radio', { name: 'Pick up' }));
     expect(screen.getByLabelText('Quantity')).toBeInTheDocument();
   });
 
