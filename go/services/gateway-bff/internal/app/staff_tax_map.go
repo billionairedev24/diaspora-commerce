@@ -87,11 +87,19 @@ func (s *staffTaxImpl) providerMap(ctx context.Context, sc staffCtx, provider st
 		e["outcomeName"] = outcomeName(jstr(e, "internalTaxCode"))
 		e["categoryName"] = firstNonEmpty(names[jstr(e, "categoryCode")], domain.Humanize(jstr(e, "categoryCode")))
 		e["verified"] = boolean(e, "verified")
-		if e["providerCode"] == nil {
-			e["providerCode"] = ""
-		}
+		noNullText(e)
 	}
 	return rows, nil
+}
+
+// noNullText turns the text fields tax-returns leaves null on a row nobody has touched (every Avalara row at first) into "".
+// The contract and the staff console's schema take text there, and one null failed the whole page.
+func noNullText(e jobj) {
+	for _, k := range []string{"providerCode", "categoryCode", "note", "verifiedNote", "changedBy", "changedAt"} {
+		if v, ok := e[k]; !ok || v == nil {
+			e[k] = ""
+		}
+	}
 }
 
 // completeness counts the outcomes a provider needs a verified code for.
@@ -238,6 +246,7 @@ func (s *staffTaxImpl) UpdateCode(ctx context.Context, c *domain.Caller, interna
 	if err != nil {
 		return nil, err
 	}
+	noNullText(out)
 	nameAll(ctx, sc, []jobj{out}, staffRef("changedBy", "Changed by"))
 	st := codeState(out)
 	out["state"], out["stateLabel"] = st, codeStateLabels[st]

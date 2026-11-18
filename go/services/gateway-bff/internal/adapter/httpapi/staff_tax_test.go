@@ -103,6 +103,9 @@ func newFakeTax(t *testing.T) *fakeTax {
 				n++
 				f.codes[p][code] = map[string]any{"internalTaxCode": code, "categoryCode": c["code"], "outcome": row["outcome"], "provider": p, "providerCode": v,
 					"verified": v != nil && n%3 == 0, "mapVersion": 1, "changedBy": "stf-admin", "changedAt": "2026-11-02T09:00:00Z"}
+				if p == "AVALARA" { // a row nobody has touched: tax-returns sends nulls
+					f.codes[p][code]["changedBy"], f.codes[p][code]["changedAt"], f.codes[p][code]["note"] = nil, nil, nil
+				}
 			}
 		}
 	}
@@ -963,6 +966,13 @@ func TestStaffTaxCodeMap(t *testing.T) {
 	av := do("admin", "GET", "/v1/staff/tax/code-map?provider=AVALARA&size=10", nil, 200)
 	if c := av["completeness"].(map[string]any); c["unmapped"] != float64(104) || c["percent"] != float64(0) {
 		t.Errorf("avalara completeness = %v", c)
+	}
+	for _, e := range items(t, av) { // the staff console's schema rejects null text, which failed the whole Avalara page
+		for _, k := range []string{"providerCode", "categoryCode", "note", "verifiedNote", "changedBy", "changedByName", "changedAt"} {
+			if v, ok := e[k]; ok && v == nil {
+				t.Errorf("avalara %s: %s is null", e["internalTaxCode"], k)
+			}
+		}
 	}
 	un := do("admin", "GET", "/v1/staff/tax/code-map?provider=AVALARA&unmappedOnly=true&size=200", nil, 200)
 	if un["total"] != float64(104) {
