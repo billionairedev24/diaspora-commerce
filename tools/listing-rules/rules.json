@@ -95,22 +95,22 @@
    "id": "brand",
    "group": "Identity",
    "name": "Brand",
-   "note": "\"Unbranded\" or \"Handmade\" allowed with a reason. Gated brands need approval.",
+   "note": "Required: name the brand (add it when it is not listed). Brand or reason: a brand, or \"No brand\" or \"Handmade\". Optional: leave it empty or choose \"No brand\". Gated brands need approval.",
    "byKind": {
-    "PKG": "required",
-    "PER": "required",
+    "PKG": "optional",
+    "PER": "optional",
     "SFD": "hidden",
     "BBY": "required",
-    "BEA": "required",
+    "BEA": "required_or_exemption",
     "HLT": "required",
-    "FSH": "required",
-    "JWL": "required",
+    "FSH": "required_or_exemption",
+    "JWL": "required_or_exemption",
     "ELC": "required",
-    "HOM": "required",
+    "HOM": "required_or_exemption",
     "KID": "required",
-    "PET": "required",
+    "PET": "optional",
     "BOK": "hidden",
-    "DIG": "required",
+    "DIG": "optional",
     "GFT": "required",
     "SRV": "hidden"
    }
@@ -997,7 +997,8 @@
    "note": "",
    "overrides": {
     "condition": "hidden",
-    "model_number": "hidden"
+    "model_number": "hidden",
+    "brand": "optional"
    }
   },
   {
@@ -1028,7 +1029,10 @@
    "taxStatus": "ACTIVE",
    "kind": "BEA",
    "approval": "brand_gated",
-   "note": "Flammable, so the dangerous goods answer applies. Brand authenticity invoice."
+   "note": "Flammable, so the dangerous goods answer applies. Brand authenticity invoice.",
+   "overrides": {
+    "brand": "required"
+   }
   },
   {
    "code": "skincare-cosmetics",
@@ -1049,7 +1053,8 @@
    "note": "",
    "overrides": {
     "condition": "hidden",
-    "model_number": "hidden"
+    "model_number": "hidden",
+    "brand": "optional"
    }
   },
   {
@@ -1105,7 +1110,8 @@
    "note": "",
    "overrides": {
     "condition": "hidden",
-    "model_number": "hidden"
+    "model_number": "hidden",
+    "brand": "optional"
    }
   },
   {
@@ -1132,7 +1138,8 @@
    "note": "Candles ask the dangerous goods question.",
    "overrides": {
     "condition": "hidden",
-    "model_number": "hidden"
+    "model_number": "hidden",
+    "brand": "optional"
    }
   },
   {
@@ -1327,7 +1334,8 @@
    "overrides": {
     "condition": "hidden",
     "model_number": "hidden",
-    "material": "optional"
+    "material": "optional",
+    "brand": "optional"
    }
   },
   {
@@ -1463,7 +1471,10 @@
    "taxStatus": "BLOCKED_BUNDLE",
    "kind": "GFT",
    "approval": "blocked",
-   "note": "Blocked until bundles can be itemised for tax."
+   "note": "Blocked until bundles can be itemised for tax.",
+   "overrides": {
+    "brand": "optional"
+   }
   },
   {
    "code": "gift-cards",
@@ -1484,7 +1495,8 @@
    "note": "Barcode exemption allowed. Brand \"Handmade\".",
    "overrides": {
     "condition": "hidden",
-    "model_number": "hidden"
+    "model_number": "hidden",
+    "brand": "optional"
    }
   },
   {
@@ -1497,7 +1509,8 @@
    "note": "",
    "overrides": {
     "model_number": "hidden",
-    "material": "optional"
+    "material": "optional",
+    "brand": "optional"
    }
   },
   {
@@ -1510,7 +1523,8 @@
    "note": "",
    "overrides": {
     "model_number": "optional",
-    "material": "optional"
+    "material": "optional",
+    "brand": "optional"
    }
   },
   {
@@ -1523,7 +1537,8 @@
    "provisional": true,
    "note": "Provisional catalog category, not in the approved matrix: treated as Clothing, shoes, bags (FSH) and open until the owner decides.",
    "overrides": {
-    "age_grade": "hidden"
+    "age_grade": "hidden",
+    "brand": "optional"
    }
   }
  ]

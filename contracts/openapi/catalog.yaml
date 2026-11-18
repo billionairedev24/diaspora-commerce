@@ -128,7 +128,10 @@ paths:
       summary: Add a brand the seller typed (pending staff review)
       description: Returns the existing brand (created=false) when the registry already has this name in the category, ignoring
         case, accents and punctuation. Otherwise creates a PENDING brand scoped to the category's department, usable at once
-        by this organisation. 201 when created, 200 for a match.
+        by this organisation, recorded in the audit trail and queued for staff (approve, merge into an existing brand or reject).
+        201 when created, 200 for a match. 422 with fieldErrors on attributes.brand when the name is not allowed (a web address,
+        an e-mail address, profanity, odd characters, no letters) or a limit is reached (new brands per organisation per day,
+        brands awaiting review); a name that matches an existing brand is never refused by a limit.
       operationId: createBrand
       requestBody:
         content:
@@ -143,6 +146,45 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/CreatedBrand'
+  /v1/brands/similar:
+    get:
+      tags:
+      - Brands
+      summary: 'Did you mean: the brand a typed name is, or close names'
+      description: For the brand combobox while the seller types a name that is not listed. exact is the brand the name already
+        is in this category (case, accents and punctuation ignored); similar lists close names (one or two typing mistakes,
+        or the same name with a few letters more). 422 with fieldErrors when the name could not be added (a web address, an
+        e-mail address, profanity, odd characters).
+      operationId: suggestBrands
+      parameters:
+      - name: name
+        in: query
+        required: true
+        schema:
+          type: string
+          maxLength: 120
+          minLength: 0
+      - name: productType
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 40
+          minLength: 0
+      - name: category
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 120
+          minLength: 0
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BrandSuggestions'
   /v1/categories:
     get:
       tags:
@@ -6932,6 +6974,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BrandScopeNode'
+        similarNames:
+          type: array
+          description: 'For a pending brand a seller typed in: close names it may duplicate (possible duplicate of ...); empty
+            otherwise'
+          items:
+            type: string
     BrandScopeNode:
       type: object
       properties:
@@ -7049,6 +7097,17 @@ components:
           type: string
         reason:
           type: string
+    BrandSuggestions:
+      type: object
+      description: 'What typing a name would do: the brand it already is (exact), or the close names the seller probably meant
+        (similar, at most three). Never another seller''s pending brand.'
+      properties:
+        exact:
+          $ref: '#/components/schemas/Brand'
+        similar:
+          type: array
+          items:
+            $ref: '#/components/schemas/Brand'
     CreateBrandRequest:
       type: object
       properties:

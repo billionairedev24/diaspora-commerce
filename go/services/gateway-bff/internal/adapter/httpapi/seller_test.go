@@ -212,6 +212,18 @@ func TestSellerContractConformance(t *testing.T) {
 	mustStatus(t, b.do("POST", "/v1/seller/catalog/brands", map[string]any{"name": "NIKE", "category": "cat-dress"}), 200)
 	mustStatus(t, b.do("POST", "/v1/seller/catalog/brands", map[string]any{"name": "x", "category": "cat-dress"}), 422)
 	mustStatus(t, b.do("POST", "/v1/seller/catalog/brands", map[string]any{"name": "Nike"}), 422)
+	// Did you mean: the exact match, close names, a refused name and the required parts.
+	if r := b.do("GET", "/v1/seller/catalog/brands/similar?name=Nike&category=cat-dress", nil); r.status != 200 || !strings.Contains(string(r.body), `"exact":{`) ||
+		!strings.Contains(string(r.body), `"similar":[]`) {
+		t.Fatalf("exact brand = %d %s", r.status, r.body)
+	}
+	if r := b.do("GET", "/v1/seller/catalog/brands/similar?name=Nikee&category=cat-dress", nil); r.status != 200 || !strings.Contains(string(r.body), `"exact":null`) ||
+		!strings.Contains(string(r.body), `"name":"Nike"`) {
+		t.Fatalf("similar brands = %d %s", r.status, r.body)
+	}
+	mustStatus(t, b.do("GET", "/v1/seller/catalog/brands/similar?name=me@shop.com&category=cat-dress", nil), 422)
+	mustStatus(t, b.do("GET", "/v1/seller/catalog/brands/similar?name=x&category=cat-dress", nil), 422)
+	mustStatus(t, b.do("GET", "/v1/seller/catalog/brands/similar?name=Nikee", nil), 422)
 
 	// Listings and the product builder.
 	mustStatus(t, b.do("GET", "/v1/seller/listings?page=0&size=25", nil), 200)

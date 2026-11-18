@@ -16,14 +16,16 @@ func TestAuditSummaryReadsLikeASentence(t *testing.T) {
 		"retire": {jobj{"action": "NODE_RETIRED", "subjectLabel": "Toys"}, "Retired Toys"},
 		"type": {jobj{"action": "TYPE_UPDATED", "subjectLabel": "Dresses", "details": map[string]any{"identifierRule": map[string]any{},
 			"attributes": map[string]any{"added": []any{"brand"}, "removed": []any{"fit"}}}}, "Changed Dresses: Identifier rule; added brand; removed fit"},
-		"approved": {jobj{"action": "REQUEST_APPROVED", "details": map[string]any{"createdPath": "Fashion › Women › Bridal sets"}}, "Approved and created Fashion › Women › Bridal sets"},
-		"unknown":  {jobj{"action": "SOMETHING_NEW", "subjectLabel": "Thing"}, "Thing"},
+		"approved":      {jobj{"action": "REQUEST_APPROVED", "details": map[string]any{"createdPath": "Fashion › Women › Bridal sets"}}, "Approved and created Fashion › Women › Bridal sets"},
+		"proposed":      {jobj{"action": "BRAND_PROPOSED", "subjectLabel": "Nikee", "details": map[string]any{"similar": []any{"Nike"}}}, "Proposed Nikee, close to Nike"},
+		"proposedAlone": {jobj{"action": "BRAND_PROPOSED", "subjectLabel": "Adire Lagos"}, "Proposed Adire Lagos"},
+		"unknown":       {jobj{"action": "SOMETHING_NEW", "subjectLabel": "Thing"}, "Thing"},
 	} {
 		if got := auditSummary(tc.entry); got != tc.want {
 			t.Errorf("%s: %q, want %q", name, got, tc.want)
 		}
 	}
-	if auditActionLabel("NODES_REORDERED") != "Reordered" || auditActionLabel("NODE_X_Y") == "" {
+	if auditActionLabel("BRAND_PROPOSED") != "Brand proposed by a seller" || auditActionLabel("NODES_REORDERED") != "Reordered" || auditActionLabel("NODE_X_Y") == "" {
 		t.Error("action labels")
 	}
 }

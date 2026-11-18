@@ -6899,6 +6899,8 @@ export interface components {
              */
             sellers: number;
             scope: components["schemas"]["StaffBrandScope"][];
+            /** @description For a pending brand a seller typed in: close names it may duplicate (possible duplicate of ...); empty otherwise */
+            similarNames?: string[];
         };
         StaffBrandList: {
             brands: components["schemas"]["StaffBrand"][];

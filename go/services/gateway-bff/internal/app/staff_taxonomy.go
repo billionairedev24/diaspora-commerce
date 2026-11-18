@@ -236,17 +236,28 @@ func (s *staffTaxonomyImpl) Audit(ctx context.Context, c *domain.Caller, subject
 		return nil, err
 	}
 	entries := make([]jobj, 0, len(raw))
-	ids := []string{}
+	ids, orgs := []string{}, []string{}
 	for _, it := range raw {
 		if m, ok := it.(map[string]any); ok {
 			entries = append(entries, m)
-			ids = append(ids, jstr(m, "actorId"))
+			// A brand a seller typed in is recorded against the seller organisation ("org:<id>"), not a user.
+			if org, isOrg := strings.CutPrefix(jstr(m, "actorId"), "org:"); isOrg {
+				orgs = append(orgs, org)
+			} else {
+				ids = append(ids, jstr(m, "actorId"))
+			}
 		}
 	}
 	names := sc.names.resolve(ctx, sc, nameUser, uniqueStrings(ids))
+	orgNames := sc.names.resolve(ctx, sc, nameOrg, uniqueStrings(orgs))
 	items := make([]any, 0, len(entries))
 	for _, e := range entries {
 		actor := names[jstr(e, "actorId")]
+		if org, isOrg := strings.CutPrefix(jstr(e, "actorId"), "org:"); isOrg {
+			if actor = orgNames[org]; actor == "" {
+				actor = "Unknown seller"
+			}
+		}
 		if actor == "" {
 			actor = "Unknown user"
 		}
@@ -274,7 +285,7 @@ var auditActions = map[string]string{
 	"NODES_REORDERED": "Reordered", "TYPE_CREATED": "Product type created", "TYPE_UPDATED": "Product type changed",
 	"REQUEST_APPROVED": "Request approved", "REQUEST_REJECTED": "Request rejected",
 	"BRAND_CREATED": "Brand added", "BRANDS_ADDED": "Brands added", "BRAND_APPROVED": "Brand approved", "BRAND_REJECTED": "Brand rejected",
-	"BRAND_RETIRED": "Brand retired", "BRAND_MERGED": "Brand merged", "BRAND_UPDATED": "Brand changed",
+	"BRAND_PROPOSED": "Brand proposed by a seller", "BRAND_RETIRED": "Brand retired", "BRAND_MERGED": "Brand merged", "BRAND_UPDATED": "Brand changed",
 }
 
 func auditActionLabel(action string) string {
@@ -327,6 +338,11 @@ func auditSummary(e jobj) string {
 		return "Rejected " + label
 	case "BRAND_CREATED":
 		return "Added brand " + label
+	case "BRAND_PROPOSED":
+		if similar := strs(d, "similar"); len(similar) > 0 {
+			return "Proposed " + label + ", close to " + strings.Join(similar, ", ")
+		}
+		return "Proposed " + label
 	case "BRANDS_ADDED":
 		return "Added " + label + ": " + strings.Join(strs(d, "brands"), ", ")
 	case "BRAND_APPROVED":

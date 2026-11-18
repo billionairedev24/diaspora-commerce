@@ -332,6 +332,22 @@ func (k *sellerListingImpl) CreateBrand(ctx context.Context, bearer, name string
 	return out, err
 }
 
+func (k *sellerListingImpl) SuggestBrands(ctx context.Context, bearer, name string, q domain.BrandQuery) (domain.BrandSuggestions, error) {
+	v := url.Values{"name": {name}}
+	if q.ProductType != "" {
+		v.Set("productType", q.ProductType)
+	}
+	if q.Category != "" {
+		v.Set("category", q.Category)
+	}
+	var out domain.BrandSuggestions
+	_, err := call(ctx, k.c, httpclient.Request{Path: "/v1/brands/similar", Query: v, Bearer: bearer, UserBearer: true}, &out)
+	if out.Similar == nil {
+		out.Similar = []domain.Brand{}
+	}
+	return out, err
+}
+
 func (k *sellerListingImpl) Brands(ctx context.Context, bearer string, q domain.BrandQuery) (domain.BrandList, error) {
 	v := url.Values{"limit": {"30"}}
 	for key, val := range map[string]string{"q": q.Q, "productType": q.ProductType, "category": q.Category} {

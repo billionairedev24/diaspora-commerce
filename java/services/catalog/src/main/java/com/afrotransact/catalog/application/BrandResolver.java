@@ -1,5 +1,6 @@
 package com.afrotransact.catalog.application;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -34,6 +35,15 @@ interface BrandResolver {
      * @param departments the departments a new brand is scoped to
      */
     Matched matchOrCreate(String orgId, Set<UUID> covering, Set<UUID> departments, String name);
+
+    /**
+     * The brands this organisation can see in these nodes whose name is close to the key (one or two typing mistakes
+     * apart, or the same name with a few letters more or less), best first; never an exact match, never another
+     * organisation's pending brand.
+     *
+     * @param key the comparison key ({@code BrandNames.normalise}) of what was typed
+     */
+    List<Brand> similar(String orgId, Set<UUID> covering, String key);
 
     record Matched(Brand brand, boolean created) {
     }

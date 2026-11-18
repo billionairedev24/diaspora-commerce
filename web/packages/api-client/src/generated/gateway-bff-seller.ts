@@ -2478,9 +2478,29 @@ export interface paths {
         put?: never;
         /**
          * Add a brand the seller typed (reviewed by AfroTransact, usable at once)
-         * @description catalog `POST /v1/brands`. Returns the existing brand with `created` false when the registry already has this name in the category (case, accents and punctuation ignored); otherwise creates a PENDING brand scoped to the category's department, visible only to this organisation until staff approve it.
+         * @description catalog `POST /v1/brands`. Returns the existing brand with `created` false when the registry already has this name in the category (case, accents and punctuation ignored); otherwise creates a PENDING brand scoped to the category's department, visible only to this organisation until staff approve it. The proposal is audited and appears in the staff review queue (approve, merge into an existing brand, or reject); the seller is never held up by it. 422 with `fieldErrors` on `attributes.brand` when the name is not allowed (a web address, an e-mail address, profanity, odd characters, no letters) or a limit is reached (new brands per organisation per day, brands awaiting review). A name that matches an existing brand is never refused by a limit.
          */
         post: operations["createBrand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/catalog/brands/similar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Did you mean: the brand a typed name is, or close names
+         * @description catalog `GET /v1/brands/similar`. For the brand combobox while the seller types a name that is not listed. `exact` is the brand the name already is in this category (case, accents and punctuation ignored), `similar` lists up to three close names (one or two typing mistakes, or the same name with a few letters more). Only approved brands and the organisation's own pending ones are considered, never another seller's. 422 when the name could not be added (a web address, an e-mail address, profanity, odd characters) or when neither `category` nor `productType` is sent.
+         */
+        get: operations["suggestBrands"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -6253,6 +6273,12 @@ export interface components {
             brand: components["schemas"]["Brand"];
             /** @description False when the brand already existed and is returned as the match */
             created: boolean;
+        };
+        BrandSuggestions: {
+            /** @description The brand the typed name already is in this category, or null */
+            exact: components["schemas"]["Brand"] | null;
+            /** @description Close names the seller probably meant, at most three; empty when there is an exact match */
+            similar: components["schemas"]["Brand"][];
         };
         ProductImportRowPage: {
             items: components["schemas"]["ProductImportRow"][];
@@ -11679,6 +11705,36 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CreatedBrand"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    suggestBrands: {
+        parameters: {
+            query: {
+                name: string;
+                /** @description Category node id or code */
+                category?: string;
+                productType?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The exact match and the close names */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BrandSuggestions"];
                 };
             };
             401: components["responses"]["Problem"];

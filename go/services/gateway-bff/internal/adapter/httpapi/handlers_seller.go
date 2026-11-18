@@ -132,6 +132,7 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 		route("POST /v1/seller/image-library/attach", h.attachLibraryImages)
 		route("GET /v1/seller/catalog/brands", h.brands)
 		route("POST /v1/seller/catalog/brands", h.createBrand)
+		route("GET /v1/seller/catalog/brands/similar", h.suggestBrands)
 	}
 	if h.s.SellerStockImports != nil {
 		route("GET /v1/seller/stock/imports/template", h.stockImportTemplate)

@@ -265,6 +265,13 @@ func (h *handlersImpl) brands(w http.ResponseWriter, r *http.Request) {
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
+func (h *handlersImpl) suggestBrands(w http.ResponseWriter, r *http.Request) {
+	qs := r.URL.Query()
+	v, err := h.s.SellerImports.SuggestBrands(r.Context(), callerFrom(r.Context()), qs.Get("name"),
+		domain.BrandQuery{Category: qs.Get("category"), ProductType: qs.Get("productType")})
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
 func (h *handlersImpl) createBrand(w http.ResponseWriter, r *http.Request) {
 	var b struct {
 		Name        string `json:"name"`

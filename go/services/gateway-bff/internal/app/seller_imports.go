@@ -36,6 +36,8 @@ type SellerImportService interface {
 	// Brands lists the brands of a category for the product form; CreateBrand adds one the seller typed (pending review).
 	Brands(ctx context.Context, c *domain.Caller, q domain.BrandQuery) (domain.BrandList, error)
 	CreateBrand(ctx context.Context, c *domain.Caller, name string, q domain.BrandQuery) (domain.CreatedBrand, error)
+	// SuggestBrands answers "did you mean" for a typed brand name: the exact match, or up to three close names.
+	SuggestBrands(ctx context.Context, c *domain.Caller, name string, q domain.BrandQuery) (domain.BrandSuggestions, error)
 }
 
 type sellerImportImpl struct {
