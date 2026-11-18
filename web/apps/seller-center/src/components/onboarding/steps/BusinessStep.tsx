@@ -102,7 +102,7 @@ export function BusinessStep({ status, ref }: StepProps) {
             id={fieldId('description')}
             label={
               <>
-                What you {kind === 'PROVIDER' ? 'offer' : 'sell'}
+                What you {kind === 'PROVIDER' ? 'provide' : 'sell'}
                 <Optional />
               </>
             }

@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
 
+import { FulfilmentTip } from '@/components/ui/FulfilmentTip';
 import { Notice } from '@/components/ui/Notice';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { Switch } from '@/components/ui/Switch';
@@ -86,6 +87,7 @@ function PickupLocationForm({ a, editable }: { a: ShipFromAddress; editable: boo
       ) : null}
       <div className="flex flex-col">
         <Switch id={id('enabled')} checked={draft.enabled} disabled={!editable || busy} onChange={(enabled) => set({ enabled })} label={t('sc.settings.pickup.toggle')} />
+        <FulfilmentTip mode="pickup" />
         <p className="m-0 text-sm text-muted" data-testid="pickup-confirm-line">
           {wasOn && saved?.enabledAt ? t('sc.settings.pickup.since', { date: shortDate(saved.enabledAt) }) : t('sc.settings.pickup.confirmLine')}
         </p>
