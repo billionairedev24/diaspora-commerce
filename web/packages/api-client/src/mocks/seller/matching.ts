@@ -4,6 +4,7 @@
    with a photo, each needing the seller's click; "None of these" is recorded; the barcode shortcut is cleaned and checked, a page created by one organisation is found by
    another, an offer never carries page content, a page that is not live cannot be sold, a gated brand needs approval, and an
    offer is TAX_HELD while the seller's own tax decision is missing. State lives on the mock database, per organisation. */
+import { type ShipFromAddress } from '../../schemas/seller';
 import {
   type CandidateList,
   type CandidateRequest,
@@ -69,6 +70,8 @@ interface MockOffer {
   orgId: string;
   condition: string;
   status: 'ACTIVE' | 'TAX_HELD';
+  fulfilment?: string;
+  shipFromLocationId?: string;
 }
 export interface MockMatchingState {
   pages: MockPage[];
@@ -152,6 +155,8 @@ export function freshMatching(): MockMatchingState {
 /** What the mock database holds for matching; created on first use so older fixtures keep working. */
 export interface MatchingHost {
   matching?: MockMatchingState;
+  /** The organisation's pickup locations, when the host has them: the same location checks as the gateway's. */
+  shipFrom?: Record<string, Pick<ShipFromAddress, 'id' | 'customerPickup' | 'afrotransactPickup'>[]>;
 }
 const stateOf = (db: MatchingHost): MockMatchingState => (db.matching ??= freshMatching());
 
@@ -372,6 +377,23 @@ export function approveMockPage(db: MatchingHost, gtin: string): boolean {
 const PAGE_CONTENT = ['title', 'description', 'bullets', 'attributes', 'attrs', 'brand', 'category', 'categoryId', 'categoryPath', 'productType', 'productTypeCode', 'gtin', 'gtinExempt',
   'variationTheme', 'variants', 'options', 'images', 'image', 'taxFacts', 'facts', 'keywords', 'sizeChartId'];
 
+/** The location a Pick up or Fulfilled by AfroTransact listing names has what the mode needs; each refusal is on the location field, never the price (the gateway's codes). */
+function requireLocation(db: MatchingHost, orgId: string, input: OfferOnlyInput): void {
+  const places = db.shipFrom?.[orgId];
+  if (!places || !input.shipFromLocationId || input.fulfilment === 'AFROTRANSACT') return;
+  const refuse = (code: string, message: string): never => {
+    throw new MatchingMockError(422, code, message, { shipFromLocationId: message });
+  };
+  const place = places.find((a) => a.id === input.shipFromLocationId);
+  if (!place) return refuse('OFFER_LOCATION_UNKNOWN', 'Choose one of your locations.');
+  if (input.fulfilment === 'AFROTRANSACT_DELIVERY') {
+    if (!place.afrotransactPickup.enabled) refuse('FBA_LOCATION_NOT_ON', 'Turn on Fulfilled by AfroTransact at this location first.');
+    return;
+  }
+  if (!place.customerPickup?.enabled) refuse('PICKUP_NOT_ON', 'Turn on pickup at this location and add the hours you are open.');
+  if (!place.customerPickup?.hours.length) refuse('PICKUP_HOURS_MISSING', 'Add pickup hours to this location.');
+}
+
 /** Offers terms only: the same answers as offers' POST /v1/offers. */
 export function createOffer(db: MatchingHost, orgId: string, raw: Record<string, unknown>): OfferOnlyResult {
   const st = stateOf(db);
@@ -391,6 +413,7 @@ export function createOffer(db: MatchingHost, orgId: string, raw: Record<string,
   if (input.fulfilment === 'AFROTRANSACT_DELIVERY' && !input.shipFromLocationId) errors.shipFromLocationId = 'Choose the store AfroTransact picks up from';
   if (input.packaging && input.fulfilment !== 'AFROTRANSACT') errors.packaging = 'The package is only for Fulfilled by AfroTransact';
   if (Object.keys(errors).length) throw new MatchingMockError(422, 'VALIDATION_FAILED', 'One or more fields are invalid.', errors);
+  requireLocation(db, orgId, input);
   const hit = findChild(st, input.atin);
   if (!hit || hit.page.status !== 'LIVE') throw new MatchingMockError(404, 'NOT_FOUND', 'This product page is not live yet.');
   if (hit.page.gated) throw new MatchingMockError(422, 'SELLING_APPROVAL_REQUIRED', 'You need approval to sell this brand. Apply under Listings.');
@@ -399,7 +422,7 @@ export function createOffer(db: MatchingHost, orgId: string, raw: Record<string,
   }
   st.seq += 1;
   const status = hit.page.taxHeld ? 'TAX_HELD' : 'ACTIVE';
-  const offer: MockOffer = { id: `offer-${st.seq}`, atin: input.atin, orgId, condition, status };
+  const offer: MockOffer = { id: `offer-${st.seq}`, atin: input.atin, orgId, condition, status, fulfilment: input.fulfilment, ...(input.shipFromLocationId ? { shipFromLocationId: input.shipFromLocationId } : {}) };
   st.offers.push(offer);
   return { offerId: offer.id, atin: input.atin, sellerSku: input.sellerSku?.trim() || `${input.atin}-${condition.replace(/_/g, '')}`, status,
     heldReason: status === 'TAX_HELD' ? 'TAX_DECISION_MISSING' : null, message: status === 'TAX_HELD' ? TAX_HELD_MESSAGE : 'Your offer is live.' };

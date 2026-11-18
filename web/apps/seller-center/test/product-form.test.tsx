@@ -114,7 +114,7 @@ describe('product form v2 (S309): wide cards of sections with proper dropdowns',
     await screen.findByLabelText('Shelf life or expiry');
     // Dropdowns: the choice questions, the unit next to a number, ship-from and handling time. (Condition is not asked for food: the item is New.)
     expect(screen.queryByLabelText('Condition')).not.toBeInTheDocument();
-    for (const name of ['Storage', 'Unit of Shelf life or expiry', 'Ships from', 'Handling time (business days)']) {
+    for (const name of ['Storage', 'Unit of Shelf life or expiry', 'Pickup location', 'Handling time (business days)']) {
       expect(screen.getByRole('combobox', { name }).tagName).toBe('SELECT');
     }
     expect(within(screen.getByLabelText('Handling time (business days)')).getAllByRole('option').length).toBeGreaterThan(5);
