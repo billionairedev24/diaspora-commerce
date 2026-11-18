@@ -218,6 +218,18 @@ describe('Add a product starts with one search box, the barcode is an optional s
     await waitFor(() => expect(bffCalls.filter((c) => c.includes('/catalog/candidates')).length).toBeGreaterThan(1), LOOKUP);
   });
 
+  it('lets the seller choose to create a new product first, straight to the form with no search and nothing recorded for staff', async () => {
+    await renderScreen(<AddProductFlow />);
+    const user = userEvent.setup();
+    expect(await screen.findByRole('radio', { name: /Sell a product already on AfroTransact/ })).toBeChecked();
+    await user.click(screen.getByRole('radio', { name: /Create a new product/ }));
+    expect(await screen.findByRole('form', { name: 'Product' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Product title')).toHaveValue('');
+    expect(getSellerDb().matching?.decisions ?? []).toEqual([]);
+    await user.click(screen.getByRole('button', { name: 'Search again' }));
+    expect(await screen.findByRole('radio', { name: /Sell a product already on AfroTransact/ })).toBeChecked();
+  });
+
   it('adds it as new when it is not here: the form starts with the name and the category, and the answer is recorded for staff', async () => {
     await renderScreen(<AddProductFlow />);
     const user = await typeName('raw shea butter 8oz');

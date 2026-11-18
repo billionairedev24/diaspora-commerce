@@ -38,7 +38,8 @@ interface Props {
 }
 
 /**
- * Step 0 of "Add a product": one search box, "What are you selling?". The name (with the size and the brand inside it) is searched while the
+ * Step 0 of "Add a product": first the choice, sell a product already on AfroTransact (the search, the default) or create a new one (straight
+ * to the full form, no search first). Then one search box, "What are you selling?". The name (with the size and the brand inside it) is searched while the
  * seller types; the pages that look like it show with photo, brand, size and the number of sellers, and every one needs the seller's click.
  * The category is a suggested chip the seller may change, never a required first step. A seller with a barcode may use it as an exact
  * shortcut. Nothing here shows an id or another seller.
@@ -76,6 +77,11 @@ export function SearchStep({ onSell, onCreate, memo = EMPTY_SEARCH, onMemo, draf
     if (query !== null && data) none.mutate();
     onCreate({ noGtin: true, title: name, ...(leaf ? { category: { id: leaf.id, path: leaf.path, productType: leaf.productType } } : {}) });
   };
+  // "Create a new product" skips the search: the form starts with whatever was typed, the chip's category too.
+  const createNew = () => {
+    const name = text.trim().replace(/\s+/g, ' ');
+    onCreate({ ...(name ? { title: name } : {}), ...(leaf ? { category: { id: leaf.id, path: leaf.path, productType: leaf.productType } } : {}) });
+  };
   const waiting = query !== null && q.isFetching && !q.data;
   const searched = data !== undefined && !q.isFetching;
 
@@ -84,6 +90,23 @@ export function SearchStep({ onSell, onCreate, memo = EMPTY_SEARCH, onMemo, draf
       <PageHeader title={t('sc.match.title')} description={t('sc.match.lead')} />
       <div className="flex max-w-3xl flex-col gap-6" data-tour="add-product-step">
         {draftKept ? <p className="m-0 text-sm" data-testid="draft-kept">{t('sc.match.draftKept')}</p> : null}
+        <fieldset className="m-0 flex flex-col gap-3 border-0 p-0" data-testid="add-mode">
+          <legend className="mb-2 text-sm font-semibold">{t('sc.match.mode.legend')}</legend>
+          <div className="flex items-start gap-2 text-sm">
+            <input type="radio" id="add-mode-existing" name="add-mode" value="existing" defaultChecked className="mt-1 shrink-0" />
+            <label htmlFor="add-mode-existing" className="cursor-pointer">
+              <span className="block font-semibold">{t('sc.match.mode.existing')}</span>
+              <span className="block text-muted">{t('sc.match.mode.existingHelp')}</span>
+            </label>
+          </div>
+          <div className="flex items-start gap-2 text-sm">
+            <input type="radio" id="add-mode-new" name="add-mode" value="new" onChange={createNew} className="mt-1 shrink-0" />
+            <label htmlFor="add-mode-new" className="cursor-pointer">
+              <span className="block font-semibold">{t('sc.match.mode.new')}</span>
+              <span className="block text-muted">{t('sc.match.mode.newHelp')}</span>
+            </label>
+          </div>
+        </fieldset>
         <TextField
           id="match-search"
           data-tour="search-input"
