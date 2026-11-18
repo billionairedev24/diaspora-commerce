@@ -40,10 +40,10 @@ export type PaymentSheetKeys = z.infer<typeof PaymentSheetKeysSchema>;
 /* ── Orders ────────────────────────────────────────────────────── */
 
 /** How a placed order's shipment reached the shopper (history keeps 'express' of any order placed before launch shipping). */
-export const DeliveryMethodSchema = z.enum(['carrier', 'express', 'legacy_seller_shipped', 'afrotransact_delivery', 'pickup']);
+export const DeliveryMethodSchema = z.enum(['carrier', 'express', 'seller_ships', 'legacy_seller_shipped', 'afrotransact_delivery', 'pickup']);
 
 /** Who moves a shipment. The apps say AfroTransact delivers, and show delivery proof, only for the AfroTransact modes. */
-export const FulfilmentModeSchema = z.enum(['legacy_seller_shipped', 'afrotransact_delivery', 'fulfilled_by_afrotransact', 'pickup', 'preorder_run']);
+export const FulfilmentModeSchema = z.enum(['seller_ships', 'legacy_seller_shipped', 'afrotransact_delivery', 'fulfilled_by_afrotransact', 'pickup', 'preorder_run']);
 export type FulfilmentMode = z.infer<typeof FulfilmentModeSchema>;
 
 /** True when AfroTransact itself delivers (or hands over) this mode: the only modes that may show a proof of delivery. */
@@ -51,11 +51,11 @@ export const deliveredByAfroTransact = (mode: FulfilmentMode): boolean => mode =
 export type DeliveryMethod = z.infer<typeof DeliveryMethodSchema>;
 
 /** A delivery option the checkout page can show a package (launch shipping: no express, quote_required outside the zones). */
-export const DeliveryOptionKeySchema = z.enum(['carrier', 'afrotransact_delivery', 'pickup', 'quote_required']);
+export const DeliveryOptionKeySchema = z.enum(['carrier', 'afrotransact_delivery', 'pickup', 'seller_ships', 'quote_required']);
 export type DeliveryOptionKey = z.infer<typeof DeliveryOptionKeySchema>;
 
 /** An option an order can be placed with: quote_required is never payable. */
-export const PlaceableOptionSchema = z.enum(['carrier', 'afrotransact_delivery', 'pickup']);
+export const PlaceableOptionSchema = z.enum(['carrier', 'afrotransact_delivery', 'pickup', 'seller_ships']);
 export type PlaceableOption = z.infer<typeof PlaceableOptionSchema>;
 
 export const TimelineEventSchema = z.object({ status: z.string(), label: z.string(), at: z.string() });

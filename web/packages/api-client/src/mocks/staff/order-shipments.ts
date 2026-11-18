@@ -13,7 +13,7 @@ const BLOCKED_TEXT: Record<ShipmentBlocked, string> = {
   PERMISSION: 'No permission',
   DELIVERY_PERMISSION: 'You need the delivery permission',
   SELLER: 'Only the seller does this step',
-  SELLER_UPDATES: 'Old seller-shipped order: use Override status',
+  SELLER_UPDATES: 'Updated by the seller: use Override status',
   PICKUP_ORDER: 'Not available for pickup orders',
   SEQUENCE: 'Earlier steps come first',
   STATE: 'Not available from here'

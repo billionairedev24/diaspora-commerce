@@ -750,6 +750,7 @@ const OfferTermsBody = z.object({
   version: z.number().int().optional()
 });
 const OfferStatusBody = z.object({ version: z.number().int().min(0).optional() });
+const SelfShippingBody = z.object({ enabled: z.boolean(), chargeMinor: z.number().int().min(0, 'Enter a charge of $0.00 or more').max(10_000, 'Enter a charge of $100.00 or less') });
 const OfferFulfilmentBody = z.object({ fulfilment: FulfilmentKindSchema, shipFromLocationId: z.string().max(64).nullable().optional() });
 
 const TokenBody = z.object({ token: z.string().trim().min(1, 'This invitation link is incomplete. Open it again from the email.').max(200) });
@@ -1514,6 +1515,28 @@ export const sellerHandlers = [
       s.timeline.push({ status, at: ctx.now.toISOString(), actor: 'seller' });
       refreshShipment(o, s.shipmentId);
       return o;
+    })
+  ),
+  // Seller self-shipping (a staff switch, off by default): one flat charge per order; refused with 409 while the switch is off.
+  http.get(
+    `${W}/self-shipping`,
+    route((ctx) => {
+      require(ctx, 'orders', 'VIEW', 'SELLER');
+      const s = ctx.db.selfShipping;
+      return { available: s.available, enabled: s.available && s.enabled, chargeMinor: s.chargeMinor, currency: 'USD', version: s.version };
+    })
+  ),
+  http.put(
+    `${W}/self-shipping`,
+    route(async (ctx) => {
+      const b = await body(ctx.request, SelfShippingBody);
+      require(ctx, 'orders', 'EDIT', 'SELLER');
+      const s = ctx.db.selfShipping;
+      if (!s.available) throw conflict('Sellers can’t ship orders themselves yet, so there is no shipping charge to set.');
+      s.enabled = b.enabled;
+      s.chargeMinor = b.chargeMinor;
+      s.version += 1;
+      return { available: true, enabled: s.enabled, chargeMinor: s.chargeMinor, currency: 'USD', version: s.version };
     })
   ),
   http.get(`${W}/orders/:orderNumber/shipments/:shipmentId/label`, () =>

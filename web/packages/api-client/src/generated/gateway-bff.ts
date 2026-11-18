@@ -4205,13 +4205,13 @@ export interface components {
         };
         DeliveryOption: {
             /**
-             * @description Launch shipping (listing rules section 3): `afrotransact_delivery` (plain "Delivery": one flat fee set by staff), `pickup` ($0), `quote_required` (the address
+             * @description Launch shipping (listing rules section 3): `afrotransact_delivery` ("Delivered by AfroTransact": AfroTransact collects from the seller and delivers; one flat fee set by staff, free for a member whose plan waives it), `pickup` ("Pick up", $0), `seller_ships` ("Shipped by the seller": only while the staff switch is on, off by default, and only for a seller that set its own flat per-order charge; the seller keeps it, no plan waives it), `quote_required` (the address
              *     is outside every delivery zone: "Too far for standard delivery. Ask us for a quote"; disabled for payment,
              *     the order cannot be placed with it) and `carrier` (retired with seller self-shipping: never offered, whatever
              *     the old staff switch says). There is no express. No label ever names a carrier.
              * @enum {string}
              */
-            key: "carrier" | "afrotransact_delivery" | "pickup" | "quote_required";
+            key: "carrier" | "afrotransact_delivery" | "pickup" | "seller_ships" | "quote_required";
             label: string;
             /** @description The window label of this option ("Nov 18 – 20"); EMPTY when there is no real basis for a date, never a guess */
             eta: string;
@@ -5503,10 +5503,10 @@ export interface components {
             deliverySelections: {
                 packageId: string;
                 /**
-                 * @description quote_required is refused (422 deliverySelections); carrier only while the staff switch is on
+                 * @description quote_required is refused (422 deliverySelections); carrier is retired; seller_ships only while the staff switch is on (off by default) and the seller set a charge, else 422 SELF_SHIPPING_UNAVAILABLE on deliverySelections
                  * @enum {string}
                  */
-                option: "carrier" | "afrotransact_delivery" | "pickup";
+                option: "carrier" | "afrotransact_delivery" | "pickup" | "seller_ships";
                 pickupPointId?: string;
                 /**
                  * @description An agreed delivery quote (`POST /v1/me/delivery-quotes`) to use as this package's shipping charge. It must be
@@ -6188,12 +6188,12 @@ export interface components {
                  * @description An order the seller shipped themselves before self-shipping was retired is legacy_seller_shipped (history only, never produced for a new order)
                  * @enum {string}
                  */
-                deliveryMethod: "carrier" | "express" | "legacy_seller_shipped" | "afrotransact_delivery" | "pickup";
+                deliveryMethod: "carrier" | "express" | "seller_ships" | "legacy_seller_shipped" | "afrotransact_delivery" | "pickup";
                 /**
                  * @description Who moves it. Two modes exist: Seller pickup and Fulfilled by AfroTransact (afrotransact_delivery from the seller's location, fulfilled_by_afrotransact from AfroTransact stock); legacy_seller_shipped is history. The app says AfroTransact delivers, and shows delivery proof, only for afrotransact_delivery, fulfilled_by_afrotransact and preorder_run
                  * @enum {string}
                  */
-                fulfilmentMode: "legacy_seller_shipped" | "afrotransact_delivery" | "fulfilled_by_afrotransact" | "pickup" | "preorder_run";
+                fulfilmentMode: "seller_ships" | "legacy_seller_shipped" | "afrotransact_delivery" | "fulfilled_by_afrotransact" | "pickup" | "preorder_run";
                 /** @description Cancel is offered: before the parcel is packed and inside the cancellation window */
                 cancellable: boolean;
                 /**
@@ -6251,12 +6251,12 @@ export interface components {
                 status: string;
                 eta: string | null;
                 /** @enum {string} */
-                method: "carrier" | "express" | "legacy_seller_shipped" | "afrotransact_delivery" | "pickup";
+                method: "carrier" | "express" | "seller_ships" | "legacy_seller_shipped" | "afrotransact_delivery" | "pickup";
                 /**
                  * @description Who moves it. Two modes exist: Seller pickup and Fulfilled by AfroTransact (afrotransact_delivery from the seller's location, fulfilled_by_afrotransact from AfroTransact stock); legacy_seller_shipped is history. The app names AfroTransact as the deliverer, and shows proof, only for afrotransact_delivery, fulfilled_by_afrotransact and preorder_run
                  * @enum {string}
                  */
-                fulfilmentMode: "legacy_seller_shipped" | "afrotransact_delivery" | "fulfilled_by_afrotransact" | "pickup" | "preorder_run";
+                fulfilmentMode: "seller_ships" | "legacy_seller_shipped" | "afrotransact_delivery" | "fulfilled_by_afrotransact" | "pickup" | "preorder_run";
                 proof: components["schemas"]["DeliveryProof"];
                 /** @enum {string|null} */
                 handover: "hand" | "door" | "desk" | null;

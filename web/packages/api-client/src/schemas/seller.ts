@@ -503,8 +503,10 @@ export const SellerShipmentSchema = z.object({
   status: ShipmentStatusSchema,
   statusLabel: z.string(),
   fulfilment: FulfilmentKindSchema,
-  /** Two modes exist. afrotransact_delivery: Fulfilled by AfroTransact from your location (the customer pays the delivery fee, you pay nothing for it); fulfilled_by_afrotransact: AfroTransact fulfils and delivers it; pickup: Seller pickup. legacy_seller_shipped: an old order you shipped yourself before self-shipping was retired (history, no steps). */
+  /** seller_ships: you ship it yourself at your own shipping charge (only while AfroTransact lets sellers do that: a staff switch, off by default). Otherwise two modes exist. afrotransact_delivery: Fulfilled by AfroTransact from your location (the customer pays the delivery fee, you pay nothing for it); fulfilled_by_afrotransact: AfroTransact fulfils and delivers it; pickup: Seller pickup. legacy_seller_shipped: an old order you shipped yourself before self-shipping was retired (history, no steps). */
   fulfilmentMode: FulfilmentModeSchema,
+  /** The next step is Mark shipped and you ship it yourself: say how it left (tracking number or details). Only with seller_ships. */
+  needsShipDetails: z.boolean().default(false),
   perishable: z.boolean(),
   lines: z.array(
     z.object({ title: z.string(), quantity: z.number().int(), unitPriceMinor: z.number().int(), itemsMinor: z.number().int(), variantAtin: z.string(), imageUrl: nullableString })
@@ -535,6 +537,20 @@ export const SellerShipmentSchema = z.object({
     .nullable()
 });
 export type SellerShipment = z.infer<typeof SellerShipmentSchema>;
+/**
+ * Your own shipping (orders): one flat charge for each order package of yours, never per product. `available` is a staff switch that
+ * is off by default; while false nothing about it is shown. You keep the whole charge and are responsible for it being fair.
+ */
+export const SellerSelfShippingSchema = z.object({
+  available: z.boolean(),
+  enabled: z.boolean(),
+  chargeMinor: z.number().int().min(0).max(10_000),
+  currency: z.string(),
+  version: z.number().int()
+});
+export type SellerSelfShipping = z.infer<typeof SellerSelfShippingSchema>;
+export const SellerSelfShippingRequestSchema = z.object({ enabled: z.boolean(), chargeMinor: z.number().int().min(0).max(10_000) });
+export type SellerSelfShippingRequest = z.infer<typeof SellerSelfShippingRequestSchema>;
 export const OrderEarningsSchema = z.object({
   itemsMinor: z.number().int(),
   shippingMinor: z.number().int(),
