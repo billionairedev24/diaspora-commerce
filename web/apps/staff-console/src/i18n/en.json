@@ -3406,7 +3406,7 @@
   "st.sx.ai.history.aiOff": "AI off",
   "st.sx.status.aiOff": "AI is switched off",
   "st.order.blocked.DELIVERY_PERMISSION": "You need the delivery permission",
-  "st.order.blocked.SELLER_UPDATES": "Old seller-shipped order: use Override status",
+  "st.order.blocked.SELLER_UPDATES": "Updated by the seller: use Override status",
   "st.order.blocked.PICKUP_ORDER": "Not available for pickup orders",
   "st.order.mode.afrotransactStore": "Fulfilled by AfroTransact · picks it up from the seller, then delivers",
   "st.order.mode.afrotransactCentre": "Fulfilled by AfroTransact · delivers it from the warehouse",
