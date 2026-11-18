@@ -21,6 +21,8 @@ const (
 	MatchGTINStore = "021234567893"
 	// MatchATINHeld is the variant of MatchGTINHeld.
 	MatchATINHeld = "ATHELDTAX1"
+	// MatchATINNoLocation is a variant whose Pick up offer offers refuses for want of a location (the field is named "shipFrom").
+	MatchATINNoLocation = "ATNOLOCAT1"
 	// MatchATINOwn is a variant the organisation already sells (an offer on it answers offers.offer-exists).
 	MatchATINOwn = "ATOWNOFFER"
 )
@@ -168,6 +170,10 @@ func (u *Upstreams) matchRoutes(mux *http.ServeMux) {
 		u.LastOfferBody = b
 		if offers[atin] {
 			problem(w, 409, "offers.offer-exists", "You already sell this item in that condition. Change your offer under Listings.", nil)
+			return
+		}
+		if atin == MatchATINNoLocation {
+			problem(w, 422, "offers.rule-violation", "The offer is not valid", map[string]any{"fieldErrors": map[string]string{"shipFrom": "Choose where customers collect it"}})
 			return
 		}
 		if atin == "ATNOTLIVE1" {
