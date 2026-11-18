@@ -184,7 +184,7 @@ class ClasspathRulesRegistryTest {
             for (int i = 0; i < kinds.size(); i++) {
                 String kind = kinds.get(i);
                 CategoryRules sample = BOOK.categories().values().stream().filter(c -> c.kindCode().equals(kind)
-                        && c.code().equals(sampleOf(kind))).findFirst().orElseThrow();
+                        && c.code().equals(sampleOf(kind, rule.field()))).findFirst().orElseThrow();
                 assertThat(sample.status(rule.field())).as(rule.label() + " / " + kind)
                         .isEqualTo(fromDoc(cells[i].strip()));
             }
@@ -192,7 +192,7 @@ class ClasspathRulesRegistryTest {
     }
 
     /** A category of each kind without an override of the kind's cells (see the overrides of rules.json). */
-    private static String sampleOf(String kind) {
+    private static String sampleOf(String kind, RuleField field) {
         return switch (kind) {
             case "PKG" -> "beans-pantry-sauces";
             case "PER" -> "dairy-eggs";
@@ -204,7 +204,8 @@ class ClasspathRulesRegistryTest {
             case "JWL" -> "jewelry-accessories";
             case "ELC" -> "phones";
             case "HOM" -> "furniture-small-appliances";
-            case "KID" -> "toys-games";
+            // toys override the brand, car seats override the condition: each is the sample for the other's cell
+            case "KID" -> field == RuleField.BRAND ? "car-seats" : "toys-games";
             case "PET" -> "pet-food";
             case "BOK" -> "printed-books";
             case "DIG" -> "audiobooks";

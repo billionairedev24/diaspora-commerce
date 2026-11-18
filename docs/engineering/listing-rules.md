@@ -164,9 +164,9 @@ Related: `docs/engineering/category-tax-design.md` (tax), `docs/engineering/ship
   categories is in section 7. The product form, the API, the bulk upload and the offer paths read the same cell: where the rule says
   optional the server never asks for a brand and the form shows no "required" mark.
 - **Where it matters:** the brand is required where it identifies the responsible manufacturer for safety or recalls (baby formula
-  and bottles, supplements, OTC medicines, medical devices, first aid, medicated skincare, car seats, toys), where authenticity is
+  and bottles, supplements, OTC medicines, medical devices, first aid, medicated skincare, car seats), where authenticity is
   the risk (electronics, fragrance, gift cards) and where the brand is the whole product (gift cards). It is brand or reason where
-  branded goods are also made by a tailor, a maker or a cook (clothing, bags, jewelry, skin and hair care, household goods). It is
+  branded goods are also made by a tailor, a maker or a cook (clothing, bags, toys, jewelry, skin and hair care, household goods). It is
   optional where loose, local, store-brand, bulk or handmade goods are normal (groceries, drinks, pet food, hair accessories, wigs,
   bedding, candles, school supplies, sports goods, digital products). It is hidden where the seller is the maker or there is no
   product (food service, services, books and magazines: books ask for author and publisher instead, in the product type).
@@ -389,14 +389,14 @@ Clarifications this implementation made:
 The kind-level cells are in the matrix of section 4 (Brand row). A category overrides its kind in `rules.json` (`overrides.brand`):
 perfumes and fragrances are `required` (kind BEA is brand or reason); hair accessories, wigs, bedding, decor and candles, pet
 grooming, handmade products, school and office supplies, sports goods and gift baskets are `optional` (kind HOM is brand or reason,
-kind GFT is required); fabrics (provisional) are optional. `BrandRulesPerCategoryTest` and the seller center test
+kind GFT is required); toys and games are brand or reason (kind KID is required; owner decision 18 Nov 2026: toys are relaxed, because handmade and local toys are common; every toy safety gate stays, see D23); fabrics (provisional) are optional. `BrandRulesPerCategoryTest` and the seller center test
 `product form: the brand rule is decided per category` write the decision of every category out, so a change to the source cannot
 slip through.
 
 | Brand | Categories (count) | Why |
 |---|---|---|
-| Required, no way out (15) | Baby food & formula, Baby bottles, Dietary supplements, OTC medicines, Medical devices, First aid & wound care, Medicated skincare, Car seats, Toys & games, Perfumes & fragrances, Computers & laptops, Gaming, Phones, TVs & audio, Gift cards | Safety or recall traceability (the brand is the responsible manufacturer, and the safety certificate or FDA listing is filed against it), or counterfeit risk (electronics, fragrance), or the brand is the product (gift cards). If the brand is not in the list the seller adds it. |
-| Brand or reason, `R*` (12) | Adult clothing & footwear, Children's clothing, Bags & purses, Jewelry & accessories, Skincare & cosmetics, Haircare, Feminine hygiene, Personal hygiene, Cleaning & paper products, Furniture & small appliances, Kitchenware & cookware, Diapers & wipes | Branded goods that are also made by a tailor, a maker or a small producer. "No brand" or "Handmade" is accepted with no further reason. Hygiene, cleaning and appliance categories keep the question because shoppers and recalls depend on it. |
+| Required, no way out (14) | Baby food & formula, Baby bottles, Dietary supplements, OTC medicines, Medical devices, First aid & wound care, Medicated skincare, Car seats, Perfumes & fragrances, Computers & laptops, Gaming, Phones, TVs & audio, Gift cards | Safety or recall traceability (the brand is the responsible manufacturer, and the safety certificate or FDA listing is filed against it), or counterfeit risk (electronics, fragrance), or the brand is the product (gift cards). If the brand is not in the list the seller adds it. |
+| Brand or reason, `R*` (13) | Adult clothing & footwear, Children's clothing, Toys & games, Bags & purses, Jewelry & accessories, Skincare & cosmetics, Haircare, Feminine hygiene, Personal hygiene, Cleaning & paper products, Furniture & small appliances, Kitchenware & cookware, Diapers & wipes | Branded goods that are also made by a tailor, a maker or a small producer. "No brand" or "Handmade" is accepted with no further reason. Hygiene, cleaning and appliance categories keep the question because shoppers and recalls depend on it. |
 | Optional (34) | All 15 groceries and food categories (pantry, candy, oils, flours, nuts, snacks, pasta, rice, spices, dairy, produce, frozen meals, meat and fish), all 6 beverage categories, Pet food, Hair accessories, Wigs, Bedding, Decor & candles, Pet grooming, Handmade, School & office supplies, Sports goods, Gift baskets, all 5 digital product categories | Loose, local, store-brand, bulk, handmade and digital goods are normal. The seller may leave it empty or choose "No brand" (listed first). A brand, when given, still feeds search facets and the registry. Pet food keeps its label photo and species rules. |
 | Hidden (12) | Bakery products, Prepared meals, Printed books, Magazines and the 8 service categories (Event tickets, Fitness classes, Hair & beauty appointments, Laundry & dry cleaning, Photography & media, Repairs, Residential cleaning, Tutoring & consulting) | The seller is the maker (food service) or there is no goods brand (services, events, tickets). Books and magazines ask for author and publisher through the product type. |
 

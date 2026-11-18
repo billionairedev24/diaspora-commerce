@@ -43,12 +43,12 @@ class BrandRulesPerCategoryTest {
         // Regulated or safety-critical: the brand is the responsible manufacturer and must be named.
         for (String c : List.of("baby-food-formula", "baby-bottles", "perfumes-fragrances", "dietary-supplements",
                 "medicated-skincare", "medical-devices", "otc-medicines", "first-aid-wound-care", "computers-laptops",
-                "gaming", "phones", "tvs-audio-accessories", "toys-games", "car-seats", "gift-cards")) {
+                "gaming", "phones", "tvs-audio-accessories", "car-seats", "gift-cards")) {
             m.put(c, R);
         }
         // Branded goods that are also made by hand or by a tailor: a brand, or "No brand" or "Handmade".
         for (String c : List.of("haircare", "skincare-cosmetics", "feminine-hygiene", "personal-hygiene",
-                "adult-clothing-footwear", "bags-purses", "childrens-clothing", "jewelry-accessories",
+                "adult-clothing-footwear", "bags-purses", "childrens-clothing", "toys-games", "jewelry-accessories",
                 "cleaning-paper-products", "furniture-small-appliances", "kitchenware-cookware", "diapers-wipes")) {
             m.put(c, RE);
         }
@@ -97,7 +97,7 @@ class BrandRulesPerCategoryTest {
     @Test
     void aRequiredBrandMustBeNamedSoNoBrandIsNotOffered() {
         for (String code : List.of("phones", "baby-food-formula", "perfumes-fragrances", "dietary-supplements",
-                "toys-games")) {
+                "car-seats")) {
             AttributeDefinition brand = brandOf(code);
 
             assertThat(brand.required()).as(code).isTrue();
