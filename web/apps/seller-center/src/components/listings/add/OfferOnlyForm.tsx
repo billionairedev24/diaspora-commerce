@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRef, useState } from 'react';
 
+import { FulfilmentTip } from '@/components/ui/FulfilmentTip';
 import { Notice } from '@/components/ui/Notice';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { problemMessage } from '@/components/ui/States';
@@ -17,7 +18,7 @@ import { useSeller } from '@/lib/session';
 import { asksCondition, conditionsAllowed, emptyOffer, OFFER_FIELD, type OfferForm, offerProblemKey, offerProblems, optionsText, serverOfferField, toOfferInput } from './match-model';
 import { type ReportKind,ReportPanel } from './ReportForms';
 
-const FULFILMENTS = ['SELLER', 'AFROTRANSACT', 'AFROTRANSACT_DELIVERY'] as const;
+const FULFILMENTS = ['SELLER', 'AFROTRANSACT_DELIVERY'] as const;
 const HANDLING_DAYS = [1, 2, 3, 4, 5, 7, 10, 14, 21, 30];
 
 interface Props {
@@ -151,11 +152,11 @@ export function OfferOnlyForm({ match, atin, onBack, onAnother }: Props) {
             <legend className="mb-1 p-0 text-sm font-semibold">{t('sc.match.offer.fulfilment')}</legend>
             {FULFILMENTS.map((c) => (
               <div key={c} className="flex items-start gap-2 text-sm">
-                <input type="radio" id={`of-fulfilment-${c}`} name="of-fulfilment" className="mt-1 shrink-0" value={c} checked={f.fulfilment === c} aria-describedby={`of-fulfilment-${c}-hint`}
+                <input type="radio" id={`of-fulfilment-${c}`} name="of-fulfilment" className="mt-1 shrink-0" value={c} checked={f.fulfilment === c}
                   onChange={() => patch({ fulfilment: c })} />
-                <span>
+                <span className="flex items-center">
                   <label htmlFor={`of-fulfilment-${c}`} className="cursor-pointer font-semibold">{t(`sc.ff.choice.${c}` as MessageKey)}</label>
-                  <span id={`of-fulfilment-${c}-hint`} className="block text-xs text-muted">{t(`sc.ff.choice.${c}.hint` as MessageKey)}</span>
+                  <FulfilmentTip mode={c === 'SELLER' ? 'pickup' : 'fba'} />
                 </span>
               </div>
             ))}
@@ -164,10 +165,6 @@ export function OfferOnlyForm({ match, atin, onBack, onAnother }: Props) {
           <div className="grid gap-4 sm:grid-cols-2">
             {f.fulfilment === 'SELLER' ? (
               <TextField id={OFFER_FIELD.qty} label={t('sc.pf.field.qty')} inputMode="numeric" value={f.qty} error={shown(OFFER_FIELD.qty)} onChange={(e) => patch({ qty: e.target.value })} />
-            ) : null}
-            {f.fulfilment !== 'AFROTRANSACT' ? (
-              <TextField id={OFFER_FIELD.shipping} label={t('sc.match.offer.shipping')} help={t('sc.match.offer.shippingHelp')} inputMode="decimal" value={f.shipping} error={shown(OFFER_FIELD.shipping)}
-                onChange={(e) => patch({ shipping: e.target.value })} />
             ) : null}
             {f.fulfilment === 'SELLER' ? (
               <Select id={OFFER_FIELD.handling} label={t('sc.pf.field.handling')} help={t('sc.pf.handlingHelp')} value={f.handling} error={shown(OFFER_FIELD.handling)}

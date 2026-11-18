@@ -48,10 +48,10 @@ function afroNoteKey(status: string, mode: string): { title: MessageKey; help: M
 }
 
 interface Props {
-  shipment: Pick<SellerShipment, 'status' | 'nextActions' | 'trackingNumber' | 'canBuyLabel' | 'fulfilment' | 'fulfilmentMode'>;
+  shipment: Pick<SellerShipment, 'status' | 'nextActions' | 'trackingNumber' | 'canBuyLabel' | 'fulfilment' | 'fulfilmentMode'> & Partial<Pick<SellerShipment, 'needsShipDetails'>>;
   editable: boolean;
   loading: boolean;
-  onMove: (to: SellerStatusAction, handoverCode?: string) => void;
+  onMove: (to: SellerStatusAction, handoverCode?: string, ship?: { shipNote?: string }) => void;
 }
 
 /**
@@ -65,6 +65,9 @@ export function ShipmentProgress({ shipment, editable, loading, onMove }: Props)
   const next = editable ? shipment.nextActions[0] : undefined;
   const needsLabel = next === 'PICKED_UP' && !shipment.trackingNumber;
   const [code, setCode] = useState('');
+  const [shipNote, setShipNote] = useState('');
+  // Only while sellers may ship themselves (a staff switch, off by default): say how it left, there is no label to buy.
+  const needsDetails = next === 'PICKED_UP' && shipment.needsShipDetails === true;
   // Only a pickup order waiting at the shop is handed over against the buyer's code; a shipped parcel is just confirmed.
   const needsCode = next === 'DELIVERED' && shipment.status === 'READY';
   const hint =
@@ -108,15 +111,20 @@ export function ShipmentProgress({ shipment, editable, loading, onMove }: Props)
               <TextField label={t('sc.ship.code')} inputMode="numeric" maxLength={4} autoComplete="off" value={code} onChange={(e) => setCode(e.currentTarget.value.replace(/\D/g, ''))} />
             </div>
           ) : null}
+          {needsDetails ? (
+            <div className="w-full max-w-sm" data-testid="ship-details">
+              <TextField label={t('sc.selfShip.shipDetails')} maxLength={500} value={shipNote} onChange={(e) => setShipNote(e.currentTarget.value)} />
+            </div>
+          ) : null}
           <Button
             size="sm"
             loading={loading}
-            disabled={needsLabel || (needsCode && !codeOk)}
-            onClick={() => onMove(next, needsCode ? code : undefined)}
+            disabled={(needsLabel && !needsDetails) || (needsCode && !codeOk) || (needsDetails && shipNote.trim() === '')}
+            onClick={() => onMove(next, needsCode ? code : undefined, needsDetails ? { shipNote: shipNote.trim() } : undefined)}
           >
             {doLabel}
           </Button>
-          <span className="text-xs text-muted">{needsLabel ? t('sc.ship.needLabel') : needsCode && !codeOk ? t('sc.ship.needCode') : hint}</span>
+          <span className="text-xs text-muted">{needsLabel && !needsDetails ? t('sc.ship.needLabel') : needsCode && !codeOk ? t('sc.ship.needCode') : hint}</span>
         </div>
       ) : null}
     </div>
