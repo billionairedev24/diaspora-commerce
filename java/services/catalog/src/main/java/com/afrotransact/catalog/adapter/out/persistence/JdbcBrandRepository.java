@@ -3,6 +3,7 @@ package com.afrotransact.catalog.adapter.out.persistence;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -127,6 +128,44 @@ class JdbcBrandRepository implements BrandRepository {
     public long countPendingOf(String orgId) {
         return jdbc.sql("select count(*) from brand where status = 'PENDING' and created_by_org = :org")
                 .param("org", orgId).query(Long.class).single();
+    }
+
+    @Override
+    public long countCreatedSince(String orgId, Instant since) {
+        return jdbc.sql("select count(*) from brand where created_by_org = :org and created_at >= :since")
+                .param("org", orgId).param("since", Timestamp.from(since)).query(Long.class).single();
+    }
+
+    @Override
+    public void recordSimilar(UUID brandId, Collection<UUID> similarIds) {
+        for (UUID other : similarIds) {
+            jdbc.sql("insert into brand_similar (brand_id, similar_id) values (:brand, :other) on conflict do nothing")
+                    .param("brand", brandId).param("other", other).update();
+        }
+    }
+
+    @Override
+    public Map<UUID, List<UUID>> similarOf(Collection<UUID> brandIds) {
+        Map<UUID, List<UUID>> out = new LinkedHashMap<>();
+        if (brandIds.isEmpty()) {
+            return out;
+        }
+        jdbc.sql("select brand_id, similar_id from brand_similar where brand_id in (:ids) order by similar_id")
+                .param("ids", brandIds).query((rs, i) -> {
+                    out.computeIfAbsent(rs.getObject("brand_id", UUID.class), k -> new ArrayList<>())
+                            .add(rs.getObject("similar_id", UUID.class));
+                    return 0;
+                }).list();
+        return out;
+    }
+
+    @Override
+    public List<Brand> findLiveWithKeyLength(int minLength, int maxLength) {
+        return withScopes(jdbc.sql("select " + COLUMNS + """
+                 from brand b where b.status in ('APPROVED', 'PENDING')
+                  and char_length(b.normalized_name) between :min and :max
+                order by (b.status = 'APPROVED') desc, b.name
+                """).param("min", minLength).param("max", maxLength).query(JdbcBrandRepository::mapBrand).list());
     }
 
     @Override

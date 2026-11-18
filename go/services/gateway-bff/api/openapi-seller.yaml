@@ -2690,7 +2690,11 @@ paths:
       description: >-
         catalog `POST /v1/brands`. Returns the existing brand with `created` false when the registry already has this
         name in the category (case, accents and punctuation ignored); otherwise creates a PENDING brand scoped to the
-        category's department, visible only to this organisation until staff approve it.
+        category's department, visible only to this organisation until staff approve it. The proposal is audited and appears
+        in the staff review queue (approve, merge into an existing brand, or reject); the seller is never held up by it.
+        422 with `fieldErrors` on `attributes.brand` when the name is not allowed (a web address, an e-mail address,
+        profanity, odd characters, no letters) or a limit is reached (new brands per organisation per day, brands awaiting
+        review). A name that matches an existing brand is never refused by a limit.
       requestBody:
         required: true
         content:
@@ -2705,6 +2709,30 @@ paths:
       responses:
         '200': {description: The brand already existed, content: {application/json: {schema: {$ref: '#/components/schemas/CreatedBrand'}}}}
         '201': {description: A pending brand was created, content: {application/json: {schema: {$ref: '#/components/schemas/CreatedBrand'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/catalog/brands/similar:
+    get:
+      tags: [Listings]
+      operationId: suggestBrands
+      security: [{sessionCookie: []}]
+      summary: 'Did you mean: the brand a typed name is, or close names'
+      description: >-
+        catalog `GET /v1/brands/similar`. For the brand combobox while the seller types a name that is not listed.
+        `exact` is the brand the name already is in this category (case, accents and punctuation ignored), `similar`
+        lists up to three close names (one or two typing mistakes, or the same name with a few letters more). Only
+        approved brands and the organisation's own pending ones are considered, never another seller's. 422 when the name
+        could not be added (a web address, an e-mail address, profanity, odd characters) or when neither `category` nor
+        `productType` is sent.
+      parameters:
+        - {name: name, in: query, required: true, schema: {type: string, minLength: 2, maxLength: 120}}
+        - {name: category, in: query, schema: {type: string, maxLength: 120}, description: 'Category node id or code'}
+        - {name: productType, in: query, schema: {type: string, maxLength: 40}}
+      responses:
+        '200': {description: The exact match and the close names, content: {application/json: {schema: {$ref: '#/components/schemas/BrandSuggestions'}}}}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
@@ -6449,6 +6477,17 @@ components:
       properties:
         brand: {$ref: '#/components/schemas/Brand'}
         created: {type: boolean, description: 'False when the brand already existed and is returned as the match'}
+    BrandSuggestions:
+      type: object
+      required: [exact, similar]
+      properties:
+        exact:
+          oneOf: [{$ref: '#/components/schemas/Brand'}, {type: 'null'}]
+          description: 'The brand the typed name already is in this category, or null'
+        similar:
+          type: array
+          items: {$ref: '#/components/schemas/Brand'}
+          description: 'Close names the seller probably meant, at most three; empty when there is an exact match'
     ProductImportRowPage:
       type: object
       required: [items, total, page, size]

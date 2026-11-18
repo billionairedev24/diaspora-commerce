@@ -1,7 +1,9 @@
 package com.afrotransact.catalog.port;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -33,6 +35,21 @@ public interface BrandRepository {
     void lockKey(String normalisedName);
 
     long countPendingOf(String orgId);
+
+    /** Remembers the close names a seller-proposed brand was typed next to (for the review queue). */
+    void recordSimilar(UUID brandId, Collection<UUID> similarIds);
+
+    /** The close brands recorded for each of the brands (only those that still exist), by brand id. */
+    Map<UUID, List<UUID>> similarOf(Collection<UUID> brandIds);
+
+    /** Brands this organisation typed in since the instant, whatever became of them (the daily cap). */
+    long countCreatedSince(String orgId, Instant since);
+
+    /**
+     * Approved and pending brands whose comparison key is between the lengths: the candidates for a "did you mean" check.
+     * The caller filters by who may see them.
+     */
+    List<Brand> findLiveWithKeyLength(int minLength, int maxLength);
 
     /**
      * Brands for the product form: approved brands whose scope covers one of {@code nodeIds}, and the organisation's

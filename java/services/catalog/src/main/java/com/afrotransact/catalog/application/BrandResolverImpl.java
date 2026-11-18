@@ -1,10 +1,13 @@
 package com.afrotransact.catalog.application;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -17,10 +20,16 @@ import com.afrotransact.catalog.domain.ProductType;
 import com.afrotransact.catalog.domain.brand.Brand;
 import com.afrotransact.catalog.domain.brand.BrandKeys;
 import com.afrotransact.catalog.domain.brand.BrandNames;
+import com.afrotransact.catalog.domain.brand.BrandProposalRules;
+import com.afrotransact.catalog.domain.brand.BrandSimilarity;
 import com.afrotransact.catalog.domain.brand.BrandStatus;
 import com.afrotransact.catalog.domain.brand.UnbrandedReason;
+import com.afrotransact.catalog.domain.taxonomy.AuditSubject;
+import com.afrotransact.catalog.domain.taxonomy.TaxonomyAuditEntry;
 import com.afrotransact.catalog.port.BrandRepository;
 import com.afrotransact.catalog.port.CategoryRepository;
+import com.afrotransact.catalog.port.TaxonomyAuditRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -30,14 +39,23 @@ class BrandResolverImpl implements BrandResolver {
     static final int MAX_PENDING_PER_ORG = 100;
     private static final String FIELD = "attributes.brand";
 
+    /** Keys within this many letters of the typed one are looked at for "did you mean". */
+    private static final int SIMILAR_WINDOW = 6;
+    private static final int MAX_SIMILAR = 3;
+
     private final BrandRepository brands;
     private final CategoryRepository categories;
+    private final TaxonomyAuditRepository audit;
     private final Clock clock;
+    private final int maxNewPerDay;
 
-    BrandResolverImpl(BrandRepository brands, CategoryRepository categories, Clock clock) {
+    BrandResolverImpl(BrandRepository brands, CategoryRepository categories, TaxonomyAuditRepository audit, Clock clock,
+                      @Value("${at.catalog.brands.max-new-per-org-per-day:10}") int maxNewPerDay) {
         this.brands = brands;
         this.categories = categories;
+        this.audit = audit;
         this.clock = clock;
+        this.maxNewPerDay = maxNewPerDay;
     }
 
     @Override
@@ -65,7 +83,7 @@ class BrandResolverImpl implements BrandResolver {
         } else if (name != null) {
             String clean = BrandNames.clean(name, FIELD);
             if (node == null) {
-                out.put(BrandKeys.NAME, clean);
+                out.put(BrandKeys.NAME, BrandProposalRules.check(clean));
             } else {
                 BrandScopes scopes = new BrandScopes(categories.findAll());
                 Matched match = matchOrCreate(owner.orgId(), scopes.covering(node),
@@ -78,7 +96,7 @@ class BrandResolverImpl implements BrandResolver {
                     () -> new CatalogRuleViolation("Unknown reason for having no brand", Map.of(FIELD, "Unknown")));
             if (!def.get().unbrandedReasons().contains(r)) {
                 throw new CatalogRuleViolation(def.get().label() + " cannot be left out for this category",
-                        Map.of(FIELD, "Name the brand; this category does not allow items without one"));
+                        Map.of(FIELD, "This category needs a brand. If it is not listed, type it and add it as a new brand"));
             }
             out.put(BrandKeys.REASON, r.name());
         }
@@ -95,12 +113,42 @@ class BrandResolverImpl implements BrandResolver {
                 return new Matched(b, false);
             }
         }
+        String proposed = BrandProposalRules.check(clean);
+        Instant now = Instant.now(clock);
+        if (brands.countCreatedSince(orgId, now.minus(Duration.ofDays(1))) >= maxNewPerDay) {
+            throw new CatalogRuleViolation("You have added the most new brands allowed for today",
+                    Map.of(FIELD, "You can add " + maxNewPerDay + " new brands a day. Choose an existing brand or try "
+                            + "again tomorrow"));
+        }
         if (brands.countPendingOf(orgId) >= MAX_PENDING_PER_ORG) {
             throw new CatalogRuleViolation("Too many brands are waiting for review",
                     Map.of(FIELD, "You have " + MAX_PENDING_PER_ORG + " brands awaiting review; use an existing brand"));
         }
-        Brand created = brands.insert(Brand.create(clean, BrandStatus.PENDING, orgId, departments, Instant.now(clock)));
+        Brand created = brands.insert(Brand.create(proposed, BrandStatus.PENDING, orgId, departments, now));
+        List<Brand> close = similar(orgId, covering, key);
+        brands.recordSimilar(created.id(), close.stream().map(Brand::id).toList());
+        List<String> similar = close.stream().map(Brand::name).toList();
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("key", key);
+        details.put("similar", similar);
+        audit.append(new TaxonomyAuditEntry(UUID.randomUUID(), now, "org:" + orgId, "BRAND_PROPOSED", AuditSubject.BRAND,
+                created.id().toString(), created.name(), "Typed in by a seller while listing", details));
         return new Matched(created, true);
+    }
+
+    @Override
+    public List<Brand> similar(String orgId, Set<UUID> covering, String key) {
+        if (key.length() < 4) {
+            return List.of();
+        }
+        List<Brand> near = new ArrayList<>();
+        for (Brand b : brands.findLiveWithKeyLength(Math.max(1, key.length() - SIMILAR_WINDOW),
+                key.length() + SIMILAR_WINDOW)) {
+            if (b.offeredTo(orgId) && covers(b, covering) && BrandSimilarity.near(key, b.normalisedName())) {
+                near.add(b);
+            }
+        }
+        return near.stream().limit(MAX_SIMILAR).toList();
     }
 
     private Brand chosen(ListingOwner owner, CategoryNode node, String id, String currentId) {

@@ -191,7 +191,7 @@ Kinds: `PKG` Packaged food and drink, `PER` Perishable food, `SFD` Food service 
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | **Identity** | | | | | | | | | | | | | | | | |
 | Title | R | R | R | R | R | R | R | R | R | R | R | R | R | R | R | R |
-| Brand | R | R | - | R | R | R | R | R | R | R | R | R | - | R | R | - |
+| Brand | o | o | - | R | R* | R | R* | R* | R | R* | R | o | - | o | R | - |
 | Product ID (barcode or ISBN) | R* | o | - | R* | R* | R | R* | R* | R | R* | R* | R* | R | - | - | - |
 | **Content** | | | | | | | | | | | | | | | | |
 | Description | R | R | R | R | R | R | R | R | R | R | R | R | R | R | R | R |

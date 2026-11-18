@@ -7708,6 +7708,7 @@ components:
         products: {type: integer, format: int64, description: 'Listings that hold the brand'}
         sellers: {type: integer, format: int64, description: 'Distinct sellers behind them'}
         scope: {type: array, items: {$ref: '#/components/schemas/StaffBrandScope'}}
+        similarNames: {type: array, items: {type: string}, description: 'For a pending brand a seller typed in: close names it may duplicate (possible duplicate of ...); empty otherwise'}
     StaffBrandList:
       type: object
       required: [brands, total, counts, canEdit]

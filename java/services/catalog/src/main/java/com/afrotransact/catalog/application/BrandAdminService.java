@@ -52,8 +52,9 @@ public interface BrandAdminService {
     /**
      * @param mergedIntoName the brand it was merged into, for display
      * @param scope          where it applies, as taxonomy paths
+     * @param similarNames   close names a seller-proposed brand was typed next to ("possible duplicate of"), by name
      */
-    record BrandView(BrandUsage usage, String mergedIntoName, List<ScopeNode> scope) {
+    record BrandView(BrandUsage usage, String mergedIntoName, List<ScopeNode> scope, List<String> similarNames) {
     }
 
     record ScopeNode(UUID nodeId, String path, String level) {

@@ -7,6 +7,7 @@ import com.afrotransact.catalog.application.BrandCatalogService;
 import com.afrotransact.catalog.application.BrandCatalogService.BrandChoice;
 import com.afrotransact.catalog.application.BrandCatalogService.BrandChoices;
 import com.afrotransact.catalog.application.BrandCatalogService.BrandCreated;
+import com.afrotransact.catalog.application.BrandCatalogService.BrandSuggestions;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -50,6 +51,16 @@ class BrandController {
         }
     }
 
+    @Schema(name = "BrandSuggestions", description = "What typing a name would do: the brand it already is (exact), or the "
+            + "close names the seller probably meant (similar, at most three). Never another seller's pending brand.")
+    record BrandSuggestionsDto(BrandDto exact, List<BrandDto> similar) {
+
+        static BrandSuggestionsDto of(BrandSuggestions s) {
+            return new BrandSuggestionsDto(s.exact() == null ? null : BrandDto.of(s.exact()),
+                    s.similar().stream().map(BrandDto::of).toList());
+        }
+    }
+
     @Schema(name = "CreateBrandRequest")
     record CreateBrandBody(@NotBlank @Size(max = 120) String name, @Size(max = 40) String productType,
                            @Size(max = 120) String category) {
@@ -74,6 +85,18 @@ class BrandController {
                      @RequestParam(required = false) @Size(max = 80) String q,
                      @RequestParam(defaultValue = "20") int limit) {
         return BrandList.of(brands.choices(productType, category, q, limit));
+    }
+
+    @Operation(operationId = "suggestBrands", summary = "Did you mean: the brand a typed name is, or close names",
+            description = "For the brand combobox while the seller types a name that is not listed. exact is the brand "
+                    + "the name already is in this category (case, accents and punctuation ignored); similar lists close "
+                    + "names (one or two typing mistakes, or the same name with a few letters more). 422 with fieldErrors "
+                    + "when the name could not be added (a web address, an e-mail address, profanity, odd characters).")
+    @GetMapping("/v1/brands/similar")
+    BrandSuggestionsDto similar(@RequestParam @NotBlank @Size(max = 120) String name,
+                                @RequestParam(required = false) @Size(max = 40) String productType,
+                                @RequestParam(required = false) @Size(max = 120) String category) {
+        return BrandSuggestionsDto.of(brands.suggest(name, productType, category));
     }
 
     @Operation(operationId = "createBrand", summary = "Add a brand the seller typed (pending staff review)",

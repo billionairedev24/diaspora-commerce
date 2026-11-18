@@ -76,6 +76,20 @@ func (u *Upstreams) libraryRoutes(mux *http.ServeMux) {
 			{"id": "b-nike", "name": "Nike", "source": "CATALOG", "status": "APPROVED", "ownProducts": 0, "products": 12},
 			{"id": "b-mama", "name": "Mama Tee", "source": "OWN", "status": "PENDING", "ownProducts": 4, "products": 4}}})
 	})
+	mux.HandleFunc("GET /v1/brands/similar", func(w http.ResponseWriter, r *http.Request) {
+		name := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("name")))
+		nike := map[string]any{"id": "b-nike", "name": "Nike", "source": "CATALOG", "status": "APPROVED", "ownProducts": 0, "products": 12}
+		switch {
+		case strings.Contains(name, "@"):
+			problem(w, 422, "catalog.rule-violation", "Brand names cannot contain an e-mail address", map[string]any{"attributes.brand": "No e-mail addresses"})
+		case name == "nike":
+			writeJSON(w, 200, map[string]any{"exact": nike, "similar": []map[string]any{}})
+		case name == "nikee":
+			writeJSON(w, 200, map[string]any{"exact": nil, "similar": []map[string]any{nike}})
+		default:
+			writeJSON(w, 200, map[string]any{"exact": nil, "similar": []map[string]any{}})
+		}
+	})
 	mux.HandleFunc("POST /v1/brands", func(w http.ResponseWriter, r *http.Request) {
 		var b struct{ Name string }
 		_ = json.NewDecoder(r.Body).Decode(&b)

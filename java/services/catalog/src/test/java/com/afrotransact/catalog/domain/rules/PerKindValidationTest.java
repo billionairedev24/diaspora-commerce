@@ -43,10 +43,10 @@ class PerKindValidationTest {
     /** kind, a category of that kind, the keys an otherwise valid but empty listing is refused for. */
     static List<Arguments> kinds() {
         return List.of(
-                Arguments.of("PKG", "beans-pantry-sauces", Set.of("description", "attributes.brand",
+                Arguments.of("PKG", "beans-pantry-sauces", Set.of("description",
                         "attributes.net_weight", "attributes.servings", "attributes.shelf",
                         "variants[0].gtin", "variants[0].packaging")),
-                Arguments.of("PER", "dairy-eggs", Set.of("description", "attributes.brand",
+                Arguments.of("PER", "dairy-eggs", Set.of("description",
                         "attributes.net_weight", "attributes.shelf", "attributes.storage",
                         "variants[0].packaging")),
                 Arguments.of("SFD", "prepared-meals", Set.of("description", "attributes.net_weight",
@@ -73,12 +73,12 @@ class PerKindValidationTest {
                         "variants[0].packaging")),
                 Arguments.of("KID", "toys-games", Set.of("description", "dangerousGoods", "attributes.brand",
                         "attributes.age_grade", "variants[0].gtin", "variants[0].packaging")),
-                Arguments.of("PET", "pet-food", Set.of("description", "labelPhoto", "attributes.brand",
+                Arguments.of("PET", "pet-food", Set.of("description", "labelPhoto",
                         "attributes.net_weight", "attributes.shelf", "variants[0].gtin",
                         "variants[0].packaging")),
                 Arguments.of("BOK", "printed-books", Set.of("description", "variants[0].gtin",
                         "variants[0].packaging")),
-                Arguments.of("DIG", "downloadable-ebooks", Set.of("description", "attributes.brand")),
+                Arguments.of("DIG", "downloadable-ebooks", Set.of("description")),
                 Arguments.of("GFT", "gift-cards", Set.of("description", "attributes.brand")),
                 Arguments.of("SRV", "repairs", Set.of("description")));
     }

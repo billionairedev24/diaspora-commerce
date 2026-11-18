@@ -69,10 +69,11 @@ public final class RuleAwareType {
     private static AttributeDefinition brandDefinition(FieldRule rule, AttributeDefinition legacy) {
         String help = legacy != null && legacy.help() != null ? legacy.help() : rule.note();
         String label = legacy != null ? legacy.label() : "Brand";
-        // A category that already refuses "no brand" (regulated goods such as beauty) keeps refusing it.
-        List<String> reasons = legacy != null && legacy.kind() == AttributeKind.BRAND ? legacy.options()
+        // The matrix decides whether "no brand" is a way out: a required brand must be named (add it when it is not
+        // listed); a brand-or-reason or optional brand also offers "No brand" and "Handmade".
+        List<String> reasons = rule.status() == FieldStatus.REQUIRED ? List.of()
                 : List.of(UnbrandedReason.UNBRANDED.name(), UnbrandedReason.HANDMADE.name());
-        return new AttributeDefinition("brand", label, reasons, rule.status() == FieldStatus.REQUIRED, false, AttributeKind.BRAND,
+        return new AttributeDefinition("brand", label, reasons, rule.status().expectsAnswer(), false, AttributeKind.BRAND,
                 List.of(), AttributeSection.DETAILS, help);
     }
 

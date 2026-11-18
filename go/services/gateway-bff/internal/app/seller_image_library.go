@@ -214,6 +214,29 @@ func (s *sellerImportImpl) CreateBrand(ctx context.Context, c *domain.Caller, na
 	return out, nil
 }
 
+func (s *sellerImportImpl) SuggestBrands(ctx context.Context, c *domain.Caller, name string, q domain.BrandQuery) (domain.BrandSuggestions, error) {
+	name = strings.Join(strings.Fields(name), " ")
+	if n := utf8.RuneCountInString(name); n < 2 || n > 120 {
+		return domain.BrandSuggestions{}, domain.ValidationProblem(map[string]string{"name": "2 to 120 characters"})
+	}
+	q, err := cleanBrandQuery(q)
+	if err != nil {
+		return domain.BrandSuggestions{}, err
+	}
+	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelView); err != nil {
+		return domain.BrandSuggestions{}, err
+	}
+	cl, err := s.client()
+	if err != nil {
+		return domain.BrandSuggestions{}, err
+	}
+	out, err := cl.SuggestBrands(ctx, c.BearerToken, name, q)
+	if err != nil {
+		return domain.BrandSuggestions{}, mapErr("catalog", err)
+	}
+	return out, nil
+}
+
 // cleanBrandQuery checks what the form sent: a category or a product type is required, so a brand is never offered
 // without knowing where it is for.
 func cleanBrandQuery(q domain.BrandQuery) (domain.BrandQuery, error) {
