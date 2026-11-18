@@ -25,6 +25,7 @@ type Shipment = OrderDetail['shipments'][number];
  */
 function modeKey(s: Shipment): MessageKey {
   switch (s.fulfilmentMode) {
+    case 'seller_ships':
     case 'legacy_seller_shipped':
       return 'ord.mode.legacy_seller_shipped';
     case 'afrotransact_delivery':

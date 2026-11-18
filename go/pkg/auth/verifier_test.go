@@ -87,3 +87,29 @@ func TestVerifierRefetchesWhenTheKeyChangesUnderTheSameKeyID(t *testing.T) {
 		t.Fatalf("bad signatures within the window must not refetch, fetches = %d", ks.fetches)
 	}
 }
+
+// Spring Authorization Server writes scope as a JSON array; the OAuth form is one space-separated string. Both verify and
+// both become permissions (a token with an array scope was rejected as malformed, 401 on every signed-in BFF call).
+func TestVerifierAcceptsScopeAsStringOrArray(t *testing.T) {
+	ks := &keyServer{}
+	key := ks.swap(t)
+	srv := httptest.NewServer(ks)
+	defer srv.Close()
+	v := NewJWKSVerifier(srv.URL, "", srv.Client())
+	for name, scope := range map[string]any{"array": []string{"cart:write", "orders:read"}, "string": "cart:write orders:read"} {
+		tok := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{"iss": srv.URL, "sub": "user-1", "scope": scope,
+			"exp": time.Now().Add(time.Minute).Unix()})
+		tok.Header["kid"] = "identity-1"
+		raw, err := tok.SignedString(key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		a, err := v.Verify(context.Background(), raw)
+		if err != nil {
+			t.Fatalf("%s scope: %v", name, err)
+		}
+		if !a.Can("cart:write") || !a.Can("orders:read") {
+			t.Fatalf("%s scope: permissions %v", name, a.Permissions)
+		}
+	}
+}

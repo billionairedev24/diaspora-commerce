@@ -66,7 +66,8 @@ type claims struct {
 	Org           string   `json:"org"`
 	Roles         []string `json:"roles"`
 	Perms         []string `json:"perms"`
-	Scope         string   `json:"scope"`
+	// Spring Authorization Server writes scope as a JSON array; the OAuth form is one space-separated string. Both are accepted.
+	Scope jwt.ClaimStrings `json:"scope"`
 }
 
 func (v *jwksVerifier) Verify(ctx context.Context, raw string) (Actor, error) {
@@ -95,8 +96,8 @@ func (v *jwksVerifier) Verify(ctx context.Context, raw string) (Actor, error) {
 		return Actor{}, fmt.Errorf("%w: %w", ErrUnauthenticated, err)
 	}
 	perms := append([]string{}, c.Perms...)
-	if c.Scope != "" {
-		perms = append(perms, strings.Fields(c.Scope)...)
+	for _, sc := range c.Scope {
+		perms = append(perms, strings.Fields(sc)...)
 	}
 	pt := c.PrincipalType
 	if pt == "" {

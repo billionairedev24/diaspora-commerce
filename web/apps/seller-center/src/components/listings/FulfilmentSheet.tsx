@@ -14,7 +14,7 @@ import { sellerApi } from '@/lib/api';
 import { money } from '@/lib/format';
 import { useSeller } from '@/lib/session';
 
-const CHOICES: FulfilmentKind[] = ['SELLER', 'AFROTRANSACT_DELIVERY'];
+const CHOICES = ['SELLER', 'AFROTRANSACT_DELIVERY'] as const satisfies readonly FulfilmentKind[];
 
 /** One price and stock line: Pick up, or Fulfilled by AfroTransact (FBA, from one of your pickup locations). Each is explained in a tooltip. */
 function OfferFulfilment({ offer, locations, editable }: { offer: SellerOffer; locations: { id: string; label: string }[]; editable: boolean }) {
