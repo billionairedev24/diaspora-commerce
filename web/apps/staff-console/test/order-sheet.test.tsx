@@ -86,8 +86,8 @@ describe('Order sheet: shipments', () => {
     const menu = await openMenu(user, patel, 'Patel Grocers');
     const ready = within(menu).getByRole('menuitem', { name: /Ready/ });
     expect(ready).toHaveAttribute('aria-disabled', 'true');
-    expect(ready).toHaveTextContent('Old seller-shipped order: use Override status');
-    expect(within(menu).getByRole('menuitem', { name: /Delivered/ })).toHaveTextContent('Old seller-shipped order: use Override status');
+    expect(ready).toHaveTextContent('Updated by the seller: use Override status');
+    expect(within(menu).getByRole('menuitem', { name: /Delivered/ })).toHaveTextContent('Updated by the seller: use Override status');
     await user.keyboard('{Escape}');
     expect(within(patel).queryByRole('button', { name: 'Override status' })).toBeNull();
   });

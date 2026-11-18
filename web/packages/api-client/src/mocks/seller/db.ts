@@ -103,6 +103,8 @@ export interface MockSellerDb {
   onboarding: Record<string, MockApplication>;
   /** Saved ship-from addresses per organisation (seller service /v1/orgs/{orgId}/ship-from-addresses). */
   shipFrom: Record<string, ShipFromAddress[]>;
+  /** Seller self-shipping: `available` is the staff switch, off by default (like the platform default); tests turn it on. */
+  selfShipping: { available: boolean; enabled: boolean; chargeMinor: number; version: number };
   /** Delivery run pick lists per organisation (delivery-runs /v1/seller/run-pickups; S264). */
   runPickups: Record<string, SellerRunPickup[]>;
   /** Each organisation's answer to the one-time "let customers collect orders here" card (carrier-gateway /v1/pickup-prompt). */
@@ -212,6 +214,7 @@ function seedOrders(now: Date): SellerOrderDetail[] {
           statusLabel: SHIPMENT_LABELS[status],
           fulfilment: fba ? 'AFROTRANSACT' : local ? 'AFROTRANSACT_DELIVERY' : 'SELLER',
           fulfilmentMode: fba ? 'fulfilled_by_afrotransact' : local ? 'afrotransact_delivery' : 'legacy_seller_shipped',
+          needsShipDetails: false,
           perishable: false,
           lines: [{ title, quantity: qty, unitPriceMinor: price, itemsMinor, variantAtin: `ATADEV${String(i).padStart(4, '0')}`, imageUrl: null }],
           itemsMinor,
@@ -706,6 +709,7 @@ function freshDb(now: Date): MockSellerDb {
     storePage: {},
     runPickups: { [SELLER_ORG]: seedRunPickups(now) },
     pickupPrompt: {},
+    selfShipping: { available: false, enabled: false, chargeMinor: 0, version: 1 },
     shipFrom: {
       [SELLER_ORG]: [
         { id: 'sfa-store', label: 'Warehouse', name: 'Ade Okafor', company: 'Ade’s Kitchen', phone: '+17135550142', line1: '9800 Bissonnet St', line2: 'Unit 4',

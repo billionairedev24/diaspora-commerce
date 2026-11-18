@@ -31,7 +31,7 @@ describe('staff order sheet (mock BFF, same shape as the Go one)', () => {
   it('lists what cannot be done with the reason instead of leaving it out', async () => {
     const sheet = await as('platform.super_admin').getRecord('orders', ORDER);
     const [first, patel] = sheet.shipments as [RecordShipment, RecordShipment];
-    expect(byTo(patel, 'READY')).toMatchObject({ allowed: false, blocked: 'SELLER_UPDATES', reason: 'Old seller-shipped order: use Override status' });
+    expect(byTo(patel, 'READY')).toMatchObject({ allowed: false, blocked: 'SELLER_UPDATES', reason: 'Updated by the seller: use Override status' });
     expect(byTo(first, 'DELIVERED')).toMatchObject({ allowed: false, blocked: 'SEQUENCE', reason: 'Earlier steps come first' });
     expect(byTo(patel, 'DELIVERED')).toMatchObject({ allowed: false, blocked: 'SELLER_UPDATES' });
     expect(byTo(patel, 'DELIVERY_FAILED')).toMatchObject({ allowed: false, blocked: 'SELLER_UPDATES' });

@@ -210,7 +210,7 @@ export function deliveryPromise(from: ShipFrom, metro: string, now: Date, dated 
   return {
     days: window.basis === 'PROMISE' ? window.days : etaDays(from, metro),
     label: window.label,
-    prefix: isAT ? LABEL_DELIVERY : LABEL_STORE_DELIVERY,
+    prefix: LABEL_DELIVERY,
     free: settings.flatFeeMinor === 0,
     feeMinor: settings.flatFeeMinor,
     cutoff: null,
@@ -238,10 +238,12 @@ export function mergeWindows(list: Arrival[]): Arrival {
 
 /** Shopper-facing option labels (launch shipping). No carrier is ever named. */
 export const LABEL_DELIVERY = 'Delivery';
-export const LABEL_STORE_DELIVERY = 'Delivery';
-export const LABEL_PICKUP_POINT = 'Pickup';
-export const LABEL_STORE_PICKUP = 'Pickup';
-export const LABEL_SELLER_SHIPPING = 'Standard shipping from the seller';
+/** The two things a shopper can choose (owner decision), as the BFF words them: AfroTransact collects from the seller and delivers, or the customer picks up. */
+export const LABEL_STORE_DELIVERY = 'Delivered by AfroTransact';
+export const LABEL_PICKUP_POINT = 'Pick up';
+export const LABEL_STORE_PICKUP = 'Pick up';
+/** The seller's own shipping (only while the staff switch is on, off by default). It never says AfroTransact delivers. */
+export const LABEL_SELLER_SHIPPING = 'Shipped by the seller';
 export const LABEL_QUOTE_REQUIRED = 'Too far for standard delivery. Ask us for a quote';
 
 /** Delivery options for one package: plain "Delivery" at the staff flat fee (free pickup is added at checkout), dated only by a real window. */
@@ -251,7 +253,7 @@ export function deliveryOptions(pkg: { from: ShipFrom; sellerName: string; arriv
   const fee = deliveryFee(pkg.subtotalMinor, settings);
   const a = pkg.arrival;
   const dates = a.basis === 'PROMISE' ? { earliestDate: a.earliestDate, latestDate: a.latestDate } : {};
-  const delivery: DeliveryOption = { key: 'afrotransact_delivery', label: isAT ? LABEL_DELIVERY : LABEL_STORE_DELIVERY, eta: a.label, feeMinor: fee, free: fee === 0, ...dates };
+  const delivery: DeliveryOption = { key: 'afrotransact_delivery', label: LABEL_STORE_DELIVERY, eta: a.label, feeMinor: fee, free: fee === 0, ...dates };
   // Sellers do not ship themselves (and the old carrier switch changes nothing): a plain seller package has no delivery, pickup only.
   if (pkg.from.fulfilment === 'SELLER') return [];
   return [delivery];

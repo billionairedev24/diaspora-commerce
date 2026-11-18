@@ -24,6 +24,7 @@ export const sellerKeys = {
   order: (orgId: string, orderNumber: string) => [...sellerKeys.orders(orgId), 'detail', orderNumber] as const,
   shipFrom: (orgId: string) => [...sellerKeys.org(orgId), 'ship-from'] as const,
   pickupPrompt: (orgId: string) => [...sellerKeys.org(orgId), 'pickup-prompt'] as const,
+  selfShipping: (orgId: string) => [...sellerKeys.org(orgId), 'self-shipping'] as const,
   runPickups: (orgId: string) => [...sellerKeys.org(orgId), 'run-pickups'] as const,
   runPickup: (orgId: string, runId: string) => [...sellerKeys.runPickups(orgId), runId] as const,
   businessPage: (orgId: string) => [...sellerKeys.org(orgId), 'business-page'] as const,
@@ -141,6 +142,9 @@ export const sellerQueries = {
     queryOptions({ queryKey: sellerKeys.runPickup(orgId, runId), queryFn: ({ signal }) => api.getRunPickup(runId, signal, BACKGROUND), staleTime: 30_000, refetchInterval: 60_000 }),
   shipFrom: (api: SellerApiClient, orgId: string) =>
     queryOptions({ queryKey: sellerKeys.shipFrom(orgId), queryFn: ({ signal }) => api.listShipFrom(signal), staleTime: 5 * MINUTE }),
+  /** Your own shipping setting; `available` is the staff switch (off by default). */
+  selfShipping: (api: SellerApiClient, orgId: string) =>
+    queryOptions({ queryKey: sellerKeys.selfShipping(orgId), queryFn: ({ signal }) => api.getSelfShipping(signal), staleTime: MINUTE, retry: false }),
   pickupPrompt: (api: SellerApiClient, orgId: string) =>
     queryOptions({ queryKey: sellerKeys.pickupPrompt(orgId), queryFn: ({ signal }) => api.getPickupPrompt(signal, BACKGROUND), staleTime: MINUTE, retry: false }),
   listings: (api: SellerApiClient, orgId: string, q: ListingsQuery) =>
