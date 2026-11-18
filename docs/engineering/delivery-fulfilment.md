@@ -1,5 +1,12 @@
 # Delivery and fulfilment modes (Delivery desk)
 
+> **Correction (ADR 0013, 2026-11-17).** Fulfilled by AfroTransact (FBA) means AfroTransact **collects the product from the seller's location and
+> delivers it**; it keeps no seller stock and charges the seller **nothing** (no per-unit FBA fee, no seller delivery fee: retired, never applied to a new
+> payment). Wherever this page speaks of stock in a fulfilment centre, per-unit FBA fees or a seller pickup-delivery fee, read it as history or as AfroTransact
+> Retail's own stock. Seller self-shipping is back only behind a staff switch that is off by default (`seller-self-shipping-options.md`). Customers see
+> "Pick up" and "Delivered by AfroTransact".
+
+
 Plain answer to "who delivers this order, who can mark it delivered, and where is the proof?". The AfroTransact **driver app is dormant**
 for now: AfroTransact-delivered orders are handled end to end by staff, from the **Delivery** module and from the **order sheet** of the
 staff console (Orders & shipments), which offer the same steps.
