@@ -127,13 +127,17 @@ var matchProblems = map[string]struct {
 // matchErr maps an upstream refusal; the codes in matchProblems keep their own plain detail.
 func matchErr(upstream string, err error) error {
 	if p, ok := port.AsUpstreamProblem(err); ok {
-		if m, known := matchProblems[p.Code]; known {
-			if m.code == domain.CodeValidationFailed && len(p.Fields) > 0 {
-				return domain.ValidationProblem(p.Fields).WithCause(err)
+		m, known := matchProblems[p.Code]
+		if p.Status == http.StatusUnprocessableEntity && len(p.Fields) > 0 && (!known || m.code == domain.CodeValidationFailed) {
+			// A refusal lands on the field it is about: offers names the place "shipFrom" / "shipFrom.locationId", the form's field is the location.
+			fields := make(map[string]string, len(p.Fields))
+			for k, v := range p.Fields {
+				fields[offerFieldOf(k)] = v
 			}
-			if p.Detail != "" {
-				return domain.NewProblem(m.status, m.code, "", p.Detail).WithCause(err)
-			}
+			return domain.ValidationProblem(fields).WithCause(err)
+		}
+		if known && p.Detail != "" {
+			return domain.NewProblem(m.status, m.code, "", p.Detail).WithCause(err)
 		}
 	}
 	return mapErr(upstream, err)
@@ -457,7 +461,11 @@ func (s *sellerMatchImpl) CreateOffer(ctx context.Context, c *domain.Caller, key
 	if err != nil {
 		return domain.OfferOnlyResult{}, err
 	}
-	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit); err != nil {
+	sc, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit)
+	if err != nil {
+		return domain.OfferOnlyResult{}, err
+	}
+	if err := s.requireOfferLocation(ctx, c, sc.org.ID, &in); err != nil {
 		return domain.OfferOnlyResult{}, err
 	}
 	if s.r.d.Offers == nil {
@@ -528,10 +536,10 @@ func offerPayload(in *domain.OfferOnlyInput) (map[string]any, error) {
 	}
 	in.ShipFromLocationID = strings.TrimSpace(in.ShipFromLocationID)
 	if len(in.ShipFromLocationID) > 64 {
-		errs["shipFromLocationId"] = "Choose a ship-from location"
+		errs["shipFromLocationId"] = "Choose one of your locations"
 	}
 	if in.Fulfilment == domain.AfroTransactDelivery && in.ShipFromLocationID == "" {
-		errs["shipFromLocationId"] = "Choose the store AfroTransact picks up from"
+		errs["shipFromLocationId"] = "Choose the location AfroTransact collects from"
 	}
 	if p := in.Packaging; p != nil {
 		switch {
