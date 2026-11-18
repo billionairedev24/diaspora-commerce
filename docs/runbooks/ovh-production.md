@@ -327,3 +327,9 @@ outbound traffic charges. **Cloudflare:** free-plan WAF and rate-limit rule quot
   a Prometheus receiver, OTLP metrics or `kubectl logs` + traces only at launch.
 - The tax, legal, Stripe Connect, Resend domain and counsel items of `docs/runbooks/launch-plan.md` and `production-readiness.md` are external lead-time gates.
 - Keycloak user migration (`docs/engineering/keycloak-migration.md`) if real users exist.
+
+## Seller self-shipping switch must be off at launch
+
+`select seller_self_shipping_enabled from shipping_settings;` on the orders database must return `false` in uat and prod (the column default is false;
+orders `V15`). Staff turn it on only in Staff console > Fees > Flat delivery fee, with a reason, after the owner picks a rule in
+`docs/engineering/seller-self-shipping-options.md`. Fulfilled by AfroTransact costs sellers nothing: there is no per-unit FBA fee to configure.

@@ -2258,3 +2258,10 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - The offer form for an existing page has no SKU input and shows the catalogue code read-only; a new product keeps its optional generated SKU
 - No new Seller Center English copy contains the word offer; all new strings have fr, es, ar and yo machine drafts
 - Unit tests for every rule pass (Java, Go, vitest); the Testcontainers ITs and a staff approval of a seller size against PostgreSQL are run in CI","E24","","High","8","seller-center catalog matching i18n","seller-center","In Review"
+"S617","Story","Fulfilled by AfroTransact means AfroTransact collects from the seller: no seller fees, no seller stock, tooltips; seller self-shipping behind an off switch","Owner correction of the fulfilment definitions: Pick up, Fulfilled by AfroTransact (we collect from the seller and deliver, the customer pays delivery, free by plan as today) and Seller ships (only behind a staff switch, off by default and off in uat and prod). Options for the multi-product shipping problem are written for the owner (docs/engineering/seller-self-shipping-options.md); only the switch and the flat per-seller-per-order rule are built.","- No per-unit FBA fee and no seller delivery fee is applied to a new payment, the seller payable is items less commission
+- A marketplace seller cannot create stock-held offers, a product has no shipping charge of its own, sending stock to AfroTransact answers 410
+- The self-shipping switch is off by default; off, the seller field, checkout option and BFF are absent and the server refuses (409 and 422)
+- On, one flat charge per seller per order is the seller's revenue with no commission on shipping and no plan waiver
+- Seller Center copy: no word offer, no fulfilment-centre wording, no optional shipping charge field, modes explained in tooltips
+- Customer apps say Pick up and Delivered by AfroTransact
+- Unit tests pass (Java, Go, vitest); Testcontainers ITs, mobile app tests and Playwright are not run here","E24","","High","8","fulfilment fba seller-center orders payments","seller-center","In Review"
