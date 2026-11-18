@@ -343,3 +343,63 @@ func exerciseAllowedConditions(t *testing.T, post func(string, any) resp) {
 		t.Fatalf("a laptop allows %v, want every condition", got)
 	}
 }
+
+// TestSellerOfferLocation is the owner's case: Add a product, Pick up, an address selected. The location id goes to offers as
+// shipFrom.locationId, a location that has what the mode needs passes, and a refusal names what is missing on the location field
+// (shipFromLocationId), never on the price.
+func TestSellerOfferLocation(t *testing.T) {
+	bff, b := sellerSetup(t, testkit.Options{Offers: true, SellerPending: true})
+	home := map[string]any{"label": "Manupa Stores", "name": "Ade Okafor", "line1": "4521 Main St", "city": "Houston", "state": "TX", "postalCode": "77002"}
+	created := b.do("POST", "/v1/seller/ship-from-addresses", home)
+	mustStatus(t, created, 201)
+	id := created.json(t)["id"].(string)
+	pickUp := func(atin, location string) resp {
+		body := map[string]any{"atin": atin, "priceMinor": 3000, "listPriceMinor": 4500, "quantity": 300, "fulfilment": "SELLER", "handlingDays": 2}
+		if location != "" {
+			body["shipFromLocationId"] = location
+		}
+		return b.do("POST", "/v1/seller/offers", body)
+	}
+	fieldOf := func(r resp) (string, map[string]any) {
+		errs, _ := r.json(t)["errors"].(map[string]any)
+		for k := range errs {
+			return k, errs
+		}
+		return "", errs
+	}
+
+	// Customer pickup is off at the location: the refusal names pickup, on the location field, and nothing reaches offers.
+	calls := bff.Upstreams.CallCount("POST /v1/offers")
+	r := pickUp("ATSHEAV002", id)
+	if k, errs := fieldOf(r); r.status != 422 || r.json(t)["code"] != "PICKUP_NOT_ON" || k != "shipFromLocationId" || len(errs) != 1 || errs["priceMinor"] != nil {
+		t.Fatalf("pickup off = %d %s", r.status, r.body)
+	}
+	if bff.Upstreams.CallCount("POST /v1/offers") != calls {
+		t.Fatal("a location that is not ready must not reach offers")
+	}
+	// Someone else's location, or none at all.
+	if r := pickUp("ATSHEAV002", "not-mine"); r.status != 422 || r.json(t)["code"] != "OFFER_LOCATION_UNKNOWN" {
+		t.Fatalf("unknown location = %d %s", r.status, r.body)
+	}
+	// Fulfilled by AfroTransact needs AfroTransact to collect there.
+	fba := b.do("POST", "/v1/seller/offers", map[string]any{"atin": "ATSHEAV002", "priceMinor": 3000, "quantity": 300, "fulfilment": "AFROTRANSACT_DELIVERY", "shipFromLocationId": id})
+	if k, _ := fieldOf(fba); fba.status != 422 || fba.json(t)["code"] != "FBA_LOCATION_NOT_ON" || k != "shipFromLocationId" {
+		t.Fatalf("fba not on = %d %s", fba.status, fba.body)
+	}
+
+	// With pickup hours the same selected location passes, and offers gets exactly the chosen id.
+	hours := []map[string]any{{"day": "MONDAY", "opens": "09:00", "closes": "17:00"}}
+	mustStatus(t, b.do("PUT", "/v1/seller/ship-from-addresses/"+id+"/customer-pickup", map[string]any{"enabled": true, "hours": hours, "readyHours": 2, "hoursConfirmed": true}), 200)
+	if r := pickUp("ATSHEAV002", id); r.status != 201 {
+		t.Fatalf("pick up at a ready location = %d %s", r.status, r.body)
+	}
+	if sf, _ := bff.Upstreams.LastOfferBody["shipFrom"].(map[string]any); sf["locationId"] != id || bff.Upstreams.LastOfferBody["fulfilment"] != "SELLER" {
+		t.Fatalf("offer sent to offers = %v", bff.Upstreams.LastOfferBody)
+	}
+
+	// offers' own refusal about the place ("shipFrom") lands on the location field, not on the price.
+	r = pickUp(testkit.MatchATINNoLocation, "")
+	if k, _ := fieldOf(r); r.status != 422 || k != "shipFromLocationId" {
+		t.Fatalf("offers location refusal = %d %s", r.status, r.body)
+	}
+}
