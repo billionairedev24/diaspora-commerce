@@ -124,13 +124,13 @@ describe('checkout (mock BFF + mock Stripe)', () => {
     await user.click(screen.getByRole('button', { name: 'Use this payment method' }));
     const pkg2 = await screen.findByTestId('checkout-package');
 
-    await user.click(within(pkg2).getByRole('radio', { name: /^Delivery / }));
+    await user.click(within(pkg2).getByRole('radio', { name: /^Delivered by AfroTransact / }));
     expect(within(pkg2).getByText(/Delivery preferences/)).toBeInTheDocument();
     await user.click(within(pkg2).getByTestId('fulfil-pickup'));
     expect(within(pkg2).getByText('Houston FC — Will Call')).toBeInTheDocument();
     expect(within(pkg2).getAllByText(/Mon–Sat/).length).toBeGreaterThan(0);
     await user.click(within(pkg2).getByTestId('delivery-option-afrotransact_delivery'));
-    await user.click(within(pkg2).getByRole('radio', { name: /^Delivery / }));
+    await user.click(within(pkg2).getByRole('radio', { name: /^Delivered by AfroTransact / }));
     await user.click(screen.getByRole('button', { name: 'Place your order' }));
     const push = useRouter().push;
     await waitFor(() => expect(push).toHaveBeenCalledWith(expect.stringMatching(/^\/orders\?placed=AT-2026-/)), { timeout: 5000 });
