@@ -15,7 +15,7 @@ import { renderScreen } from './render';
 /* AfroTransact Delivery from the seller's store (S255) in the Seller Center, against the seller mocks. */
 /** Turns driver pickup on for a card and opens Monday 9 to 5 (nothing is prefilled). */
 async function turnOnWithMonday(user: ReturnType<typeof userEvent.setup>, card: HTMLElement) {
-  await user.click(within(card).getByRole('switch', { name: /AfroTransact picks up here/ }));
+  await user.click(within(card).getByRole('switch', { name: /AfroTransact collects from here/ }));
   await user.click(within(card).getByRole('switch', { name: 'Monday' }));
   await user.selectOptions(within(card).getByLabelText('From, Monday'), '09:00');
   await user.selectOptions(within(card).getByLabelText('To, Monday'), '17:00');
@@ -41,8 +41,8 @@ describe('AfroTransact pickup and delivery fee', () => {
     const user = userEvent.setup();
     await renderScreen(<ShippingView />);
     const cards = await screen.findAllByTestId('shipping-location');
-    const katy = within(cards[1] as HTMLElement).getByRole('form', { name: 'AfroTransact pickup' });
-    const toggle = within(katy).getByRole('switch', { name: /AfroTransact picks up here/ });
+    const katy = within(cards[1] as HTMLElement).getByRole('form', { name: 'Fulfilled by AfroTransact' });
+    const toggle = within(katy).getByRole('switch', { name: /AfroTransact collects from here/ });
     expect(toggle).toHaveAttribute('aria-checked', 'false');
     await user.click(toggle);
     // Nothing is prefilled: seven closed days, and Save waits for a valid day.
@@ -67,14 +67,14 @@ describe('AfroTransact pickup and delivery fee', () => {
     const user = userEvent.setup();
     await renderScreen(<ShippingView />);
     const cards = await screen.findAllByTestId('shipping-location');
-    const mama = within(cards[0] as HTMLElement).getByRole('form', { name: 'AfroTransact pickup' });
-    const toggle = within(mama).getByRole('switch', { name: /AfroTransact picks up here/ });
+    const mama = within(cards[0] as HTMLElement).getByRole('form', { name: 'Fulfilled by AfroTransact' });
+    const toggle = within(mama).getByRole('switch', { name: /AfroTransact collects from here/ });
     expect(toggle).toHaveAttribute('aria-checked', 'true');
-    expect(within(mama).getByTestId('fulfilment-mode')).toHaveTextContent('Fulfilled by AfroTransact');
-    expect(within(mama).getByTestId('fulfilment-mode')).toHaveTextContent('paid by the customer');
+    expect(within(mama).getByTestId('fulfilment-mode')).toHaveTextContent('delivered by AfroTransact');
+    expect(within(mama).getByTestId('fulfilment-mode')).toHaveTextContent('pays the delivery fee');
     expect(within(mama).queryByTestId('self-ship-ack')).toBeNull();
     await user.click(toggle);
-    expect(within(mama).getByTestId('fulfilment-mode')).not.toHaveTextContent('ship the orders from this location yourself');
+    expect(within(mama).getByTestId('fulfilment-mode')).toHaveTextContent('Fulfilled by AfroTransact is off here');
     // Mama Put's kitchen also offers Seller pickup, so customers can still buy from it: no warning.
     expect(within(mama).queryByText(/No customer can buy from this location yet/)).toBeNull();
     expect(within(mama).queryByRole('checkbox')).toBeNull();
@@ -87,10 +87,10 @@ describe('AfroTransact pickup and delivery fee', () => {
   it('tells the seller what to enable when a location offers neither Fulfilled by AfroTransact nor Seller pickup', async () => {
     await renderScreen(<ShippingView />);
     const cards = await screen.findAllByTestId('shipping-location');
-    const second = within(cards[1] as HTMLElement).getByRole('form', { name: 'AfroTransact pickup' });
-    expect(within(second).getByRole('switch', { name: /AfroTransact picks up here/ })).toHaveAttribute('aria-checked', 'false');
+    const second = within(cards[1] as HTMLElement).getByRole('form', { name: 'Fulfilled by AfroTransact' });
+    expect(within(second).getByRole('switch', { name: /AfroTransact collects from here/ })).toHaveAttribute('aria-checked', 'false');
     expect(within(second).getByText(/No customer can buy from this location yet/)).toBeInTheDocument();
-    expect(within(second).getByText(/Turn on Fulfilled by AfroTransact below, or Seller pickup in Settings > Pickup/)).toBeInTheDocument();
+    expect(within(second).getByText(/Turn on Fulfilled by AfroTransact below, or Pick up in Settings > Pickup/)).toBeInTheDocument();
   });
 
   it('explains why driver pickup can’t be turned on: outside the area, not geocoded', async () => {
@@ -110,13 +110,13 @@ describe('AfroTransact pickup and delivery fee', () => {
     expect(await within(nowhere).findByRole('alert')).toHaveTextContent('couldn’t locate this address at street level');
   });
 
-  it('sets an offer to “AfroTransact picks up from my location” with a pickup location', async () => {
+  it('sets an offer to “Fulfilled by AfroTransact (FBA)” with a pickup location', async () => {
     const user = userEvent.setup();
     const listing = (await mockApi().listListings({ page: 0, size: 10 })).items.find((l) => l.fulfilment === 'SELLER' && l.atin);
     if (!listing) throw new Error('no listing');
     await renderScreen(<FulfilmentSheet listing={listing} onClose={() => undefined} />);
     const form = (await screen.findAllByTestId('offer-fulfilment'))[0] as HTMLElement;
-    await user.click(within(form).getByLabelText('AfroTransact picks up from my location'));
+    await user.click(within(form).getByLabelText('Fulfilled by AfroTransact (FBA)'));
     const location = within(form).getByLabelText('Pickup location');
     expect(within(location).getAllByRole('option')).toHaveLength(2); // only the address with pickup on
     await user.selectOptions(location, 'sfa-store');

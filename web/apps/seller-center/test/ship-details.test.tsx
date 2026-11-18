@@ -34,7 +34,7 @@ describe('self-shipping is retired', () => {
     expect(screen.queryByTestId('ship-details')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /shipped|delivered/i })).toBeNull();
     await user.click(screen.getByRole('button'));
-    expect(onMove).toHaveBeenCalledWith('READY', undefined);
+    expect(onMove).toHaveBeenCalledWith('READY', undefined, undefined);
   });
 });
 
@@ -80,6 +80,6 @@ describe('a seller whose shipment is fulfilled by AfroTransact', () => {
     expect(screen.queryByTestId('afrotransact-note')).toBeNull();
     await user.type(screen.getByLabelText(/code/i), '4821');
     await user.click(screen.getByRole('button', { name: /Hand over/ }));
-    expect(onMove).toHaveBeenCalledWith('DELIVERED', '4821');
+    expect(onMove).toHaveBeenCalledWith('DELIVERED', '4821', undefined);
   });
 });

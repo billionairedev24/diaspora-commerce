@@ -93,8 +93,8 @@ describe('settings forms survive typing', () => {
         <ShippingView />
       </Guarded>
     );
-    const katy = within((await screen.findAllByTestId('shipping-location'))[1] as HTMLElement).getByRole('form', { name: 'AfroTransact pickup' });
-    await user.click(within(katy).getByRole('switch', { name: /AfroTransact picks up here/ }));
+    const katy = within((await screen.findAllByTestId('shipping-location'))[1] as HTMLElement).getByRole('form', { name: 'Fulfilled by AfroTransact' });
+    await user.click(within(katy).getByRole('switch', { name: /AfroTransact collects from here/ }));
     await user.click(within(katy).getByRole('switch', { name: 'Monday' }));
     await user.selectOptions(within(katy).getByLabelText('From, Monday'), '08:30');
     expect(within(katy).getByLabelText('From, Monday')).toHaveValue('08:30');
