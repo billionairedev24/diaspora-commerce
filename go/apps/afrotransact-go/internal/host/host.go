@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 
@@ -278,8 +279,7 @@ func (h *hostImpl) Close(ctx context.Context) error {
 		mu   sync.Mutex
 		errs []error
 	)
-	for i := len(h.mods) - 1; i >= 0; i-- {
-		r := h.mods[i]
+	for _, r := range slices.Backward(h.mods) {
 		if r.mod.Close == nil {
 			continue
 		}
