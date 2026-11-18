@@ -1,7 +1,7 @@
 import { type ChangeRequest } from '@afrotransact/api-client';
 import { describe, expect, it } from 'vitest';
 
-import { asksCondition, barcodeReady, blockerKey, candidateAsMatch, changeAsMatch, conditionsAllowed, digitsOf, emptyOffer, type OfferForm, offerProblems, readyToSell, requestedSize, searchTextOf, serverOfferField, sizeNeedsNewProduct, sizeProblemKey, sizeToConfirm, toOfferInput } from '@/components/listings/add/match-model';
+import { asksCondition, barcodeReady, blockerKey, candidateAsMatch, changeAsMatch, chosenLocation, conditionsAllowed, digitsOf, emptyOffer, locationProblem, type OfferForm, offerProblems, readyToSell, requestedSize, searchTextOf, serverOfferField, sizeNeedsNewProduct, sizeProblemKey, sizeToConfirm, toOfferInput } from '@/components/listings/add/match-model';
 import { withStart } from '@/components/listings/form-model';
 import { emptyForm } from '@/components/listings/form-model';
 import { CATALOG_FILES } from '@/i18n/catalogs';
@@ -73,11 +73,11 @@ describe('the add-product search and the barcode shortcut (S382)', () => {
 });
 
 describe('the offer-only form', () => {
-  const form = (over: Partial<OfferForm> = {}): OfferForm => ({ ...emptyOffer(), price: '12.50', qty: '8', ...over });
+  const form = (over: Partial<OfferForm> = {}): OfferForm => ({ ...emptyOffer(), price: '12.50', qty: '8', shipFromId: 'loc-1', ...over });
 
   it('has no photo, title or attribute field in what it sends', () => {
     const input = toOfferInput('ATSHEAV001', form({ listPrice: '15', shipping: '4.99' }));
-    expect(input).toEqual({ atin: 'ATSHEAV001', priceMinor: 1250, listPriceMinor: 1500, shippingMinor: 499, fulfilment: 'SELLER', condition: 'NEW', handlingDays: 2, quantity: 8 });
+    expect(input).toEqual({ atin: 'ATSHEAV001', priceMinor: 1250, listPriceMinor: 1500, shippingMinor: 499, fulfilment: 'SELLER', condition: 'NEW', handlingDays: 2, quantity: 8, shipFromLocationId: 'loc-1' });
     for (const content of ['title', 'images', 'attributes', 'brand', 'category', 'gtin', 'description', 'productType']) expect(input).not.toHaveProperty(content);
   });
 
@@ -88,9 +88,10 @@ describe('the offer-only form', () => {
     expect(Object.keys(offerProblems(form({ qty: '' })))).toEqual(['of-qty']);
     expect(Object.keys(offerProblems(form({ condition: 'USED_GOOD' })))).toEqual(['of-note']);
     expect(offerProblems(form({ condition: 'USED_GOOD', note: 'Box dented' }))).toEqual({});
-    expect(Object.keys(offerProblems(form({ fulfilment: 'AFROTRANSACT_DELIVERY' })))).toEqual(['of-ship-from']);
-    expect(Object.keys(offerProblems(form({ fulfilment: 'AFROTRANSACT' })))).toEqual(['of-pkg']);
-    expect(offerProblems(form({ fulfilment: 'AFROTRANSACT', qty: '', pkg: { length: '12', width: '8', height: '4', weight: '2.5' } }))).toEqual({});
+    expect(Object.keys(offerProblems(form({ fulfilment: 'AFROTRANSACT_DELIVERY', shipFromId: '' })))).toEqual(['of-ship-from']);
+    expect(offerProblems(form({ shipFromId: '' }))['of-ship-from']).toBe('sc.match.err.pickupLocation');
+    expect(Object.keys(offerProblems(form({ fulfilment: 'AFROTRANSACT', shipFromId: '' })))).toEqual(['of-pkg']);
+    expect(offerProblems(form({ fulfilment: 'AFROTRANSACT', qty: '', shipFromId: '', pkg: { length: '12', width: '8', height: '4', weight: '2.5' } }))).toEqual({});
     expect(Object.keys(offerProblems(form({ handling: '45' })))).toEqual(['of-handling']);
   });
 
@@ -108,6 +109,38 @@ describe('the offer-only form', () => {
     expect(serverOfferField('priceMinor')).toBe('of-price');
     expect(serverOfferField('conditionNote')).toBe('of-note');
     expect(serverOfferField('shipFromLocationId')).toBe('of-ship-from');
+  });
+
+  it('never puts a refusal about the place on the price', () => {
+    // The offers service names the place "shipFrom" or "shipFrom.locationId"; a name the form does not have is not guessed onto the price.
+    expect(serverOfferField('shipFrom')).toBe('of-ship-from');
+    expect(serverOfferField('shipFrom.locationId')).toBe('of-ship-from');
+    expect(serverOfferField('somethingNew')).toBeUndefined();
+  });
+
+  it('sends the place that is shown selected: the default location when none was picked (the owner’s Pick up case)', () => {
+    const places = [{ id: 'loc-2', isDefault: false }, { id: 'loc-1', isDefault: true }];
+    expect(chosenLocation('', places)).toBe('loc-1');
+    expect(chosenLocation('loc-2', places)).toBe('loc-2');
+    expect(chosenLocation('gone', places)).toBe('loc-1');
+    expect(chosenLocation('', [{ id: 'only', isDefault: false }])).toBe('only');
+    expect(chosenLocation('', [{ id: 'a', isDefault: false }, { id: 'b', isDefault: false }])).toBe('');
+    expect(chosenLocation('', [])).toBe('');
+    const sent = toOfferInput('ATSHEAV001', { ...form({ price: '30', listPrice: '45', qty: '300', handling: '2' }), shipFromId: chosenLocation('', places) });
+    expect(sent).toMatchObject({ priceMinor: 3000, listPriceMinor: 4500, quantity: 300, handlingDays: 2, fulfilment: 'SELLER', shipFromLocationId: 'loc-1' });
+  });
+
+  it('says what is missing at the location and where to fix it', () => {
+    expect(locationProblem('PICKUP_HOURS_MISSING')).toMatchObject({ message: 'sc.match.err.pickupHours', href: '/settings/pickup' });
+    expect(locationProblem('PICKUP_NOT_ON')).toMatchObject({ message: 'sc.match.err.pickupNotOn', href: '/settings/pickup' });
+    expect(locationProblem('FBA_LOCATION_NOT_ON')).toMatchObject({ message: 'sc.match.err.fbaNotOn', href: '/settings/locations' });
+    expect(locationProblem('OFFER_EXISTS')).toBeUndefined();
+    expect(EN_MESSAGES['sc.match.err.pickupHours']).toBe('Add pickup hours to this location.');
+  });
+
+  it('has no ship-from or seller-fulfilled wording left from the old modes in the English copy', () => {
+    const stale = Object.entries(EN_MESSAGES).filter(([k, v]) => /ship-from|seller-fulfilled|ships from/i.test(v) && !k.startsWith('sc.tour.'));
+    expect(stale.map(([k]) => k)).toEqual([]);
   });
 });
 

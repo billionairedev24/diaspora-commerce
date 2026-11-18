@@ -111,6 +111,21 @@ const OFFER_PROBLEMS: Record<string, MessageKey> = {
 };
 export const offerProblemKey = (code: string | undefined): MessageKey | undefined => (code ? OFFER_PROBLEMS[code] : undefined);
 
+/** What is missing at the chosen location, by the gateway's problem code: the words, and where it is fixed (Pickup settings, or the locations list for Fulfilled by AfroTransact). */
+const LOCATION_PROBLEMS: Record<string, { message: MessageKey; fix: MessageKey; href: string }> = {
+  PICKUP_NOT_ON: { message: 'sc.match.err.pickupNotOn', fix: 'sc.match.fix.pickup', href: '/settings/pickup' },
+  PICKUP_HOURS_MISSING: { message: 'sc.match.err.pickupHours', fix: 'sc.match.fix.pickupHours', href: '/settings/pickup' },
+  FBA_LOCATION_NOT_ON: { message: 'sc.match.err.fbaNotOn', fix: 'sc.match.fix.fba', href: '/settings/locations' },
+  OFFER_LOCATION_UNKNOWN: { message: 'sc.match.err.locationUnknown', fix: 'sc.match.fix.locations', href: '/settings/locations' }
+};
+export const locationProblem = (code: string | undefined): { message: MessageKey; fix: MessageKey; href: string } | undefined => (code ? LOCATION_PROBLEMS[code] : undefined);
+
+/** The location the form sends: the one chosen, else the seller's default (shown selected, so it is also what is sent), else the only one. */
+export function chosenLocation(chosen: string, locations: { id: string; isDefault: boolean }[]): string {
+  if (chosen && locations.some((l) => l.id === chosen)) return chosen;
+  return (locations.find((l) => l.isDefault) ?? (locations.length === 1 ? locations[0] : undefined))?.id ?? '';
+}
+
 /* ── The offer-only form ── */
 
 export interface OfferForm {
@@ -153,6 +168,7 @@ export function offerProblems(f: OfferForm): Record<string, MessageKey> {
   if (f.fulfilment === 'SELLER' && (qty === null || qty > 100_000)) p[OFFER_FIELD.qty] = 'sc.match.err.qty';
   if (f.condition !== 'NEW' && !f.note.trim()) p[OFFER_FIELD.note] = 'sc.match.err.note';
   if (f.fulfilment === 'AFROTRANSACT_DELIVERY' && !f.shipFromId) p[OFFER_FIELD.shipFrom] = 'sc.match.err.shipFrom';
+  if (f.fulfilment === 'SELLER' && !f.shipFromId) p[OFFER_FIELD.shipFrom] = 'sc.match.err.pickupLocation';
   const days = whole(f.handling);
   if (days === null || days > 30) p[OFFER_FIELD.handling] = 'sc.match.err.handling';
   if (f.fulfilment === 'AFROTRANSACT') {
@@ -179,10 +195,10 @@ export function toOfferInput(atin: string, f: OfferForm): OfferOnlyInput {
   return input;
 }
 
-/** The server's field names (offers, BFF) mapped to the form's field ids, so a refusal lands on the field it is about. */
-export const serverOfferField = (field: string): string =>
+/** The server's field names (offers, BFF) mapped to the form's field ids, so a refusal lands on the field it is about. A name the form does not have is not put on the price: it is undefined (the form shows it on its own). */
+export const serverOfferField = (field: string): string | undefined =>
   ({ priceMinor: OFFER_FIELD.price, listPriceMinor: OFFER_FIELD.listPrice, shippingMinor: OFFER_FIELD.shipping, quantity: OFFER_FIELD.qty, condition: OFFER_FIELD.condition,
-    conditionNote: OFFER_FIELD.note, handlingDays: OFFER_FIELD.handling, shipFromLocationId: OFFER_FIELD.shipFrom, packaging: OFFER_FIELD.pkg,
-    fulfilment: OFFER_FIELD.fulfilment })[field] ?? OFFER_FIELD.price;
+    conditionNote: OFFER_FIELD.note, handlingDays: OFFER_FIELD.handling, shipFromLocationId: OFFER_FIELD.shipFrom, shipFrom: OFFER_FIELD.shipFrom, 'shipFrom.locationId': OFFER_FIELD.shipFrom,
+    packaging: OFFER_FIELD.pkg, fulfilment: OFFER_FIELD.fulfilment } as Record<string, string>)[field];
 
 export { OFFER_CONDITIONS };

@@ -15,7 +15,7 @@ import { sellerApi } from '@/lib/api';
 import { idempotencyKey } from '@/lib/format';
 import { useSeller } from '@/lib/session';
 
-import { asksCondition, conditionsAllowed, emptyOffer, OFFER_FIELD, type OfferForm, offerProblemKey, offerProblems, optionsText, serverOfferField, toOfferInput } from './match-model';
+import { asksCondition, chosenLocation, conditionsAllowed, emptyOffer, locationProblem, OFFER_FIELD, type OfferForm, offerProblemKey, offerProblems, optionsText, serverOfferField, toOfferInput } from './match-model';
 import { type ReportKind,ReportPanel } from './ReportForms';
 
 const FULFILMENTS = ['SELLER', 'AFROTRANSACT_DELIVERY'] as const;
@@ -44,6 +44,7 @@ export function OfferOnlyForm({ match, atin, onBack, onAnother }: Props) {
   const [showAll, setShowAll] = useState(false);
   const [server, setServer] = useState<Record<string, string>>({});
   const [form, setForm] = useState('');
+  const [fix, setFix] = useState<{ label: MessageKey; href: string } | null>(null);
   const [result, setResult] = useState<OfferOnlyResult | null>(null);
   const [report, setReport] = useState<ReportKind | null>(null);
   const key = useRef(idempotencyKey());
@@ -54,12 +55,16 @@ export function OfferOnlyForm({ match, atin, onBack, onAnother }: Props) {
   // Condition is asked only where the category's listing rules allow used or renewed items; elsewhere it is not shown and the item is New.
   const askCondition = asksCondition(match);
   const conditions = conditionsAllowed(match);
+  // The place shown selected is the place sent: the one chosen, else the seller's default (or only) location.
+  const locationId = chosenLocation(f.shipFromId, locations);
+  const sent: OfferForm = { ...(askCondition ? f : { ...f, condition: 'NEW', note: '' }), shipFromId: locationId };
   const patch = (p: Partial<OfferForm>) => {
     setF((prev) => ({ ...prev, ...p }));
     setServer({});
     setForm('');
+    setFix(null);
   };
-  const problems = offerProblems(askCondition ? f : { ...f, condition: 'NEW', note: '' });
+  const problems = offerProblems(sent);
   const shown = (id: string): string | undefined => {
     const k = problems[id];
     if (server[id]) return server[id];
@@ -67,7 +72,7 @@ export function OfferOnlyForm({ match, atin, onBack, onAnother }: Props) {
   };
 
   const send = useMutation({
-    mutationFn: () => api.matching.createOffer(toOfferInput(atin, askCondition ? f : { ...f, condition: 'NEW', note: '' }), key.current),
+    mutationFn: () => api.matching.createOffer(toOfferInput(atin, sent), key.current),
     onSuccess: (r) => {
       setResult(r);
       void qc.invalidateQueries({ queryKey: sellerKeys.listings(orgId) });
@@ -75,8 +80,23 @@ export function OfferOnlyForm({ match, atin, onBack, onAnother }: Props) {
     },
     onError: (e) => {
       key.current = idempotencyKey();
+      const where = isApiError(e) ? locationProblem(e.code) : undefined;
+      if (where) {
+        // What is missing at the chosen location, next to the location field, with the place where it is fixed.
+        setServer({ [OFFER_FIELD.shipFrom]: t(where.message) });
+        setFix({ label: where.fix, href: where.href });
+        return;
+      }
       if (isApiError(e) && Object.keys(e.fieldErrors).length && e.code !== 'PAGE_CONTENT_LOCKED') {
-        setServer(Object.fromEntries(Object.entries(e.fieldErrors).map(([field, message]) => [serverOfferField(field), message])));
+        const mine: Record<string, string> = {};
+        const other: string[] = [];
+        for (const [field, message] of Object.entries(e.fieldErrors)) {
+          const id = serverOfferField(field);
+          if (id) mine[id] = message;
+          else other.push(message);
+        }
+        setServer(mine);
+        if (other.length) setForm(other.join(' '));
         return;
       }
       const known = isApiError(e) ? offerProblemKey(e.code) : undefined;
@@ -171,9 +191,14 @@ export function OfferOnlyForm({ match, atin, onBack, onAnother }: Props) {
                 options={HANDLING_DAYS.map((d) => ({ value: String(d), label: t('sc.pf.handlingDays', { count: d }) }))} onChange={(e) => patch({ handling: e.currentTarget.value })} />
             ) : null}
             {f.fulfilment !== 'AFROTRANSACT' ? (
-              <Select id={OFFER_FIELD.shipFrom} label={t('sc.pf.field.shipFrom')} value={f.shipFromId} error={shown(OFFER_FIELD.shipFrom)}
-                help={locations.length ? undefined : t('sc.pf.shipFromNone')} placeholder={t('sc.match.offer.shipFromDefault')}
-                options={locations.map((a) => ({ value: a.id, label: `${a.label} · ${a.city}, ${a.state}` }))} onChange={(e) => patch({ shipFromId: e.currentTarget.value })} />
+              <div className="flex flex-col gap-1">
+                <Select id={OFFER_FIELD.shipFrom} label={t(f.fulfilment === 'SELLER' ? 'sc.match.offer.location.pickup' : 'sc.match.offer.location.fba')} value={locationId} error={shown(OFFER_FIELD.shipFrom)}
+                  help={locations.length ? undefined : t('sc.pf.shipFromNone')} placeholder={locationId ? undefined : t('sc.match.offer.locationNone')}
+                  options={locations.map((a) => ({ value: a.id, label: `${a.label} · ${a.city}, ${a.state}` }))} onChange={(e) => patch({ shipFromId: e.currentTarget.value })} />
+                {fix || (!locations.length && shown(OFFER_FIELD.shipFrom)) ? (
+                  <Link href={fix?.href ?? '/settings/locations'} className="text-sm" data-testid="location-fix">{t(fix?.label ?? 'sc.match.fix.locations')}</Link>
+                ) : null}
+              </div>
             ) : null}
             <div className="flex flex-col gap-1" data-testid="catalog-code">
               <span className="text-sm font-semibold">{t('sc.match.offer.catalogCode')}</span>
