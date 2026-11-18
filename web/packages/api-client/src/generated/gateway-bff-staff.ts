@@ -8994,12 +8994,12 @@ export interface components {
             /**
              * @description Who moves it. `afrotransact_delivery` and `fulfilled_by_afrotransact` are "Fulfilled by AfroTransact": staff holding
              *     delivery:manage take the delivery steps (the steps whose `via` is `delivery`, through /v1/staff/deliveries). `pickup`: the customer
-             *     collects (ready, collected, not collected). `legacy_seller_shipped`: history from before self-shipping was retired, only the
-             *     override moves it. Staff holding orders:override-shipment can override Fulfilled by AfroTransact (forward only) and
+             *     collects (ready, collected, not collected). `seller_ships`: the seller ships it themselves (only while the staff switch is on, off by default), only the seller or the override moves it. `legacy_seller_shipped`: history from before self-shipping was retired, only the
+             *     override moves it. Staff holding orders:override-shipment can override Fulfilled by AfroTransact (forward only), the seller's own shipments and
              *     legacy shipments, always with a reason.
              * @enum {string}
              */
-            mode: "legacy_seller_shipped" | "afrotransact_delivery" | "fulfilled_by_afrotransact" | "pickup" | "preorder_run";
+            mode: "seller_ships" | "legacy_seller_shipped" | "afrotransact_delivery" | "fulfilled_by_afrotransact" | "pickup" | "preorder_run";
             /** @description Units in the shipment */
             itemCount: number;
             /** @description The first item names (at most three) */

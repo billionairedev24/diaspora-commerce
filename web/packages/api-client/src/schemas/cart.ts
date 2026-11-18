@@ -33,11 +33,12 @@ export type CartLine = z.infer<typeof CartLineSchema>;
 
 export const DeliveryOptionSchema = z.object({
   /**
-   * Launch shipping: `afrotransact_delivery` (one flat fee set by staff), `pickup` ($0), `quote_required` (outside every
-   * delivery zone: disabled for payment, the shopper asks for a quote) and `carrier` (seller-shipped; only behind the staff
-   * switch, off at launch). There is no express and no label names a carrier.
+   * Launch shipping: `afrotransact_delivery` ("Delivered by AfroTransact": one flat fee set by staff), `pickup` ("Pick up", $0),
+   * `quote_required` (outside every delivery zone: disabled for payment, the shopper asks for a quote) and `seller_ships`
+   * ("Shipped by the seller": only while the staff switch is on, off by default, at the seller's own flat charge). `carrier` is
+   * retired. There is no express and no label names a carrier.
    */
-  key: z.enum(['carrier', 'afrotransact_delivery', 'pickup', 'quote_required']),
+  key: z.enum(['carrier', 'afrotransact_delivery', 'pickup', 'seller_ships', 'quote_required']),
   label: z.string(),
   eta: z.string(),
   feeMinor: MinorSchema,

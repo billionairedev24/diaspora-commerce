@@ -444,6 +444,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/self-shipping": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your own shipping charge (only while AfroTransact lets sellers ship themselves)
+         * @description orders `GET /v1/seller/self-shipping` (Orders view). `available` is a staff switch that is off by default; while it is false
+         *     the app shows nothing about shipping yourself. The charge is one flat amount per order package, not per product.
+         */
+        get: operations["getSelfShipping"];
+        /**
+         * Set your own flat shipping charge per order
+         * @description orders `PUT /v1/seller/self-shipping` (Orders edit). 409 `SELF_SHIPPING_DISABLED` while the staff switch is off (the default),
+         *     so the server refuses it even if a client shows the field. 422 for a charge outside $0.00 to $100.00. You keep the whole
+         *     charge; you are responsible for it being the right amount.
+         */
+        put: operations["setSelfShipping"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/orders/{orderNumber}/shipments/{shipmentId}/rates": {
         parameters: {
             query?: never;
@@ -3282,7 +3309,7 @@ export interface paths {
         put?: never;
         /**
          * inventory `POST /v1/inbound/shipments`
-         * @description Mirrors inventory `POST /v1/inbound/shipments` with the member's token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory's `InboundShipment` (contracts/openapi/inventory.yaml).
+         * @description Mirrors inventory `POST /v1/inbound/shipments` with the member's token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory's `InboundShipment` (contracts/openapi/inventory.yaml). RETIRED: AfroTransact keeps no seller stock (Fulfilled by AfroTransact means it collects from your pickup location and delivers), so this is always refused with 410 FBA_INBOUND_RETIRED. Reading existing plans stays.
          */
         post: operations["postSellerFbaInbound"];
         delete?: never;
@@ -3305,7 +3332,7 @@ export interface paths {
         get: operations["getSellerFbaInboundById"];
         /**
          * inventory `PUT /v1/inbound/shipments/{id}`
-         * @description Mirrors inventory `PUT /v1/inbound/shipments/{id}` with the member's token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory's `InboundShipment` (contracts/openapi/inventory.yaml).
+         * @description Mirrors inventory `PUT /v1/inbound/shipments/{id}` with the member's token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory's `InboundShipment` (contracts/openapi/inventory.yaml). RETIRED: AfroTransact keeps no seller stock (Fulfilled by AfroTransact means it collects from your pickup location and delivers), so this is always refused with 410 FBA_INBOUND_RETIRED. Reading existing plans stays.
          */
         put: operations["putSellerFbaInboundById"];
         post?: never;
@@ -3325,7 +3352,7 @@ export interface paths {
         get?: never;
         /**
          * inventory `PUT /v1/inbound/shipments/{id}/tracking`
-         * @description Mirrors inventory `PUT /v1/inbound/shipments/{id}/tracking` with the member's token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory's `InboundTrackingResult` (contracts/openapi/inventory.yaml).
+         * @description Mirrors inventory `PUT /v1/inbound/shipments/{id}/tracking` with the member's token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory's `InboundTrackingResult` (contracts/openapi/inventory.yaml). RETIRED: AfroTransact keeps no seller stock (Fulfilled by AfroTransact means it collects from your pickup location and delivers), so this is always refused with 410 FBA_INBOUND_RETIRED. Reading existing plans stays.
          */
         put: operations["putSellerFbaInboundTracking"];
         post?: never;
@@ -3346,7 +3373,7 @@ export interface paths {
         put?: never;
         /**
          * inventory `POST /v1/inbound/shipments/{id}/ship`
-         * @description Mirrors inventory `POST /v1/inbound/shipments/{id}/ship` with the member's token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory's `InboundShipment` (contracts/openapi/inventory.yaml).
+         * @description Mirrors inventory `POST /v1/inbound/shipments/{id}/ship` with the member's token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory's `InboundShipment` (contracts/openapi/inventory.yaml). RETIRED: AfroTransact keeps no seller stock (Fulfilled by AfroTransact means it collects from your pickup location and delivers), so this is always refused with 410 FBA_INBOUND_RETIRED. Reading existing plans stays.
          */
         post: operations["postSellerFbaInboundShip"];
         delete?: never;
@@ -3366,7 +3393,7 @@ export interface paths {
         put?: never;
         /**
          * inventory `POST /v1/inbound/shipments/{id}/cancel`
-         * @description Mirrors inventory `POST /v1/inbound/shipments/{id}/cancel` with the member's token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory's `InboundShipment` (contracts/openapi/inventory.yaml).
+         * @description Mirrors inventory `POST /v1/inbound/shipments/{id}/cancel` with the member's token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory's `InboundShipment` (contracts/openapi/inventory.yaml). RETIRED: AfroTransact keeps no seller stock (Fulfilled by AfroTransact means it collects from your pickup location and delivers), so this is always refused with 410 FBA_INBOUND_RETIRED. Reading existing plans stays.
          */
         post: operations["postSellerFbaInboundCancel"];
         delete?: never;
@@ -4885,11 +4912,13 @@ export interface components {
             status: components["schemas"]["ShipmentStatus"];
             statusLabel: string;
             fulfilment: components["schemas"]["Fulfilment"];
+            /** @description The next step is Mark shipped and you ship it yourself, so say how it left (tracking number or details). Only ever true while sellers may ship themselves (a staff switch, off by default) */
+            needsShipDetails?: boolean;
             /**
-             * @description Two modes exist. afrotransact_delivery: Fulfilled by AfroTransact from your location (AfroTransact collects and delivers; the customer pays the delivery fee, you pay nothing for it). fulfilled_by_afrotransact: AfroTransact fulfils and delivers it. pickup: Seller pickup. legacy_seller_shipped: an old order you shipped yourself before self-shipping was retired; history, you have no steps on it.
+             * @description seller_ships: you ship it yourself at your own shipping charge (only while the staff switch is on, off by default). Two modes exist otherwise. afrotransact_delivery: Fulfilled by AfroTransact from your location (AfroTransact collects and delivers; the customer pays the delivery fee, you pay nothing for it). fulfilled_by_afrotransact: AfroTransact fulfils and delivers it. pickup: Seller pickup. legacy_seller_shipped: an old order you shipped yourself before self-shipping was retired; history, you have no steps on it.
              * @enum {string}
              */
-            fulfilmentMode: "legacy_seller_shipped" | "afrotransact_delivery" | "fulfilled_by_afrotransact" | "pickup" | "preorder_run";
+            fulfilmentMode: "seller_ships" | "legacy_seller_shipped" | "afrotransact_delivery" | "fulfilled_by_afrotransact" | "pickup" | "preorder_run";
             perishable: boolean;
             lines: {
                 title: string;
@@ -4937,6 +4966,27 @@ export interface components {
             status: components["schemas"]["SellerStatusAction"];
             /** @description The buyer's 4-digit code; required when status is DELIVERED (handing a pickup order over), ignored otherwise */
             handoverCode?: string;
+            /** @description How you sent it (who took it, when). With PICKED_UP, only for an order you ship yourself (a staff switch, off by default) */
+            shipNote?: string;
+            /** @description Tracking number, no spaces. With PICKED_UP, only for an order you ship yourself */
+            trackingNumber?: string;
+            /** @description Optional name of whoever carried it; customers only see the tracking number */
+            trackingCarrier?: string;
+        };
+        SellerSelfShipping: {
+            /** @description AfroTransact lets sellers ship themselves (a staff switch, off by default). While false nothing about it is shown and every change is refused with 409 SELF_SHIPPING_DISABLED */
+            available: boolean;
+            /** @description You ship your own orders and charge the flat shipping below (false while not available) */
+            enabled: boolean;
+            /** @description One flat shipping charge for each order package of yours, never per product. It is your charge and your responsibility; you keep all of it and AfroTransact takes no commission on it */
+            chargeMinor: number;
+            /** @example USD */
+            currency: string;
+            version: number;
+        };
+        SellerSelfShippingRequest: {
+            enabled: boolean;
+            chargeMinor: number;
         };
         Parcel: {
             weightLb: number;
@@ -8331,6 +8381,60 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getSelfShipping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Your setting */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerSelfShipping"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    setSelfShipping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SellerSelfShippingRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerSelfShipping"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
@@ -12931,6 +13035,7 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            410: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
@@ -12997,6 +13102,7 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            410: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
@@ -13036,6 +13142,7 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            410: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
@@ -13075,6 +13182,7 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            410: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
@@ -13114,6 +13222,7 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            410: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];

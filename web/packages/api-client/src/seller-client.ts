@@ -161,6 +161,9 @@ import {
   SellerOfferSchema,
   type SellerOrderDetail,
   SellerOrderDetailSchema,
+  type SellerSelfShipping,
+  type SellerSelfShippingRequest,
+  SellerSelfShippingSchema,
   type SellerOrderPage,
   SellerOrderPageSchema,
   type SellerProductDetail,
@@ -353,12 +356,17 @@ export function createSellerApiClient(options: ApiClientOptions) {
      * One step forward (confirm, pack, ready); `handoverCode` is the buyer's 4-digit code, needed to hand a pickup order over
      * (DELIVERED). Sellers do not ship or deliver orders themselves: AfroTransact does (Fulfilled by AfroTransact).
      */
-    updateShipmentStatus: (orderNumber: string, shipmentId: string, status: SellerStatusAction, key?: string, handoverCode?: string): Promise<SellerOrderDetail> =>
+    updateShipmentStatus: (orderNumber: string, shipmentId: string, status: SellerStatusAction, key?: string, handoverCode?: string, ship?: { shipNote?: string; trackingNumber?: string }): Promise<SellerOrderDetail> =>
       request(`${shipment(orderNumber, shipmentId)}/status`, SellerOrderDetailSchema, {
         method: 'POST',
-        body: { status, ...(handoverCode ? { handoverCode } : {}) },
+        body: { status, ...(handoverCode ? { handoverCode } : {}), ...(ship?.shipNote ? { shipNote: ship.shipNote } : {}), ...(ship?.trackingNumber ? { trackingNumber: ship.trackingNumber } : {}) },
         headers: idem(key)
       }),
+    /** Your own shipping setting. `available` is the staff switch (off by default): while false nothing about it is shown. */
+    getSelfShipping: (signal?: AbortSignal): Promise<SellerSelfShipping> => request('/v1/seller/self-shipping', SellerSelfShippingSchema, { signal }),
+    /** Sets your flat shipping charge per order. 409 SELF_SHIPPING_DISABLED while the staff switch is off. */
+    setSelfShipping: (body: SellerSelfShippingRequest): Promise<SellerSelfShipping> =>
+      request('/v1/seller/self-shipping', SellerSelfShippingSchema, { method: 'PUT', body }),
     quoteRates: (orderNumber: string, shipmentId: string, parcel: Parcel, shipFrom: SellerAddress, carrier?: string): Promise<RateQuotes> =>
       request(`${shipment(orderNumber, shipmentId)}/rates`, RateQuotesSchema, { method: 'POST', body: { parcel, shipFrom, ...(carrier ? { carrier } : {}) } }),
     buyLabel: (orderNumber: string, shipmentId: string, body: { carrier: string; service: string; parcel: Parcel; shipFrom: SellerAddress }, key: string): Promise<LabelPurchase> =>

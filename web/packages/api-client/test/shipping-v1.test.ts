@@ -66,7 +66,7 @@ describe('the shopper estimate equals what orders charges (shared fee vectors)',
     const api = await signedIn();
     await api.addToCart({ offerId: (await api.getProduct('AT000000P2')).buyBox?.offerId ?? '', quantity: 2 });
     const pkg = (await api.getCheckoutSummary('ad1')).packages[0];
-    expect(pkg?.deliveryOptions.map((o) => o.label)).toEqual(['Delivery', 'Pickup']);
+    expect(pkg?.deliveryOptions.map((o) => o.label)).toEqual(['Delivered by AfroTransact', 'Pick up']);
     for (const set of vectors.settings) {
       setShippingSettings({ flatFeeMinor: set.flatFeeMinor, freeAboveMinor: set.freeAboveMinor });
       const sum = await api.getCheckoutSummary('ad1', `${pkg?.packageId}:afrotransact_delivery`);

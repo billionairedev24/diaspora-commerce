@@ -214,7 +214,7 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
     expect(s?.fulfilmentMode).toBe('legacy_seller_shipped');
     expect(s?.canBuyLabel).toBe(false);
     expect(s?.nextActions).toEqual([]);
-    expect(s).not.toHaveProperty('needsShipDetails');
+    expect(s?.needsShipDetails, 'a legacy order never asks how it was sent').toBe(false);
     await expect(api.updateShipmentStatus(row.orderNumber, row.shipmentId, 'CONFIRMED')).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);
     await expect(api.updateShipmentStatus(row.orderNumber, row.shipmentId, 'PICKED_UP')).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);
   });
