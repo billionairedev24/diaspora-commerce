@@ -75,6 +75,7 @@ import { SERVICE_PLACES } from '../shopper-state';
 import { buildStorefront, publishMockStore, searchStoreProducts, unpublishMockStore } from '../storefront';
 import { providerKeyForOrg } from '../storefront';
 import { parseSort, queryRows, type SortKey, type TableColumnLike } from '../table';
+import { brandNameProblem, nearBrandKeys } from './brand-similarity';
 import {
   applyStockRows,
   FEED_SAMPLE,
@@ -2298,6 +2299,28 @@ export const sellerHandlers = [
       return { departmentId: depts.length === 1 ? (depts[0]?.id ?? null) : null, departmentName: depts.length === 1 ? (depts[0]?.name ?? null) : null, brands };
     })
   ),
+  http.get(
+    `${W}/catalog/brands/similar`,
+    route((ctx) => {
+      require(ctx, 'listings', 'VIEW', 'SELLER');
+      const params = query(ctx);
+      const name = (params.get('name') ?? '').trim().replace(/\s+/g, ' ');
+      const depts = departmentsOf(CATEGORY_TREE, { category: params.get('category'), productType: params.get('productType') });
+      if (name.length < 2 || name.length > 120) throw invalid({ name: '2 to 120 characters' });
+      if (depts.length === 0) throw invalid({ category: 'Choose a category first' });
+      const key = normaliseBrand(name);
+      const deptIds = depts.map((d) => d.id);
+      const visible = [
+        ...MOCK_BRANDS.filter((b) => deptIds.includes(b.departmentId)).map((b) => ({ id: b.id, name: b.name, status: 'APPROVED' as const, products: b.products })),
+        ...ctx.db.pendingBrands.filter((b) => deptIds.includes(b.departmentId)).map((b) => ({ id: b.id, name: b.name, status: 'PENDING' as const, products: 0 }))
+      ].map((b) => ({ id: b.id, name: b.name, source: b.status === 'PENDING' ? ('OWN' as const) : ('CATALOG' as const), status: b.status, ownProducts: 0, products: b.products }));
+      const exact = visible.find((b) => normaliseBrand(b.name) === key) ?? null;
+      if (exact) return { exact, similar: [] };
+      const problem = brandNameProblem(name);
+      if (problem) throw invalid({ 'attributes.brand': problem });
+      return { exact: null, similar: visible.filter((b) => nearBrandKeys(key, normaliseBrand(b.name))).slice(0, 3) };
+    })
+  ),
   http.post(
     `${W}/catalog/brands`,
     route(async (ctx) => {
@@ -2313,6 +2336,8 @@ export const sellerHandlers = [
       if (known) return { created: false, brand: { id: known.id, name: known.name, source: 'CATALOG' as const, status: 'APPROVED' as const, ownProducts: 0, products: known.products } };
       const mine = ctx.db.pendingBrands.find((x) => normaliseBrand(x.name) === key && deptIds.includes(x.departmentId));
       if (mine) return { created: false, brand: { id: mine.id, name: mine.name, source: 'OWN' as const, status: 'PENDING' as const, ownProducts: 0, products: 0 } };
+      const problem = brandNameProblem(name);
+      if (problem) throw invalid({ 'attributes.brand': problem });
       const made = { id: nextId(ctx.db, 'brand'), name, departmentId: depts[0]?.id ?? '' };
       ctx.db.pendingBrands.push(made);
       return { created: true, brand: { id: made.id, name, source: 'OWN' as const, status: 'PENDING' as const, ownProducts: 0, products: 0 } };

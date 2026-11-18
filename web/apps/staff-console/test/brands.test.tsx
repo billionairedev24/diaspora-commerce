@@ -62,9 +62,20 @@ describe('the brand queue', () => {
     expect(within(row).getByText('Lagos Threads')).toBeInTheDocument();
     expect(within(row).getByText('2 products')).toBeInTheDocument();
     expect(within(row).getByText('Fashion')).toBeInTheDocument();
-    expect(screen.queryByText('Nike')).not.toBeInTheDocument();
+    expect(screen.queryByText('Nike', { selector: 'strong' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Waiting for review (4)' })).toHaveAttribute('aria-pressed', 'true');
     expect(document.body.textContent).not.toMatch(/brand-cotedivoire/);
+  });
+
+  it('flags a possible duplicate in the queue and in the sheet, so staff can merge it instead of approving a second Nike', async () => {
+    const user = userEvent.setup();
+    await renderScreen(<BrandsView />);
+    const row = (await screen.findByText('Nikee')).closest('tr')!;
+    expect(within(row).getByText('Nike')).toBeInTheDocument();
+    expect(screen.getByText('Possible duplicate of')).toBeInTheDocument();
+    expect(within(screen.getByText('Cotedivoire').closest('tr')!).queryByText('Nike')).not.toBeInTheDocument();
+    await user.click(screen.getByText('Nikee'));
+    expect(within(await sheet()).getByText('Possible duplicate of')).toBeInTheDocument();
   });
 
   it('shows the other statuses on request and searches by name', async () => {

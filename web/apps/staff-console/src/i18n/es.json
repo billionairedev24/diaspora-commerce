@@ -1980,6 +1980,7 @@
   "st.brand.col.products": "Productos",
   "st.brand.col.scope": "Se aplica a",
   "st.brand.col.requested": "Solicitada",
+  "st.brand.col.similar": "Posible duplicado de",
   "st.brand.byStaff": "Añadida por el personal",
   "st.brand.productsCount": "{n} productos",
   "st.brand.scopeMore": "{first} +{n} más",

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, expectTypeOf, it } from 'vitest';
 
-import { type BrandList, type CreatedBrand, createSellerApiClient, isApiError } from '../src';
+import { type BrandList, type BrandSuggestions, type CreatedBrand, createSellerApiClient, isApiError } from '../src';
 import type { components } from '../src/generated/gateway-bff-seller';
 import { resetSellerDb } from '../src/mocks/seller';
 import { handleSellerMockRequest } from '../src/mocks/seller-runtime';
@@ -17,6 +17,7 @@ describe('brand choices', () => {
   it('match the generated contract types', () => {
     expectTypeOf<BrandList>().toExtend<components['schemas']['BrandList']>();
     expectTypeOf<CreatedBrand>().toExtend<components['schemas']['CreatedBrand']>();
+    expectTypeOf<BrandSuggestions>().toExtend<components['schemas']['BrandSuggestions']>();
   });
 
   it('never offer a brand of an unrelated department', async () => {
@@ -60,6 +61,32 @@ describe('typing a brand in', () => {
   it('refuses a name without letters and a missing category', async () => {
     await expect(api.createBrand('!!', { category: 'pt-dresses' })).rejects.toSatisfy((e) => isApiError(e) && e.status === 422);
     await expect(api.createBrand('Nike', {})).rejects.toSatisfy((e) => isApiError(e) && e.status === 422);
+  });
+});
+
+describe('did you mean', () => {
+  it('names the brand a typed name already is, ignoring case, accents and punctuation', async () => {
+    expect((await api.suggestBrands('LEVIS', { category: 'pt-dresses' })).exact).toMatchObject({ name: 'Levi’s', status: 'APPROVED' });
+    expect((await api.suggestBrands(' nike ', { category: 'pt-dresses' })).similar).toEqual([]);
+  });
+
+  it('suggests the close name for a typing mistake and nothing for an unrelated name', async () => {
+    const near = await api.suggestBrands('Nikee', { category: 'pt-dresses' });
+    expect(near.exact).toBeNull();
+    expect(near.similar.map((b) => b.name)).toEqual(['Nike']);
+    expect((await api.suggestBrands('Cotedivoire Studio', { category: 'pt-dresses' })).similar).toEqual([]);
+  });
+
+  it('never suggests a brand of an unrelated department or another seller’s pending brand', async () => {
+    expect((await api.suggestBrands('Maggii', { category: 'pt-dresses' })).similar).toEqual([]);
+    expect((await api.suggestBrands('Maggii', { productType: 'grocery' })).similar.map((b) => b.name)).toEqual(['Maggi']);
+  });
+
+  it('is refused for names that could not be added', async () => {
+    for (const bad of ['me@shop.com', 'www.cheap.ng', 'Fuck Brand']) {
+      await expect(api.suggestBrands(bad, { category: 'pt-dresses' })).rejects.toSatisfy((e) => isApiError(e) && e.status === 422);
+      await expect(api.createBrand(bad, { category: 'pt-dresses' })).rejects.toSatisfy((e) => isApiError(e) && e.status === 422);
+    }
   });
 });
 

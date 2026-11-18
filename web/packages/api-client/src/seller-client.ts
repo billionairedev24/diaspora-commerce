@@ -35,7 +35,9 @@ import {
   type BookingCard,
   BookingCardSchema,
   type BrandList,
+  type BrandSuggestions,
   BrandListSchema,
+  BrandSuggestionsSchema,
   type BrandScope,
   type BusinessPageSettings,
   type BusinessPageSettingsInput,
@@ -599,6 +601,9 @@ export function createSellerApiClient(options: ApiClientOptions) {
     /** Adds a brand the seller typed: the existing match, or a pending brand reviewed by AfroTransact. */
     createBrand: (name: string, scope: BrandScope): Promise<CreatedBrand> =>
       request('/v1/seller/catalog/brands', CreatedBrandSchema, { method: 'POST', body: { name, category: scope.category, productType: scope.productType } }),
+    /** "Did you mean": the brand a typed name already is in the category, or up to three close names. 422 when the name cannot be added. */
+    suggestBrands: (name: string, scope: BrandScope, signal?: AbortSignal): Promise<BrandSuggestions> =>
+      request('/v1/seller/catalog/brands/similar', BrandSuggestionsSchema, { query: { name, category: scope.category || undefined, productType: scope.productType || undefined }, signal }),
     getCategoryTree: (signal?: AbortSignal): Promise<CategoryNode[]> => request('/v1/seller/catalog/categories', z.array(CategoryNodeSchema), { signal }),
     getProductType: (code: string, signal?: AbortSignal): Promise<ProductTypeSchema> =>
       request(`/v1/seller/catalog/product-types/${enc(code)}`, ProductTypeSchemaSchema, { signal }),

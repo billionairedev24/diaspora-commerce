@@ -69,6 +69,7 @@ export const sellerKeys = {
   imageLibrary: (orgId: string) => [...sellerKeys.org(orgId), 'image-library'] as const,
   imageLibraryPage: (orgId: string, q: ImageLibraryQuery) => [...sellerKeys.imageLibrary(orgId), q] as const,
   brands: (orgId: string, scope: BrandScope, q: string) => [...sellerKeys.org(orgId), 'brands', scope.category ?? '', scope.productType ?? '', q] as const,
+  brandSuggestions: (orgId: string, scope: BrandScope, name: string) => [...sellerKeys.org(orgId), 'brand-suggestions', scope.category ?? '', scope.productType ?? '', name] as const,
   categoryRequests: (orgId: string) => [...sellerKeys.org(orgId), 'category-requests'] as const,
   inventory: (orgId: string, lowStock: boolean) => [...sellerKeys.org(orgId), 'inventory', lowStock] as const,
   payouts: (orgId: string) => [...sellerKeys.org(orgId), 'payouts'] as const,
@@ -211,6 +212,15 @@ export const sellerQueries = {
       queryFn: ({ signal }) => api.listBrands(scope, q, signal),
       enabled: Boolean(scope.category || scope.productType),
       placeholderData: keepPreviousData,
+      staleTime: 60_000
+    }),
+  /** "Did you mean" for a typed brand name (two characters or more). */
+  brandSuggestions: (api: SellerApiClient, orgId: string, scope: BrandScope, name: string) =>
+    queryOptions({
+      queryKey: sellerKeys.brandSuggestions(orgId, scope, name),
+      queryFn: ({ signal }) => api.suggestBrands(name, scope, signal),
+      enabled: name.length >= 2 && Boolean(scope.category || scope.productType),
+      retry: false,
       staleTime: 60_000
     }),
   categoryRequests: (api: SellerApiClient, orgId: string) =>
