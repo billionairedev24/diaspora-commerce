@@ -17,6 +17,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 
 import { SettingsPage } from '@/components/settings/SettingsShell';
+import { ControlRowAction } from '@/components/ui/ControlRowAction';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { Switch } from '@/components/ui/Switch';
 import { sellerApi } from '@/lib/api';
@@ -444,7 +445,7 @@ export function StorePageView() {
 
       <Group id="sp-social" title="Social links" help="Full https links to your own profiles.">
         {draft.social.map((link, i) => (
-          <div key={i} className="grid gap-2 sm:grid-cols-[10rem_1fr_auto] sm:items-end">
+          <div key={i} data-testid="social-row" className="grid gap-2 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:items-start sm:gap-x-3">
             <Field label="Network">
               {(a11y) => (
                 <select {...a11y} className={fieldStyles.control} value={link.network} disabled={!editable} onChange={(e) => patch((d) => ({ ...d, social: d.social.map((x, j) => (j === i ? { ...x, network: e.target.value as StoreSocialNetwork } : x)) }))}>
@@ -457,9 +458,11 @@ export function StorePageView() {
               )}
             </Field>
             <TextField label="Link" placeholder={NETWORKS.find((n) => n.id === link.network)?.example} value={link.url} error={err(`social.${i}.url`)} disabled={!editable} onChange={(e) => patch((d) => ({ ...d, social: d.social.map((x, j) => (j === i ? { ...x, url: e.target.value } : x)) }))} />
-            <Button type="button" variant="neutral" size="sm" disabled={!editable} onClick={() => patch((d) => ({ ...d, social: d.social.filter((_, j) => j !== i) }))}>
-              Remove
-            </Button>
+            <ControlRowAction>
+              <Button type="button" variant="neutral" className="max-sm:w-full" aria-label={`Remove ${NETWORKS.find((n) => n.id === link.network)?.name ?? link.network} link`} disabled={!editable} onClick={() => patch((d) => ({ ...d, social: d.social.filter((_, j) => j !== i) }))}>
+                Remove
+              </Button>
+            </ControlRowAction>
           </div>
         ))}
         {draft.social.length < MAX_SOCIAL ? (

@@ -170,3 +170,39 @@ describe('Settings > Store page for a provider', () => {
     expect(r.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical').map((v) => `${v.id}: ${v.nodes[0]?.html.slice(0, 80)}`)).toEqual([]);
   }, 20_000);
 });
+
+describe('Settings > Store page > Social links row', () => {
+  beforeEach(() => {
+    resetSellerDb(new Date());
+    asRole(null);
+  });
+
+  it('keeps the network, link and Remove controls in one row, with Remove named by its network', async () => {
+    const user = userEvent.setup();
+    await renderScreen(<StorePageView />);
+    await user.click(await screen.findByRole('button', { name: 'Add a link' }));
+    const row = await screen.findByTestId('social-row');
+    const select = within(row).getByLabelText('Network');
+    const input = within(row).getByLabelText('Link');
+    const remove = within(row).getByRole('button', { name: 'Remove Instagram link' });
+    // same row container, three direct cells (select cell, link cell, action cell), top-aligned, no end/baseline alignment
+    expect(row.children).toHaveLength(3);
+    expect(row.className).toMatch(/sm:items-start/);
+    expect(row.className).not.toMatch(/items-end/);
+    const action = remove.closest('[data-control-row-action]');
+    expect(action).not.toBeNull();
+    expect(action!.parentElement).toBe(row);
+    // the action cell carries a hidden label spacer so Remove shares the controls' line
+    expect(action!.querySelector('[aria-hidden="true"]')).not.toBeNull();
+    // stacks full width on narrow screens
+    expect(remove.className).toMatch(/max-sm:w-full/);
+    // logical CSS and tokens only: no physical margins or raw colours on the row
+    expect(row.outerHTML).not.toMatch(/\b(ml|mr|pl|pr|left|right)-|#[0-9a-f]{3,8}\b/i);
+    // the name follows the chosen network
+    await user.selectOptions(select, 'tiktok');
+    expect(within(row).getByRole('button', { name: 'Remove TikTok link' })).toBeInTheDocument();
+    await user.type(input, 'https://tiktok.com/@shop');
+    await user.click(within(row).getByRole('button', { name: 'Remove TikTok link' }));
+    expect(screen.queryByTestId('social-row')).toBeNull();
+  });
+});
