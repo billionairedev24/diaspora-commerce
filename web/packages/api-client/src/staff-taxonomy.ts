@@ -180,7 +180,9 @@ export const StaffBrandSchema = z.object({
   /** Listings that hold the brand, and the distinct sellers behind them. */
   products: z.number().int(),
   sellers: z.number().int(),
-  scope: z.array(BrandScopeNodeSchema)
+  scope: z.array(BrandScopeNodeSchema),
+  /** For a pending brand a seller typed in: close names it may duplicate ("possible duplicate of ..."). */
+  similarNames: z.array(z.string()).default([])
 });
 export type StaffBrand = z.infer<typeof StaffBrandSchema>;
 

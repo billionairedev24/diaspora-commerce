@@ -41,7 +41,7 @@ export interface MockTaxonomyState {
   seq: number;
 }
 
-export type MockBrand = Omit<StaffBrand, 'scope'> & { scope: string[] };
+export type MockBrand = Omit<StaffBrand, 'scope' | 'similarNames'> & { scope: string[]; similarNames?: string[] };
 
 const PERMISSION = 'catalog:taxonomy';
 const NEW_TYPE = '__new__';
@@ -276,7 +276,7 @@ function seedBrands(nodes: TaxonomyNode[]): MockBrand[] {
     brand('brand-nikee', 'Nikee', 'PENDING', 'Fashion', 'Accra Spice Co.', 1, 1),
     brand('brand-adire', 'Adire Lagos', 'PENDING', 'Fashion', 'Nile Beauty', 5, 3),
     brand('brand-shea', 'Shea Gold', 'PENDING', 'Beauty', 'Nile Beauty', 3, 1)
-  ];
+  ].map((b) => (b.id === 'brand-nikee' ? { ...b, similarNames: ['Nike'] } : b));
 }
 
 /** Counts and children computed from the stored nodes (the tree is read, never stored with them). */
@@ -653,6 +653,7 @@ export function taxonomyHandlers(W: string, deps: PreorderHandlerDeps) {
   const brandKey = (s: string) => s.normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
   const brandView = (ctx: PreorderCtx, b: MockBrand): StaffBrand => ({
     ...b,
+    similarNames: b.similarNames ?? [],
     scope: b.scope.flatMap((id) => {
       const n = st(ctx).nodes.find((x) => x.id === id);
       return n ? [{ nodeId: n.id, path: n.path, level: n.level }] : [];

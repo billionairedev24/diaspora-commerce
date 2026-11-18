@@ -1756,6 +1756,9 @@ export type BrandList = z.infer<typeof BrandListSchema>;
 /** Typing a brand in: the existing match (created false) or a new pending brand. */
 export const CreatedBrandSchema = z.object({ brand: BrandSchema, created: z.boolean() });
 export type CreatedBrand = z.infer<typeof CreatedBrandSchema>;
+/** What typing a name would do: the brand it already is (exact) or the close names the seller probably meant (similar). */
+export const BrandSuggestionsSchema = z.object({ exact: BrandSchema.nullable(), similar: z.array(BrandSchema) });
+export type BrandSuggestions = z.infer<typeof BrandSuggestionsSchema>;
 /** Which category (node id or code) or product type the brands are for. */
 export interface BrandScope {
   category?: string;

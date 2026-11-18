@@ -1,6 +1,6 @@
 # Listing rules, approval gating and launch shipping (APPROVED SPEC)
 
-**Status:** approved by the owner as recommended (all of D1 to D22). Agents must follow this strictly. Source of the field and category rules: `tools/listing-rules/rules.json` (generated from the reviewed matrix; edit that file and this document together). Reference: Amazon Seller Central practice, with the owner-supplied "Categories and products that require approval" page.
+**Status:** approved by the owner as recommended (all of D1 to D22; D23 added 18 Nov 2026 after owner feedback, in review). Agents must follow this strictly. Source of the field and category rules: `tools/listing-rules/rules.json` (generated from the reviewed matrix; edit that file and this document together). Reference: Amazon Seller Central practice, with the owner-supplied "Categories and products that require approval" page.
 
 Related: `docs/engineering/category-tax-design.md` (tax), `docs/engineering/shipping-and-tax-data.md` (shipping today), `docs/runbooks/application-review-workflow.md` (review workflow), `docs/engineering/service-areas.md`.
 
@@ -155,6 +155,29 @@ Related: `docs/engineering/category-tax-design.md` (tax), `docs/engineering/ship
 - **Decision:** Keep community pre-order windows as built. In checkout the line shows the window date and the delivery fee rule of that run. Pre-order lines and in-stock lines go in separate packages, each with its own fee. This needs end-to-end tests with the new flat fee.
 - **Amazon standard:** Amazon pre-orders charge at ship time and show a release date.
 - **Why:** A pre-order must never be blocked or double-charged by the shipping change.
+
+### D23. Is the brand always required? (owner feedback 18 Nov 2026: "groceries need no brand")
+
+- **Decision:** No. The brand is decided per category in the same matrix as every other field, never in code or in the UI. Four
+  outcomes: **required** (name the brand; there is no "No brand" choice), **brand or reason** (a brand, or "No brand" or "Handmade";
+  the matrix cell is `R*`), **optional** (leave it empty or choose "No brand") and **hidden** (no question). The audit of all 73
+  categories is in section 7. The product form, the API, the bulk upload and the offer paths read the same cell: where the rule says
+  optional the server never asks for a brand and the form shows no "required" mark.
+- **Where it matters:** the brand is required where it identifies the responsible manufacturer for safety or recalls (baby formula
+  and bottles, supplements, OTC medicines, medical devices, first aid, medicated skincare, car seats, toys), where authenticity is
+  the risk (electronics, fragrance, gift cards) and where the brand is the whole product (gift cards). It is brand or reason where
+  branded goods are also made by a tailor, a maker or a cook (clothing, bags, jewelry, skin and hair care, household goods). It is
+  optional where loose, local, store-brand, bulk or handmade goods are normal (groceries, drinks, pet food, hair accessories, wigs,
+  bedding, candles, school supplies, sports goods, digital products). It is hidden where the seller is the maker or there is no
+  product (food service, services, books and magazines: books ask for author and publisher instead, in the product type).
+- **A brand that is not in the list:** the seller types it and chooses "Add “…” as a new brand". It is stored as a seller-proposed
+  brand (status `PENDING`), usable at once by that seller, attached to the listing, queued for staff to approve, merge into an
+  existing brand or reject. The seller is never held up by that review. See section 7.
+- **Amazon standard:** Amazon requires a brand or "Generic" for most categories and lets sellers request a missing brand; it
+  exempts some categories. We replace "Generic" with an honest "No brand" reason.
+- **Why:** A mandatory brand for rice, produce or spices produces made-up brands ("Generic", "N/A") that pollute search facets and the
+  brand registry, and blocks honest sellers of loose goods. Where the brand is required, the picker always lets the seller add a
+  missing one, so nobody is stuck.
 
 ## 2. Approval model
 
@@ -359,3 +382,70 @@ Clarifications this implementation made:
 - The label photo is an image with `role: LABEL`, kept last in `images` so the first picture stays the main image.
 - Description is required for every kind (it was optional before).
 
+## 7. Brand rules, the brand picker and brand gating
+
+### 7.1 The brand cell per category (D23)
+
+The kind-level cells are in the matrix of section 4 (Brand row). A category overrides its kind in `rules.json` (`overrides.brand`):
+perfumes and fragrances are `required` (kind BEA is brand or reason); hair accessories, wigs, bedding, decor and candles, pet
+grooming, handmade products, school and office supplies, sports goods and gift baskets are `optional` (kind HOM is brand or reason,
+kind GFT is required); fabrics (provisional) are optional. `BrandRulesPerCategoryTest` and the seller center test
+`product form: the brand rule is decided per category` write the decision of every category out, so a change to the source cannot
+slip through.
+
+| Brand | Categories (count) | Why |
+|---|---|---|
+| Required, no way out (15) | Baby food & formula, Baby bottles, Dietary supplements, OTC medicines, Medical devices, First aid & wound care, Medicated skincare, Car seats, Toys & games, Perfumes & fragrances, Computers & laptops, Gaming, Phones, TVs & audio, Gift cards | Safety or recall traceability (the brand is the responsible manufacturer, and the safety certificate or FDA listing is filed against it), or counterfeit risk (electronics, fragrance), or the brand is the product (gift cards). If the brand is not in the list the seller adds it. |
+| Brand or reason, `R*` (12) | Adult clothing & footwear, Children's clothing, Bags & purses, Jewelry & accessories, Skincare & cosmetics, Haircare, Feminine hygiene, Personal hygiene, Cleaning & paper products, Furniture & small appliances, Kitchenware & cookware, Diapers & wipes | Branded goods that are also made by a tailor, a maker or a small producer. "No brand" or "Handmade" is accepted with no further reason. Hygiene, cleaning and appliance categories keep the question because shoppers and recalls depend on it. |
+| Optional (34) | All 15 groceries and food categories (pantry, candy, oils, flours, nuts, snacks, pasta, rice, spices, dairy, produce, frozen meals, meat and fish), all 6 beverage categories, Pet food, Hair accessories, Wigs, Bedding, Decor & candles, Pet grooming, Handmade, School & office supplies, Sports goods, Gift baskets, all 5 digital product categories | Loose, local, store-brand, bulk, handmade and digital goods are normal. The seller may leave it empty or choose "No brand" (listed first). A brand, when given, still feeds search facets and the registry. Pet food keeps its label photo and species rules. |
+| Hidden (12) | Bakery products, Prepared meals, Printed books, Magazines and the 8 service categories (Event tickets, Fitness classes, Hair & beauty appointments, Laundry & dry cleaning, Photography & media, Repairs, Residential cleaning, Tutoring & consulting) | The seller is the maker (food service) or there is no goods brand (services, events, tickets). Books and magazines ask for author and publisher through the product type. |
+
+### 7.2 The picker
+
+One combobox (`BrandField`, backed by `GET /v1/seller/catalog/brands`, `.../brands/similar` and `POST .../brands`):
+
+- Searches the brands of the chosen category's department (never another department's), the organisation's most used first.
+- Always offers **Add “<typed text>” as a new brand** for any typed name. A name that differs from a listed brand only in case,
+  accents or punctuation ("LEVIS", "Levi’s") is not added: the listed brand is returned and used, so no duplicate is created.
+- **Did you mean:** while the seller types, the picker asks `GET /v1/brands/similar`. A close name (one or two typing mistakes, or
+  the same name with a few letters more; "Nikee" for "Nike") is shown as "Did you mean this brand?" beside the Add row. The
+  seller may still add the new name; the review queue then shows "Possible duplicate of Nike" so staff can merge it.
+- Optional categories list **No brand** first. Brand-or-reason categories list "No brand" and "Handmade (no brand)" after the brands.
+  Required categories list neither, and the tooltip says why a brand is needed.
+- A new brand is `PENDING`, visible only to its organisation, attached to the listing, and recorded in the taxonomy audit trail
+  as `BRAND_PROPOSED` (actor: the seller organisation). It appears in Staff console, Catalog, Brands, "Waiting for review", naming the
+  seller (never an id), the products that hold it, where it applies and the possible duplicates. Staff approve it, merge it into an
+  existing brand (the listings follow) or reject it (the listing must pick another brand when next edited). A seller is never
+  blocked while it waits.
+- **Limits:** names are 2 to 120 characters; letters, digits and `& ' ’ . , - + ( ) ! / ® ™` only, starting with a letter or digit,
+  with at least one letter; no web addresses, no e-mail addresses, no profanity (whole words, English, French and Spanish seed list;
+  staff catch the rest), no runs of five identical characters, and "Generic", "N/A", "No brand" are read as the "No brand" reason,
+  never a brand. At most **10 new brands per organisation per rolling 24 hours** (`at.catalog.brands.max-new-per-org-per-day`) and
+  100 awaiting review. A name that matches an existing brand is never refused by a limit. Pending brands are tenant-isolated
+  (`Brand.offeredTo`); "did you mean" shows only approved brands and the organisation's own.
+- **No squatting:** a typed name that matches an approved brand in the category always resolves to that brand, never a copy. The
+  same name in an unrelated department ("Apple" produce and "Apple" phones) is a separate brand, scoped to its department.
+
+### 7.3 Brand gating, hygiene gating and the barcode path
+
+- Gating (D2) is by brand **name**, through the selling rules (`BRAND` and `BRAND_IN_CATEGORY` scopes, names compared without
+  case, spaces and punctuation), and is independent of the registry status. In a `brand_gated` category (clothing, bags,
+  electronics, perfume) a listing needs the seller's approval only when its brand name is a gated brand. A listing with an
+  unbranded reason, or a new brand whose name is not gated, goes live like an open category. A pending brand never blocks a listing.
+  A `PENDING` brand whose name equals a gated brand still triggers the gate, because the gate reads the name, not the status, so
+  a seller cannot dodge approval by adding a gated brand as "new".
+- A required brand category (electronics, perfume) refuses "No brand" with: "This category needs a brand. If it is not listed,
+  type it and add it as a new brand." Nothing waits on staff; the new brand is usable at once.
+- Hygiene (D9): condition is hidden; the brand stays asked (brand or reason) for hygiene, feminine hygiene and diapers so recalls
+  and shopper trust work.
+- Barcode (D14): unchanged. In a brand-gated category a listing without a barcode needs staff to accept the exemption (reason
+  `BRAND_GATED_CATEGORY`) whatever its brand. Outside gated categories a no-barcode listing is checked against the "known GS1
+  brand" rule using the brand's id (a brand with enough pages that carry barcodes). A new pending brand has none, so it is not
+  flagged; once staff merge it into a known brand its listings are.
+- Merge: the products of the merged brand are repointed to the target and republished (search facets follow).
+
+### 7.4 Things this change does not do
+
+- The seller service compares gated brand names without folding accents ("Hermès" and "Hermes" are different gate keys); the
+  catalog registry does fold them, so a typed name resolves to the registry spelling first. Folding the gate key needs a data
+  migration of stored selling-rule keys and is left for the owner (see the backlog story).

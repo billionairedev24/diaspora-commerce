@@ -91,13 +91,13 @@ describe('product form v2 (S309): wide cards of sections with proper dropdowns',
     const brand = await screen.findByRole('combobox', { name: 'Brand or label' });
     await user.click(brand);
     expect(await screen.findByRole('option', { name: 'Nike' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'No brand / unbranded' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'No brand' })).toBeInTheDocument();
     expect(screen.getByText('Brands in Fashion')).toBeInTheDocument();
     // a grocery or beauty brand is never offered under a dress
     expect(screen.queryByRole('option', { name: 'Maggi' })).not.toBeInTheDocument();
     expect(screen.queryByRole('option', { name: 'Cantu' })).not.toBeInTheDocument();
     await user.type(brand, 'Zuri Naturals');
-    await user.click(screen.getByRole('option', { name: 'Add “Zuri Naturals” as a new brand (reviewed by AfroTransact)' }));
+    await user.click(screen.getByRole('option', { name: 'Add “Zuri Naturals” as a new brand' }));
     await waitFor(() => expect(brand).toHaveValue('Zuri Naturals'));
     await user.click(brand);
     await user.click(await screen.findByRole('option', { name: 'Nike' }));

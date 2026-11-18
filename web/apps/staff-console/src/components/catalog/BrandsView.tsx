@@ -72,6 +72,7 @@ export function BrandsView() {
           return first ? (rest.length ? t('st.brand.scopeMore', { first: first.path, n: rest.length }) : first.path) : '';
         }
       },
+      { id: 'similar', header: t('st.brand.col.similar'), accessorFn: (b) => b.similarNames.join(', '), enableSorting: false, size: 200 },
       { id: 'requested', header: t('st.brand.col.requested'), accessorFn: (b) => when(b.createdAt), enableSorting: false, size: 170 },
       rowActionsColumn<StaffBrand>({
         header: t('st.rows.actionsHeader'),
