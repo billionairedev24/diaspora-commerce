@@ -55,6 +55,7 @@ POST /v1/category-requests/{id}/approve | STAFF_ONLY | catalog:taxonomy [princip
 POST /v1/category-requests/{id}/reject | STAFF_ONLY | catalog:taxonomy [principal-guard] | -
 GET /v1/brands | ORG_SCOPED_LIST | BrandCatalogServiceImpl.options: own pending brands via owners.ownerFor(actor).orgId | CatalogTenantIsolationTest
 POST /v1/brands | ORG_OWNED | BrandCatalogServiceImpl.create: org = owners.ownerFor(actor) | CatalogTenantIsolationTest
+GET /v1/brands/similar | ORG_SCOPED_LIST | BrandCatalogServiceImpl.suggest: exact and near matches limited to approved brands and the own pending ones via BrandResolverImpl.similar(owners.ownerFor(actor).orgId) | BrandResolverImplTest
 @BrandAdminController | STAFF_ONLY | BrandAdminServiceImpl: catalog:taxonomy [principal-guard] | -
 @TaxonomyController | STAFF_ONLY | TaxonomyAdminServiceImpl: catalog:taxonomy [principal-guard] | -
 @TaxonomyImportController | STAFF_ONLY | TaxonomyImportServiceImpl: catalog:taxonomy [principal-guard] | -

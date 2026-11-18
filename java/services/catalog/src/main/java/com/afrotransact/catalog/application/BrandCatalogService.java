@@ -32,6 +32,22 @@ public interface BrandCatalogService {
     BrandCreated create(String name, String productType, String category);
 
     /**
+     * What typing this name would do: the brand it would match exactly (case, accents and punctuation ignored), and the
+     * close names a seller probably meant ("Adidass" for "Adidas"). Reads only; shows approved brands and the
+     * organisation's own pending ones, never another seller's.
+     *
+     * @throws com.afrotransact.catalog.domain.CatalogRuleViolation when the name could not be added (a link, profanity ...)
+     */
+    BrandSuggestions suggest(String name, String productType, String category);
+
+    /**
+     * @param exact   the brand the name already is, or null
+     * @param similar close names, best first (empty when there is an exact match)
+     */
+    record BrandSuggestions(BrandChoice exact, List<BrandChoice> similar) {
+    }
+
+    /**
      * @param departmentId   the department of the category (the group header "Brands in …")
      * @param departmentName its name, null when the request named only a product type used in several departments
      */

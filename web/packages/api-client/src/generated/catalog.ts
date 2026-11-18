@@ -18,9 +18,29 @@ export interface paths {
         put?: never;
         /**
          * Add a brand the seller typed (pending staff review)
-         * @description Returns the existing brand (created=false) when the registry already has this name in the category, ignoring case, accents and punctuation. Otherwise creates a PENDING brand scoped to the category's department, usable at once by this organisation. 201 when created, 200 for a match.
+         * @description Returns the existing brand (created=false) when the registry already has this name in the category, ignoring case, accents and punctuation. Otherwise creates a PENDING brand scoped to the category's department, usable at once by this organisation, recorded in the audit trail and queued for staff (approve, merge into an existing brand or reject). 201 when created, 200 for a match. 422 with fieldErrors on attributes.brand when the name is not allowed (a web address, an e-mail address, profanity, odd characters, no letters) or a limit is reached (new brands per organisation per day, brands awaiting review); a name that matches an existing brand is never refused by a limit.
          */
         post: operations["createBrand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/brands/similar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Did you mean: the brand a typed name is, or close names
+         * @description For the brand combobox while the seller types a name that is not listed. exact is the brand the name already is in this category (case, accents and punctuation ignored); similar lists close names (one or two typing mistakes, or the same name with a few letters more). 422 with fieldErrors when the name could not be added (a web address, an e-mail address, profanity, odd characters).
+         */
+        get: operations["suggestBrands"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3720,6 +3740,8 @@ export interface components {
             /** Format: int64 */
             sellers?: number;
             scope?: components["schemas"]["BrandScopeNode"][];
+            /** @description For a pending brand a seller typed in: close names it may duplicate (possible duplicate of ...); empty otherwise */
+            similarNames?: string[];
         };
         BrandScopeNode: {
             /** Format: uuid */
@@ -3770,6 +3792,11 @@ export interface components {
         Skipped: {
             sku?: string;
             reason?: string;
+        };
+        /** @description What typing a name would do: the brand it already is (exact), or the close names the seller probably meant (similar, at most three). Never another seller's pending brand. */
+        BrandSuggestions: {
+            exact?: components["schemas"]["Brand"];
+            similar?: components["schemas"]["Brand"][];
         };
         CreateBrandRequest: {
             name: string;
@@ -4524,6 +4551,30 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["CreatedBrand"];
+                };
+            };
+        };
+    };
+    suggestBrands: {
+        parameters: {
+            query: {
+                name: string;
+                productType?: string;
+                category?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BrandSuggestions"];
                 };
             };
         };

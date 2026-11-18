@@ -73,12 +73,13 @@ class BrandAdminServiceImpl implements BrandAdminService {
         List<BrandUsage> rows = brands.search(f.statuses(), needle, f.scopeNodeId(), limit, offset);
         Map<UUID, CategoryNode> nodes = nodes();
         Map<UUID, String> names = mergedNames(rows.stream().map(BrandUsage::brand).toList());
+        Map<UUID, List<String>> similar = similarNames(rows.stream().map(BrandUsage::brand).toList());
         Map<BrandStatus, Long> counts = new EnumMap<>(BrandStatus.class);
         for (BrandStatus s : BrandStatus.values()) {
             counts.put(s, 0L);
         }
         brands.countByStatus().forEach(c -> counts.put(c.status(), c.count()));
-        return new BrandPage(rows.stream().map(u -> view(u, nodes, names)).toList(),
+        return new BrandPage(rows.stream().map(u -> view(u, nodes, names, similar)).toList(),
                 brands.count(f.statuses(), needle, f.scopeNodeId()), counts);
     }
 
@@ -87,7 +88,7 @@ class BrandAdminServiceImpl implements BrandAdminService {
     public BrandView get(UUID id) {
         permissions.require(CatalogPermissions.TAXONOMY);
         BrandUsage usage = brands.usage(id).orElseThrow(BrandAdminServiceImpl::notFound);
-        return view(usage, nodes(), mergedNames(List.of(usage.brand())));
+        return view(usage, nodes(), mergedNames(List.of(usage.brand())), similarNames(List.of(usage.brand())));
     }
 
     // ------------------------------------------------------------------ creating
@@ -382,11 +383,25 @@ class BrandAdminServiceImpl implements BrandAdminService {
         return out;
     }
 
-    private static BrandView view(BrandUsage usage, Map<UUID, CategoryNode> nodes, Map<UUID, String> mergedNames) {
+    /** The names of the close brands recorded for the pending ones among these (only brands that still exist). */
+    private Map<UUID, List<String>> similarNames(List<Brand> of) {
+        Map<UUID, List<UUID>> ids = brands.similarOf(of.stream().filter(b -> b.status() == BrandStatus.PENDING)
+                .map(Brand::id).toList());
+        Map<UUID, String> names = new HashMap<>();
+        brands.findAllById(ids.values().stream().flatMap(List::stream).distinct().toList())
+                .forEach(b -> names.put(b.id(), b.name()));
+        Map<UUID, List<String>> out = new HashMap<>();
+        ids.forEach((id, others) -> out.put(id, others.stream().map(names::get).filter(n -> n != null).sorted().toList()));
+        return out;
+    }
+
+    private static BrandView view(BrandUsage usage, Map<UUID, CategoryNode> nodes, Map<UUID, String> mergedNames,
+                                  Map<UUID, List<String>> similar) {
         List<ScopeNode> scope = usage.brand().scope().stream().map(nodes::get).filter(n -> n != null)
                 .sorted((a, b) -> a.path().compareTo(b.path()))
                 .map(n -> new ScopeNode(n.id(), n.path(), n.level().name())).toList();
-        return new BrandView(usage, mergedNames.get(usage.brand().mergedIntoId()), scope);
+        return new BrandView(usage, mergedNames.get(usage.brand().mergedIntoId()), scope,
+                similar.getOrDefault(usage.brand().id(), List.of()));
     }
 
     private void record(Actor actor, String action, Brand brand, String reason, Map<String, Object> details) {

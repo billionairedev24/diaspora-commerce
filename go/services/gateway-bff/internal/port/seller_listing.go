@@ -147,6 +147,8 @@ type SellerListingClient interface {
 	Brands(ctx context.Context, bearer string, q domain.BrandQuery) (domain.BrandList, error)
 	// CreateBrand is catalog POST /v1/brands (adds a pending brand, or returns the existing match).
 	CreateBrand(ctx context.Context, bearer, name string, q domain.BrandQuery) (domain.CreatedBrand, error)
+	// SuggestBrands is catalog GET /v1/brands/similar (the exact match and the "did you mean" names for a typed name).
+	SuggestBrands(ctx context.Context, bearer, name string, q domain.BrandQuery) (domain.BrandSuggestions, error)
 }
 
 // CatalogImageUsage is catalog's ImageUsage.

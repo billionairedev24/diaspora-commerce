@@ -37,14 +37,16 @@ final class BrandAdminDtos {
     record BrandResponse(UUID id, String name, BrandStatus status, UUID mergedIntoId, String mergedIntoName,
                          String createdByOrg, Instant createdAt, Instant updatedAt, long version, String decidedBy,
                          Instant decidedAt, String decisionReason, long products, long sellers,
-                         List<ScopeResponse> scope) {
+                         List<ScopeResponse> scope,
+                         @Schema(description = "For a pending brand a seller typed in: close names it may duplicate "
+                                 + "(possible duplicate of ...); empty otherwise") List<String> similarNames) {
 
         static BrandResponse of(BrandView v) {
             Brand b = v.usage().brand();
             return new BrandResponse(b.id(), b.name(), b.status(), b.mergedIntoId(), v.mergedIntoName(),
                     b.createdByOrg(), b.createdAt(), b.updatedAt(), b.version(), b.decidedBy(), b.decidedAt(),
                     b.decisionReason(), v.usage().products(), v.usage().sellers(),
-                    v.scope().stream().map(ScopeResponse::of).toList());
+                    v.scope().stream().map(ScopeResponse::of).toList(), v.similarNames());
         }
     }
 

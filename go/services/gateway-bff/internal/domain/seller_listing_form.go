@@ -376,6 +376,13 @@ type CreatedBrand struct {
 	Created bool  `json:"created"`
 }
 
+// BrandSuggestions is what typing a name would do: the brand it already is (Exact) or the close names the seller
+// probably meant (Similar, at most three). Pending brands of other sellers never appear.
+type BrandSuggestions struct {
+	Exact   *Brand  `json:"exact"`
+	Similar []Brand `json:"similar"`
+}
+
 // ProductImportRowPage is one page of the preview.
 type ProductImportRowPage struct {
 	Items []ProductImportRow `json:"items"`
