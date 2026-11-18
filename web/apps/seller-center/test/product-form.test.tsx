@@ -119,12 +119,8 @@ describe('product form v2 (S309): wide cards of sections with proper dropdowns',
     }
     expect(within(screen.getByLabelText('Handling time (business days)')).getAllByRole('option').length).toBeGreaterThan(5);
     // Segmented controls: who ships it, and whether it comes in several versions.
-    const ship = screen.getByRole('group', { name: 'Who ships it?' });
-    expect(within(ship).getByRole('button', { name: 'I ship it' })).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.click(within(ship).getByRole('button', { name: 'Fulfilled by AfroTransact' }));
-    expect(within(ship).getByRole('button', { name: 'Fulfilled by AfroTransact' })).toHaveAttribute('aria-pressed', 'true');
-    // AfroTransact fulfilment: the ship-from choices go away; the package (with its unit selects) is asked for every physical product, whoever ships it.
-    expect(screen.queryByLabelText('Ships from')).not.toBeInTheDocument();
+    // How customers get the product is not asked on the product form (it is set per pickup location and per listing).
+    expect(screen.queryByRole('group', { name: 'Who ships it?' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('Size unit').tagName).toBe('SELECT');
     expect(screen.getByLabelText('Weight unit').tagName).toBe('SELECT');
     const variants = screen.getByRole('group', { name: 'Does it come in different sizes, colours or weights?' });

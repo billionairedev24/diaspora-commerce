@@ -163,7 +163,7 @@ export function OfferOnlyForm({ match, atin, onBack, onAnother }: Props) {
           </fieldset>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            {f.fulfilment === 'SELLER' ? (
+            {f.fulfilment !== 'AFROTRANSACT' ? (
               <TextField id={OFFER_FIELD.qty} label={t('sc.pf.field.qty')} inputMode="numeric" value={f.qty} error={shown(OFFER_FIELD.qty)} onChange={(e) => patch({ qty: e.target.value })} />
             ) : null}
             {f.fulfilment === 'SELLER' ? (

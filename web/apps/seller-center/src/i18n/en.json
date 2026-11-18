@@ -665,7 +665,7 @@
   "sc.match.report.close": "Close",
   "sc.match.offer.note": "Describe the condition",
   "sc.match.offer.noteHelp": "For example: box dented, item works perfectly. At most 200 characters.",
-  "sc.match.offer.fulfilment": "Who ships it?",
+  "sc.match.offer.fulfilment": "How do customers get it?",
   "sc.match.offer.shipFromDefault": "My default ship-from address",
   "sc.match.offer.packageHelp": "The box you send to AfroTransact: size in inches and weight in pounds.",
   "sc.match.offer.pkg.length": "Length (in)",
