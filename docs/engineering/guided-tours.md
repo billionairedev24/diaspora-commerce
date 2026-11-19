@@ -185,7 +185,7 @@ screens with no chapter, or things the brief named that the product does not hav
 | Selling approvals `/listings/approvals` | approvals (catalogue) | 4/4 | covered |
 | Image library `/listings/images` | images (catalogue) | 4/4 | covered |
 | Bulk upload `/listings/bulk`, history, `[importId]` | bulk-upload (catalogue) | 5/5 | covered (an individual report is described in the last step, not toured) |
-| Inventory & FBA `/inventory` | inventory (catalogue) | 4/4 | covered (the FBA tab is not toured step by step) |
+| Inventory `/inventory` | inventory (catalogue) | 4/4 | covered |
 | Orders `/orders` (order sheet) | orders (fulfilment) | 5/5 | covered (the order sheet is a dialog: not pointed at) |
 | Locations `/settings/locations`, shipping `/settings/shipping` | shipping-setup (fulfilment) | 4/4 | covered (`/orders/ship-from` redirects to Locations) |
 | Pickup `/settings/pickup` | pickup-setup (fulfilment) | 3/3 | covered |
