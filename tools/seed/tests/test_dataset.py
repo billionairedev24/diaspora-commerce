@@ -175,10 +175,12 @@ class DatasetTest(unittest.TestCase):
         self.assertTrue(any("pickup" in loc.modes for loc in D.LOCATIONS), "some sellers offer Seller pickup")
         self.assertTrue(any("fba" in loc.modes for loc in D.LOCATIONS), "some locations are Fulfilled by AfroTransact")
         self.assertTrue(D.HOURS, "FBA needs pickup hours: they are never invented by the server")
-        for key in D.LOCATION_FBA:
-            product = next(p for p in D.PRODUCTS if p.key == key)
-            self.assertIn("fba", D.LOCATION_BY_SELLER[product.seller].modes, f"{key} is offered from an FBA location")
-            self.assertFalse(product.also, "one seller location per such product")
+        # Nothing is held at AfroTransact (ADR 0013): every marketplace seller of any product has a location to offer from.
+        for p in D.PRODUCTS:
+            for key in (p.seller, *[k for k, _ in p.also]):
+                if key != "retail":
+                    self.assertIn(key, D.LOCATION_BY_SELLER, f"{p.key}: {key} needs a location")
+        self.assertFalse(hasattr(D, "LOCATION_FBA"))
         self.assertFalse(hasattr(D, "SELF_SHIPPED"))
         self.assertNotIn("SELLER", {p.fulfilment for p in D.PRODUCTS})
 
@@ -192,7 +194,7 @@ class DatasetTest(unittest.TestCase):
         nodes = {"HOU-FC", "ATL-FC", "EWR-FC", "LAX-FC"}
         for s in D.SELLERS:
             self.assertIn(s.node, nodes)
-            self.assertEqual(s.fulfilment, "AFROTRANSACT", "no seller ships itself (ADR 0011)")
+            self.assertEqual(s.fulfilment, "AFROTRANSACT_DELIVERY", "no seller ships itself; nothing is held at AfroTransact (ADR 0013)")
         for p in D.PRODUCTS:
             self.assertIn(p.seller, D.SELLER_BY_KEY)
             for other, factor in p.also:

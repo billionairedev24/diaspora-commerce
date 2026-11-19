@@ -157,6 +157,7 @@ class OffersAndStockTest(unittest.TestCase):
         self.offers.on("POST", "/v1/offers", create)
         self.offers.on("POST", "/v1/offers/*", action)
         self.offers.on("PATCH", "/v1/offers/*", patch)
+        self.made = self.locations()  # every marketplace offer comes from its seller's location (ADR 0013)
 
     def product(self, key):
         p = next(x for x in D.PRODUCTS if x.key == key)
@@ -172,21 +173,19 @@ class OffersAndStockTest(unittest.TestCase):
 
         active = [o for o in self.store if o["status"] == "ACTIVE"]
         self.assertEqual({o["sellerOrgId"] for o in active}, {"org_mama_put_pantry", "org_lagos_larder"})
-        self.assertTrue(all(o["inventorySku"] == o["atin"] for o in active), "FBA stock is keyed by variant ATIN")
+        self.assertTrue(all(o["inventorySku"] == o["atin"] for o in active), "stock is keyed by variant ATIN")
+        self.assertTrue(all(o["fulfilment"] == "AFROTRANSACT_DELIVERY" and o["shipFrom"]["locationId"] and o["quantity"] > 0
+                            for o in active), "Fulfilled by AfroTransact from the seller's location, stock counted on the offer")
         mama = [o for o in active if o["sellerOrgId"] == "org_mama_put_pantry"]
         self.assertEqual([o["priceMinor"] for o in mama], [899, 1850], "the main seller keeps the dataset price")
         lagos = [o for o in active if o["sellerOrgId"] == "org_lagos_larder"]
         self.assertEqual([o["priceMinor"] for o in lagos], [949, 1959])
-        self.assertEqual(set(stocked), {"mama-put", "lagos-larder"})
+        self.assertEqual(stocked, {}, "nothing is received at AfroTransact for a marketplace seller")
 
         receipts = []
         self.s.svc["inventory"].on("POST", "/v1/receipts", lambda path, body, kw: receipts.append((body, kw)) or {})
         self.s._stock(p, product, stocked)
-        nodes = [b["nodeId"] for b, _ in receipts]
-        self.assertEqual(nodes, ["HOU-FC", "ATL-FC"], "two owners never share a node for one SKU")
-        self.assertEqual(receipts[0][0]["ownerOrg"], "org_mama_put_pantry")
-        self.assertEqual(receipts[0][1]["headers"]["Idempotency-Key"], receipts[0][0]["receiptRef"])
-        self.assertIn("expDate", receipts[0][0]["lines"][0], "food lots carry dates")
+        self.assertEqual(receipts, [], "no marketplace stock receipt")
 
         again = len(self.store)
         self.s._offers(p, product)
@@ -201,8 +200,17 @@ class OffersAndStockTest(unittest.TestCase):
         self.assertEqual([(o["priceMinor"], o["listPriceMinor"]) for o in retail], [(649, 799), (1099, 1349)])
         self.assertTrue(all(o["inventorySku"] == o["atin"] for o in retail))
 
+    def test_only_afrotransact_retail_stock_is_received(self):
+        p, product = self.product("at-jollof-seasoning")
+        receipts = []
+        self.s.svc["inventory"].on("POST", "/v1/receipts", lambda path, body, kw: receipts.append((body, kw)) or {})
+        self.s._stock(p, product, self.s._offers(p, product))
+        self.assertTrue(receipts and all("ownerOrg" not in b for b, _ in receipts), "Retail's own stock has no seller owner")
+        self.assertEqual(receipts[0][1]["headers"]["Idempotency-Key"], receipts[0][0]["receiptRef"])
+        self.assertIn("expDate", receipts[0][0]["lines"][0], "food lots carry dates")
+
     def test_receipts_already_taken_are_fine(self):
-        p, product = self.product("garam-masala")
+        p, product = self.product("at-jollof-seasoning")
 
         def taken(path, body, kw):
             raise ApiError("POST", path, 409, {"code": "inventory.idempotency-key-reused"})
@@ -217,12 +225,12 @@ class OffersAndStockTest(unittest.TestCase):
         made = []
 
         def create(path, body, kw):
-            a = dict(body, id=f"loc-{len(made)}", version=0, position={"lat": 29.7, "lng": -95.4},
+            a = dict(body, id=f"loc-{len(made)}", version=0, position={"lat": 29.7, "lng": -95.4}, _org=path.split("/")[3],
                      afrotransactPickup={"enabled": enabled and bool(body.get("pickupHours")), "hours": body.get("pickupHours")})
             made.append(a)
             return a
 
-        self.s.svc["seller"].on("GET", "/v1/orgs/*", lambda path, body, kw: list(made))
+        self.s.svc["seller"].on("GET", "/v1/orgs/*", lambda path, body, kw: [a for a in made if a["_org"] == path.split("/")[3]])
         self.s.svc["seller"].on("POST", "/v1/orgs/*", create)
 
         def enable(path, body, kw):
@@ -237,7 +245,7 @@ class OffersAndStockTest(unittest.TestCase):
         return made
 
     def test_a_location_product_is_offered_from_the_fba_location_with_its_stock_on_the_offer(self):
-        made = self.locations()
+        made = self.made
         p, product = self.product("turmeric")  # Patel Grocers, Edison NJ
         stocked = self.s._offers(p, product)
 
@@ -248,13 +256,33 @@ class OffersAndStockTest(unittest.TestCase):
         self.assertEqual(stocked, {}, "no FC stock for an offer from the seller's own location")
         self.assertNotIn("SELLER", {o["fulfilment"] for o in self.store if "fulfilment" in o})
 
-    def test_a_location_that_cannot_be_fba_falls_back_to_fc_stock_and_says_so(self):
+    def test_a_location_that_cannot_be_fba_is_pick_up_from_that_location_and_says_so(self):
         self.locations(enabled=False)
         p, product = self.product("kuli-kuli")
         stocked = self.s._offers(p, product)
-        self.assertEqual({o["fulfilment"] for o in self.store if o["sellerOrgId"] == "org_lagos_larder"}, {"AFROTRANSACT"})
-        self.assertEqual(set(stocked), {"lagos-larder"})
+        mine = [o for o in self.store if o["sellerOrgId"] == "org_lagos_larder"]
+        self.assertEqual({o["fulfilment"] for o in mine}, {"SELLER"})
+        self.assertTrue(all(o["quantity"] > 0 and o["shipFrom"]["locationId"] for o in mine))
+        self.assertEqual(stocked, {}, "never stock held at AfroTransact")
         self.assertTrue(any("Fulfilled by AfroTransact is not on" in m for m in self.s.report.problems))
+
+    def test_a_seller_without_a_location_gets_no_stock_held_offer(self):
+        self.s.up["seller"] = False
+        p, product = self.product("ofada-rice")
+        self.s._offers(p, product)
+        self.assertFalse([o for o in self.store if o["sellerOrgId"] != D.RETAIL_ORG and o["status"] == "ACTIVE"])
+        self.assertNotIn("AFROTRANSACT", {o.get("fulfilment") for o in self.store})
+        self.assertTrue(any("no usable location" in m for m in self.s.report.problems))
+
+    def test_a_stock_held_offer_from_before_the_redefinition_is_withdrawn_and_replaced(self):
+        p, product = self.product("namkeen")
+        atin = product["variants"][0]["atin"]
+        self.store.append({"id": "held", "atin": atin, "sellerOrgId": "org_patel_grocers", "status": "ACTIVE",
+                           "fulfilment": "AFROTRANSACT", "priceMinor": 1, "version": 0})
+        self.s._offers(p, product)
+        self.assertEqual(next(o for o in self.store if o["id"] == "held")["status"], "WITHDRAWN")
+        self.assertEqual({o["fulfilment"] for o in self.store if o["sellerOrgId"] == "org_patel_grocers"
+                          and o["status"] == "ACTIVE"}, {"AFROTRANSACT_DELIVERY"})
 
     def test_an_offer_from_before_self_shipping_was_retired_is_withdrawn_and_replaced(self):
         self.locations()

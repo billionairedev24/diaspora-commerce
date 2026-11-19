@@ -141,64 +141,13 @@ PURCHASE_ORDERS: list[PurchaseOrder] = [
 
 
 # ------------------------------------------------------------------------------------------------ inventory
-@dataclass(frozen=True)
-class InboundLine:
-    """qty: whole cases of 12 (inventory's rule for FBA plans)."""
-    product: str
-    variant: int
-    qty: int
-    lot: str
-    made_days_ago: int = 30
-    expires_in_days: int = 400
-    received: int = -1  # units received good (-1 = all); only for RECEIVING / CLOSED
-    damaged: int = 0
-    hold: str = ""  # QC hold reason: the received lot goes to quarantine
-
-
-@dataclass(frozen=True)
-class Inbound:
-    """An FBA inbound shipment of a seller, taken to WORKING (draft) · SHIPPED (in transit, or arrived) · RECEIVING ·
-    CLOSED. `arrives_in_days` 0 or less with SHIPPED = arrived at the FC, waiting to be received."""
-    name: str
-    owner: str  # seller key
-    target: str
-    lines: tuple[InboundLine, ...]
-    arrives_in_days: int = 3
-    carrier: str = "ups"
-    tracking: str = ""
-
-
-INBOUND: list[Inbound] = [
-    Inbound("Mama Put · holiday pantry (draft)", "mama-put", "WORKING", (
-        InboundLine("ofada-rice", 1, 48, "MPP-OFA-2611", 20, 340),
-        InboundLine("pepper-soup-spice", 0, 72, "MPP-PSS-2611", 15, 520))),
-    Inbound("Mama Put · garri and beans", "mama-put", "SHIPPED", (
-        InboundLine("ijebu-garri", 0, 96, "MPP-GAR-2610C", 25, 300),
-        InboundLine("oloyin-beans", 0, 60, "MPP-OLO-2610", 40, 480)), arrives_in_days=3, tracking="1Z84A7W90311827465"),
-    Inbound("Lagos Larder · egusi and suya (arrived)", "lagos-larder", "SHIPPED", (
-        InboundLine("egusi", 0, 84, "LLF-EGU-2610", 35, 330),
-        InboundLine("suya-spice", 0, 60, "LLF-SUY-2610", 20, 360)), arrives_in_days=-1, carrier="fedex",
-        tracking="794611023817"),
-    Inbound("Mama Put · chin chin and crayfish", "mama-put", "RECEIVING", (
-        InboundLine("chin-chin", 0, 120, "MPP-CHN-2610", 10, 48, received=72),
-        InboundLine("ground-crayfish", 0, 48, "MPP-CRF-2610", 60, 400, received=0)), arrives_in_days=-2,
-        tracking="1Z84A7W90311829911"),
-    Inbound("Mama Put · October pantry", "mama-put", "CLOSED", (
-        InboundLine("ijebu-garri", 1, 60, "MPP-GAR-2610A", 300, 35),
-        InboundLine("ofada-rice", 0, 48, "MPP-OFA-2610", 90, 300, received=46, damaged=2),
-        InboundLine("pepper-soup-spice", 0, 36, "MPP-PSS-2610", 30, 400, hold="QC hold: torn seals on a case"),
-        InboundLine("oloyin-beans", 1, 24, "MPP-OLO-2609", 200, 1)), arrives_in_days=-9,
-        tracking="1Z84A7W90311820004"),
-    Inbound("Accra Market · shito restock", "accra-market", "CLOSED", (
-        InboundLine("shito", 0, 48, "ACM-SHI-2610", 140, 58),), arrives_in_days=-6, carrier="usps",
-        tracking="9400111899223344556677"),
-]
-# Lots from the CLOSED shipments with less than the 90-day minimum life left are quarantined at receiving (short-dated);
-# the seeder releases them as "accepted short-dated" so they are sellable and show up for markdown, except the one that
-# expires tomorrow (it stays on hold and becomes EXPIRED at the next nightly expiry run).
+# AfroTransact keeps no marketplace seller stock (ADR 0013), so there are no seller inbound shipments here: the lots below belong to
+# AfroTransact Retail's own purchase orders. Lots from the received purchase orders with less than the 90-day minimum life left are
+# quarantined at receiving (short-dated); the seeder releases them as "accepted short-dated" so they are sellable and show up for
+# markdown, except the one that expires tomorrow (it stays on hold and becomes EXPIRED at the next nightly expiry run).
 ACCEPT_SHORT_DATED_REASON = "Accepted short-dated for markdown (buyer decision)"
-COUNT_SKUS = ("chin-chin", "shito")  # cycle counts: the first is left open for review, the second is posted
-TRANSFER = ("ijebu-garri", 1, "ATL-FC", 12, "Rebalance: Atlanta demand for garri")
+COUNT_SKUS = ("at-pepper-sauce", "at-dried-pepper")  # Retail lots counted: the first is left open for review, the second is posted
+TRANSFER = ("at-pepper-sauce", 0, "ATL-FC", 12, "Rebalance: Atlanta demand for pepper sauce")
 
 
 # ------------------------------------------------------------------------------------------------ orders
