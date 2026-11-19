@@ -119,3 +119,31 @@ func (h *handlersImpl) staffSetAISpendCap(w http.ResponseWriter, r *http.Request
 	setVersionETag(w, v)
 	h.reply(w, r, http.StatusOK, v, err)
 }
+
+func (h *handlersImpl) staffPictureRules(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.PictureRules.Get(r.Context(), callerFrom(r.Context()))
+	w.Header().Set("Cache-Control", "no-store")
+	setVersionETag(w, versionOfRules(v))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffSetPictureRules(w http.ResponseWriter, r *http.Request) {
+	b, err := staffBody(r)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.PictureRules.Set(r.Context(), callerFrom(r.Context()), r.Header.Get("If-Match"), b)
+	w.Header().Set("Cache-Control", "no-store")
+	setVersionETag(w, versionOfRules(v))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+// versionOfRules lifts the stored version of the rules document to the top, where setVersionETag reads it.
+func versionOfRules(v map[string]any) map[string]any {
+	rules, _ := v["rules"].(map[string]any)
+	if rules == nil {
+		return v
+	}
+	return map[string]any{"version": rules["version"]}
+}

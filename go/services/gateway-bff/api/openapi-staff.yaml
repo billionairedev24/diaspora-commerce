@@ -60,6 +60,8 @@ tags:
     description: 'Developer tools for the identity service (identity:admin): the token inspector and the published OIDC documents. Its tables (oauth-clients, identity-sessions, signing-keys, auth-settings, session-policy) are Resources. The identity-sessions table has a Device column (the User-Agent identity records at sign-in, parsed to a label such as `Chrome on macOS`; empty when none was recorded) and its sheet also shows the raw user agent. Step-up: the forms of the most dangerous actions (rotate the signing key, sign a user or a client out, disable a client, change the settings) end with a `stepUpPassword` field (type password, not required). The BFF checks it at identity (`POST /v1/admin/identity/step-up`) and relays the proof as `X-Step-Up`; a blank value is accepted when the person signed in within five minutes, otherwise the action answers 422 on `stepUpPassword`. A wrong password counts towards the account lockout. The password is never stored, cached or logged.'
   - name: Access
     description: 'Settings > Roles and permissions (access:read to look, access:admin to change). The permission catalogue, the roles of each portal with their permissions, who holds a role, a person''s direct grants and effective permissions, and the access change log. Identity owns the data and checks access:read / access:admin on every call with the staff member''s own token; the BFF also needs View (reads) or Edit (changes) on the Users & roles module and a reason of 3 to 300 characters on every change. A change reaches a person''s sign-in on their next access token (within about 5 minutes).'
+  - name: Picture rules
+    description: The ONE picture-rules setting (profile strict, startup or testing plus knobs), audited
   - name: AI spend
     description: 'Settings > AI and MCP spend cap: today''s AI spend (UTC day) against the daily cap, by feature, read from ai-gateway''s usage ledger with the staff member''s own token (ai:manage), and the cap itself. Cost is estimated by ai-gateway from provider usage after each call. A day with no model call is zero with `hasData: false`: nothing is estimated or invented here. The cap is a runtime setting kept by ai-gateway: `AI_GLOBAL_DAILY_COST_USD` is only its initial default and `AI_GLOBAL_DAILY_COST_MAX_USD` its hard ceiling (docs/runbooks/ai-spend-and-mcp-access.md). Staff with ai:manage or ai:cap.manage read it; only ai:cap.manage changes it, with a reason, against the version they loaded. The BFF relays with the staff member''s own token and decides nothing: ai-gateway is the judge.'
   - name: Staff invitations
@@ -2504,6 +2506,39 @@ paths:
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '412': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '428': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/picture-rules:
+    get:
+      tags: [Picture rules]
+      operationId: getPictureRules
+      security: [{sessionCookie: []}]
+      summary: The picture rules in force, who changed them last, the profiles to compare and the audit trail
+      description: catalog `GET /v1/catalog/picture-rules`. Needs catalog:moderate or catalog:picture-rules.manage. People are named, never shown as ids. The ETag is the version to send as If-Match when changing. Not cached.
+      responses:
+        '200': {description: The rules, headers: {ETag: {description: 'The rules'' version ("<version>")', schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/PictureRulesView'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Picture rules]
+      operationId: setPictureRules
+      security: [{sessionCookie: []}]
+      summary: Change the picture rules profile and knobs
+      description: catalog `PUT /v1/catalog/picture-rules`. Needs the catalog:picture-rules.manage permission (403 otherwise). `profile` is strict (the documented standard), startup (relaxed launch) or testing (pictures optional); `overrides` change single knobs on top of it (an empty object returns every knob to the profile). `reason` is 3 to 300 characters and is logged with who and when. `If-Match` is the version loaded (428 `VERSION_REQUIRED` without it, 409 when someone else saved first). Reaches media, search, the storefront and Seller Center within 30 seconds. The answer is the new state, like the GET.
+      parameters:
+        - {name: If-Match, in: header, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PictureRulesUpdate'}}}
+      responses:
+        '200': {description: Saved, headers: {ETag: {description: 'The new version ("<version>")', schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/PictureRulesView'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '428': {$ref: '#/components/responses/Problem'}
         '502': {$ref: '#/components/responses/Problem'}
@@ -8188,6 +8223,77 @@ components:
         byFeature:
           type: array
           items: {$ref: '#/components/schemas/AiSpendFeature'}
+    PictureKnobs:
+      type: object
+      required: [minImages, minLongSidePx, minShortSidePx, maxMegabytes, checkBackground, checkAspect, checkTextOverlay, requireRealPhotoForStorefront, requirePhotoForMatching, allowPlaceholders]
+      properties:
+        minImages: {type: integer, minimum: 0, maximum: 10, description: 'Pictures a listing needs before it can be published (0: none needed)'}
+        minLongSidePx: {type: integer, minimum: 1, maximum: 10000, description: 'The longest side of the main picture, in pixels (the zoom rule)'}
+        minShortSidePx: {type: integer, minimum: 1, maximum: 10000, description: 'The shortest side of every picture, in pixels'}
+        maxMegabytes: {type: integer, minimum: 1, maximum: 20, description: 'One file''s size cap (the platform ceiling of 20 MB always applies)'}
+        checkBackground: {type: boolean, description: 'Ask for a plain white background and a product that fills the frame (main picture)'}
+        checkAspect: {type: boolean, description: 'Warn about very wide or very tall pictures'}
+        checkTextOverlay: {type: boolean, description: 'Hold pictures that carry text, logos or watermarks for review'}
+        requireRealPhotoForStorefront: {type: boolean, description: 'Home, rails and search show only products with a real photo'}
+        requirePhotoForMatching: {type: boolean, description: 'A page without a real photo is not offered as a match to sellers'}
+        allowPlaceholders: {type: boolean, description: 'A stand-in image counts as a real photo'}
+    PictureOverrides:
+      type: object
+      description: 'Knobs changed on top of the profile; an absent key keeps the profile''s value'
+      additionalProperties: false
+      properties:
+        minImages: {type: integer, minimum: 0, maximum: 10}
+        minLongSidePx: {type: integer, minimum: 1, maximum: 10000}
+        minShortSidePx: {type: integer, minimum: 1, maximum: 10000}
+        maxMegabytes: {type: integer, minimum: 1, maximum: 20}
+        checkBackground: {type: boolean}
+        checkAspect: {type: boolean}
+        checkTextOverlay: {type: boolean}
+        requireRealPhotoForStorefront: {type: boolean}
+        requirePhotoForMatching: {type: boolean}
+        allowPlaceholders: {type: boolean}
+    PictureRules:
+      type: object
+      required: [profile, knobs, overridden, formats, version]
+      properties:
+        profile: {type: string, enum: [strict, startup, testing]}
+        knobs: {$ref: '#/components/schemas/PictureKnobs'}
+        overridden: {type: array, items: {type: string}, description: 'Names of the knobs staff changed on top of the profile'}
+        formats: {type: array, items: {type: string, enum: [image/jpeg, image/png, image/webp, image/avif]}, description: 'Accepted image types under every profile; SVG, HTML and executables are never accepted'}
+        version: {type: integer, format: int64, description: 'The stored version; 0 while the environment default is in force'}
+        summary: {type: string, description: 'The rule in plain words, for messages ("at least 1 photo, at least 500 px on the longest side, ...")'}
+        relaxed: {type: boolean, description: 'Any rule is looser than the strict standard'}
+    PictureRulesChange:
+      type: object
+      required: [version, profile, overridden, changedBy, changedAt, reason]
+      properties:
+        version: {type: integer, format: int64}
+        previousProfile: {type: string, nullable: true, enum: [strict, startup, testing]}
+        profile: {type: string, enum: [strict, startup, testing]}
+        overridden: {type: array, items: {type: string}}
+        changedBy: {type: string, description: 'Who saved it, by name'}
+        changedAt: {type: string, format: date-time}
+        reason: {type: string}
+    PictureRulesView:
+      type: object
+      required: [rules, overrides, canChange, environmentDefault, relaxed, profiles, history]
+      properties:
+        rules: {$ref: '#/components/schemas/PictureRules'}
+        overrides: {$ref: '#/components/schemas/PictureOverrides'}
+        updatedBy: {type: string, nullable: true, description: 'Who saved the rules in force, by name; absent while the environment default is in force'}
+        updatedAt: {type: string, format: date-time, nullable: true}
+        canChange: {type: boolean, description: 'The caller holds catalog:picture-rules.manage'}
+        environmentDefault: {type: string, enum: [strict, startup, testing], description: 'The profile this environment starts on (local and dev testing, uat and prod startup)'}
+        relaxed: {type: boolean, description: 'Any rule is looser than the strict standard: the console shows a warning'}
+        profiles: {type: array, description: 'The default knobs of every profile, for the comparison table', items: {$ref: '#/components/schemas/PictureRules'}}
+        history: {type: array, description: 'Newest first', items: {$ref: '#/components/schemas/PictureRulesChange'}}
+    PictureRulesUpdate:
+      type: object
+      required: [profile, reason]
+      properties:
+        profile: {type: string, enum: [strict, startup, testing]}
+        overrides: {$ref: '#/components/schemas/PictureOverrides'}
+        reason: {type: string, minLength: 3, maxLength: 300, description: 'Why: logged with the person''s name'}
     AiSpendCap:
       type: object
       required: [capMicros, source, defaultMicros, ceilingMicros, version, day, spentMicros, remainingMicros, resetsAt, canChange, history]

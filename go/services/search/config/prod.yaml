@@ -40,3 +40,8 @@ ads:
 telemetry:
   otlpEndpoint: otel-collector.observability:4318
   sampleRatio: 0.1
+# Platform picture rules (profile strict | startup | testing; staff change them in Settings > Picture rules, owned by catalog,
+# docs/engineering/picture-rules.md). `profile` is only the FALLBACK until catalog has answered; prod starts on startup.
+pictureRules:
+  catalogUrl: http://catalog
+  profile: startup

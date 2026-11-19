@@ -24,6 +24,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/events"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/httpserver"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/logging"
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/picturerules"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/telemetry"
 	"github.com/billionairedev24/diaspora-commerce/go/services/search"
 	"github.com/billionairedev24/diaspora-commerce/go/services/search/internal/adapter/adtoken"
@@ -141,6 +142,7 @@ func run() error {
 	if cfg.Semantic.MinWords > 0 {
 		opts = append(opts, app.WithMinSemanticWords(cfg.Semantic.MinWords))
 	}
+	opts = append(opts, app.WithPictureRules(pictureRules(cfg, loader.Env())))
 	deps := httpapi.Deps{
 		Searcher:  app.NewProductSearcher(index, emb, log, opts...),
 		Suggester: app.NewSuggester(index),
@@ -248,4 +250,14 @@ func (r readiness) Check(ctx context.Context) error {
 		return fmt.Errorf("ping: %w", err)
 	}
 	return nil
+}
+
+// pictureRules reads the platform picture rules from catalog (cached 30 s); without a catalog URL the environment's default
+// profile applies as it is.
+func pictureRules(cfg config.Config, env string) picturerules.Source {
+	fallback := picturerules.FromEnv(env, cfg.PictureRules.Profile)
+	if cfg.PictureRules.CatalogURL == "" {
+		return picturerules.Static(fallback)
+	}
+	return picturerules.NewClient(cfg.PictureRules.CatalogURL, &http.Client{Timeout: 3 * time.Second}, picturerules.DefaultTTL, fallback)
 }

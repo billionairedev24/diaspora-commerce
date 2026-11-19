@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/picturerules"
 	"github.com/billionairedev24/diaspora-commerce/go/services/search/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/search/internal/port"
 )
@@ -62,7 +63,15 @@ func WithEvents(events port.EventPublisher) SearcherOption {
 	return func(s *productSearcherImpl) { s.events = events }
 }
 
+// WithPictureRules makes the storefront photo requirement of EligibleOnly follow the platform picture rules (profile and knobs
+// read from catalog with a short cache): where they do not require a real photo (testing), products without one are listed too.
+// Without it the strict rule applies.
+func WithPictureRules(src picturerules.Source) SearcherOption {
+	return func(s *productSearcherImpl) { s.pictures = src }
+}
+
 type productSearcherImpl struct {
+	pictures         picturerules.Source
 	index            port.Index
 	embedder         port.Embedder
 	embedTimeout     time.Duration
@@ -104,6 +113,9 @@ func (s *productSearcherImpl) Search(ctx context.Context, q domain.Query) (domai
 	}
 	if s.markets != nil && !s.markets[q.Market] {
 		return domain.Page{}, errors.Join(domain.ErrUnknownMarket, fmt.Errorf("market %q is not served", q.Market))
+	}
+	if q.EligibleOnly && s.pictures != nil {
+		q.AnyPhoto = !s.pictures.Rules(ctx).StorefrontPhotoFilter()
 	}
 	vec, skipped := s.embed(ctx, q)
 	page, err := s.index.Search(ctx, q, vec)

@@ -627,8 +627,11 @@ type ProductDraft struct {
 // category requires (barcode, package, label photo, country of origin ...) comes from catalog's listing rules
 // (GET /v1/listing-rules), which validates every submission and answers field errors the form maps to its fields; the
 // gateway does not keep a second copy of those rules.
-func (d ProductDraft) Validate() map[string]string {
-	errs := d.validateContent()
+func (d ProductDraft) Validate() map[string]string { return d.ValidateMin(1) }
+
+// ValidateMin is Validate with the number of pictures the active picture rules ask for (0: pictures are optional).
+func (d ProductDraft) ValidateMin(minImages int) map[string]string {
+	errs := d.validateContent(minImages)
 	if (d.CategoryID == "") == (d.CategoryRequestID == "") {
 		errs["categoryId"] = "Choose a category, or request a new one."
 	}
@@ -636,21 +639,28 @@ func (d ProductDraft) Validate() map[string]string {
 }
 
 // ValidateEdit applies the form's rules to an edit (the category may be omitted: it is kept).
-func (d ProductDraft) ValidateEdit() map[string]string {
-	errs := d.validateContent()
+func (d ProductDraft) ValidateEdit() map[string]string { return d.ValidateEditMin(1) }
+
+// ValidateEditMin is ValidateEdit with the number of pictures the active picture rules ask for.
+func (d ProductDraft) ValidateEditMin(minImages int) map[string]string {
+	errs := d.validateContent(minImages)
 	if d.CategoryRequestID != "" {
 		errs["categoryRequestId"] = "A product's category request can't change."
 	}
 	return errs
 }
 
-func (d ProductDraft) validateContent() map[string]string {
+func (d ProductDraft) validateContent(minImages int) map[string]string {
 	errs := map[string]string{}
 	if n := len([]rune(strings.TrimSpace(d.Title))); n < 10 || n > 200 {
 		errs["title"] = "At least 10 characters"
 	}
-	if len(d.Images) == 0 {
-		errs["images"] = "Add at least one image."
+	if len(d.Images) < minImages {
+		if minImages == 1 {
+			errs["images"] = "Add at least one image."
+		} else {
+			errs["images"] = fmt.Sprintf("Add at least %d images.", minImages)
+		}
 	} else if len(d.Images) > 10 {
 		errs["images"] = "Up to 10 images."
 	}

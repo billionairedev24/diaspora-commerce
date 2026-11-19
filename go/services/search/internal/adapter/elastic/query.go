@@ -206,7 +206,7 @@ func buildFilters(q domain.Query) []any {
 	if q.InStockOnly || q.EligibleOnly {
 		f = append(f, object{"term": object{"in_stock": true}})
 	}
-	if q.EligibleOnly {
+	if q.EligibleOnly && !q.AnyPhoto {
 		f = append(f, object{"term": object{"photo_ok": true}})
 	}
 	if q.OnSale {

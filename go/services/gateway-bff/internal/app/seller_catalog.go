@@ -3,12 +3,14 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"regexp"
 	"slices"
 	"strings"
 
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/picturerules"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
 )
@@ -281,7 +283,7 @@ func (s *sellerCatalogImpl) SetActive(ctx context.Context, c *domain.Caller, pro
 
 func (s *sellerCatalogImpl) Submit(ctx context.Context, c *domain.Caller, d domain.ProductDraft) (domain.ListingRow, error) {
 	defer s.cache.drop("listings")
-	if errs := d.Validate(); len(errs) > 0 {
+	if errs := d.ValidateMin(CurrentPictureRules(ctx).Knobs.MinImages); len(errs) > 0 {
 		return domain.ListingRow{}, domain.ValidationProblem(errs)
 	}
 	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit); err != nil {
@@ -486,7 +488,8 @@ func (s *sellerCatalogImpl) RequestCategory(ctx context.Context, c *domain.Calle
 	return requestOf(r), nil
 }
 
-var imageTypes = []string{"image/jpeg", "image/png", "image/webp"}
+// imageTypes are the accepted image types under every profile (picturerules.Formats): JPEG, PNG, WebP and AVIF.
+var imageTypes = picturerules.Formats()
 
 // UploadInput is a request for a direct image upload. Slot says what a product image is for (MAIN is judged by the strict
 // rules, OTHER is the default); Title and Brand are what the AI check compares the picture with; ProductTypeCode lets
@@ -514,10 +517,12 @@ func (s *sellerCatalogImpl) Upload(ctx context.Context, c *domain.Caller, in Upl
 		errs["fileName"] = "Required"
 	}
 	if !slices.Contains(imageTypes, in.ContentType) {
-		errs["contentType"] = "Use JPG, PNG or WebP"
+		errs["contentType"] = "Use JPG, PNG, WebP or AVIF"
 	}
-	if in.Size <= 0 || in.Size > 8<<20 {
-		errs["size"] = "Images must be 8 MB or smaller"
+	// The size cap is the active picture rule (Settings > Picture rules), not a fixed number.
+	rules := CurrentPictureRules(ctx)
+	if in.Size <= 0 || in.Size > rules.MaxBytes() {
+		errs["size"] = fmt.Sprintf("Images must be %d MB or smaller", rules.Knobs.MaxMegabytes)
 	}
 	if in.Slot != "" && !slices.Contains(imageSlots, in.Slot) {
 		errs["slot"] = "MAIN, OTHER, SWATCH or LABEL"

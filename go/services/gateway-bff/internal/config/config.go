@@ -29,6 +29,12 @@ type Upstream struct {
 	} `yaml:"breaker"`
 }
 
+// PictureRulesConfig is where the platform picture rules start: Profile is only the FALLBACK used until catalog has answered once
+// (local and dev testing, uat and prod startup; docs/engineering/picture-rules.md). The setting itself is owned by catalog.
+type PictureRulesConfig struct {
+	Profile string `yaml:"profile" env:"PICTURE_RULES_PROFILE"`
+}
+
 // Upstreams lists every service the BFF composes. URLs are overridden with <NAME>_URL env vars.
 type Upstreams struct {
 	Search        Upstream `yaml:"search"`
@@ -140,6 +146,8 @@ type Config struct {
 	} `yaml:"oidc"`
 
 	Upstreams Upstreams `yaml:"upstreams"`
+	// PictureRules: the fallback profile until catalog has answered (see PictureRulesConfig).
+	PictureRules PictureRulesConfig `yaml:"pictureRules"`
 
 	RateLimit struct {
 		AuthPerMinute   int `yaml:"authPerMinute" env:"RATE_LIMIT_AUTH_PER_MINUTE"`

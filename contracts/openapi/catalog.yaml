@@ -18,6 +18,8 @@ servers:
 security:
 - bearer: []
 tags:
+- name: Picture rules
+  description: The ONE picture-rules setting - a named profile (strict, startup, testing) plus per-knob overrides, staff-controlled and audited (docs/engineering/picture-rules.md)
 - name: Catalog matching
   description: 'One lookup from a barcode or a brand with a part number to the existing product page (S381, S383): the seller sells an offer on the page and never edits its content'
 - name: Change requests
@@ -3752,6 +3754,68 @@ paths:
                 $ref: '#/components/schemas/AtinRedirect'
         '404':
           description: catalog.redirect-not-found
+  /v1/public/picture-rules:
+    get:
+      tags:
+      - Picture rules
+      operationId: getPublicPictureRules
+      security: []
+      summary: The picture rules in force (public)
+      description: 'Read by media, search, the indexer and the gateway (Go services) with a 30 second cache, and by Seller Center to word its messages. Nothing here is secret: it is the rule sellers are held
+        to. The ETag is the stored version.'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PictureRules'
+  /v1/catalog/picture-rules:
+    get:
+      tags:
+      - Picture rules
+      operationId: getPictureRulesSetting
+      summary: The picture rules, who changed them last and the audit trail (catalog:moderate or catalog:picture-rules.manage)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PictureRulesView'
+        '403':
+          description: Missing catalog:moderate or catalog:picture-rules.manage
+    put:
+      tags:
+      - Picture rules
+      operationId: updatePictureRulesSetting
+      summary: Change the profile and overrides (catalog:picture-rules.manage; reason and the version loaded as If-Match)
+      description: 409 `catalog.concurrent-update` when the version is stale; 422 for an invalid value or a missing reason. An empty `overrides` object returns every knob to the profile's value.
+      parameters:
+      - name: If-Match
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PictureRulesUpdate'
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PictureRulesView'
+        '403':
+          description: Missing catalog:picture-rules.manage
+        '409':
+          description: catalog.concurrent-update
+        '422':
+          description: Invalid value or missing reason
   /v1/catalog/settings:
     get:
       tags:
@@ -3795,6 +3859,233 @@ paths:
           description: Invalid value
 components:
   schemas:
+    PictureKnobs:
+      type: object
+      required:
+      - minImages
+      - minLongSidePx
+      - minShortSidePx
+      - maxMegabytes
+      - checkBackground
+      - checkAspect
+      - checkTextOverlay
+      - requireRealPhotoForStorefront
+      - requirePhotoForMatching
+      - allowPlaceholders
+      properties:
+        minImages:
+          type: integer
+          minimum: 0
+          maximum: 10
+          description: 'Pictures a listing needs before it can be published (0: none needed)'
+        minLongSidePx:
+          type: integer
+          minimum: 1
+          maximum: 10000
+          description: The longest side of the main picture, in pixels (the zoom rule)
+        minShortSidePx:
+          type: integer
+          minimum: 1
+          maximum: 10000
+          description: The shortest side of every picture, in pixels
+        maxMegabytes:
+          type: integer
+          minimum: 1
+          maximum: 20
+          description: One file's size cap (the platform ceiling of 20 MB always applies)
+        checkBackground:
+          type: boolean
+          description: Ask for a plain white background and a product that fills the frame (main picture)
+        checkAspect:
+          type: boolean
+          description: Warn about very wide or very tall pictures
+        checkTextOverlay:
+          type: boolean
+          description: Hold pictures that carry text, logos or watermarks for review
+        requireRealPhotoForStorefront:
+          type: boolean
+          description: Home, rails and search show only products with a real photo
+        requirePhotoForMatching:
+          type: boolean
+          description: A page without a real photo is not offered as a match to sellers
+        allowPlaceholders:
+          type: boolean
+          description: A stand-in image counts as a real photo
+    PictureOverrides:
+      type: object
+      description: Knobs changed on top of the profile; an absent key keeps the profile's value
+      additionalProperties: false
+      properties:
+        minImages:
+          type: integer
+          minimum: 0
+          maximum: 10
+        minLongSidePx:
+          type: integer
+          minimum: 1
+          maximum: 10000
+        minShortSidePx:
+          type: integer
+          minimum: 1
+          maximum: 10000
+        maxMegabytes:
+          type: integer
+          minimum: 1
+          maximum: 20
+        checkBackground:
+          type: boolean
+        checkAspect:
+          type: boolean
+        checkTextOverlay:
+          type: boolean
+        requireRealPhotoForStorefront:
+          type: boolean
+        requirePhotoForMatching:
+          type: boolean
+        allowPlaceholders:
+          type: boolean
+    PictureRules:
+      type: object
+      required:
+      - profile
+      - knobs
+      - overridden
+      - formats
+      - version
+      properties:
+        profile:
+          type: string
+          enum:
+          - strict
+          - startup
+          - testing
+        knobs:
+          $ref: '#/components/schemas/PictureKnobs'
+        overridden:
+          type: array
+          items:
+            type: string
+          description: Names of the knobs staff changed on top of the profile
+        formats:
+          type: array
+          items:
+            type: string
+            enum:
+            - image/jpeg
+            - image/png
+            - image/webp
+            - image/avif
+          description: Accepted image types under every profile; SVG, HTML and executables are never accepted
+        version:
+          type: integer
+          format: int64
+          description: The stored version; 0 while the environment default is in force
+        summary:
+          type: string
+          description: The rule in plain words, for messages ("at least 1 photo, at least 500 px on the longest side, ...")
+    PictureRulesChange:
+      type: object
+      required:
+      - version
+      - profile
+      - overridden
+      - changedBy
+      - changedAt
+      - reason
+      properties:
+        version:
+          type: integer
+          format: int64
+        previousProfile:
+          type: string
+          nullable: true
+          enum:
+          - strict
+          - startup
+          - testing
+        profile:
+          type: string
+          enum:
+          - strict
+          - startup
+          - testing
+        overridden:
+          type: array
+          items:
+            type: string
+        changedBy:
+          type: string
+          description: The staff member's id (the BFF names them)
+        changedAt:
+          type: string
+          format: date-time
+        reason:
+          type: string
+    PictureRulesView:
+      type: object
+      required:
+      - rules
+      - overrides
+      - canChange
+      - environmentDefault
+      - relaxed
+      - profiles
+      - history
+      properties:
+        rules:
+          $ref: '#/components/schemas/PictureRules'
+        overrides:
+          $ref: '#/components/schemas/PictureOverrides'
+        updatedBy:
+          type: string
+          nullable: true
+          description: The staff member's id (the BFF names them)
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        canChange:
+          type: boolean
+          description: The caller holds catalog:picture-rules.manage
+        environmentDefault:
+          type: string
+          enum:
+          - strict
+          - startup
+          - testing
+          description: The profile this environment starts on (local and dev testing, uat and prod startup)
+        relaxed:
+          type: boolean
+          description: 'Any rule is looser than the strict standard: the console shows a warning'
+        profiles:
+          type: array
+          description: The default knobs of every profile, for the comparison table
+          items:
+            $ref: '#/components/schemas/PictureRules'
+        history:
+          type: array
+          description: Newest first
+          items:
+            $ref: '#/components/schemas/PictureRulesChange'
+    PictureRulesUpdate:
+      type: object
+      required:
+      - profile
+      - reason
+      properties:
+        profile:
+          type: string
+          enum:
+          - strict
+          - startup
+          - testing
+        overrides:
+          $ref: '#/components/schemas/PictureOverrides'
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 300
+          description: 'Why: logged with the person''s name'
     ListingDetails:
       type: object
       description: Description, condition, search keywords, fulfilment, package, handling time and ship-from, and the seller's tax behaviour facts

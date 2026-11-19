@@ -134,6 +134,7 @@ func (h *handlersImpl) Register(mux *http.ServeMux) {
 	route("GET /v1/maintenance", h.maintenance)
 	// Site & content
 	route("GET /v1/site-config", h.siteConfig)
+	route("GET /v1/picture-rules", h.pictureRules)
 	route("GET /v1/home", h.home)
 	route("GET /v1/home/recently-viewed", h.recentlyViewed)
 	route("POST /v1/home/ad-events", h.adEvent)
