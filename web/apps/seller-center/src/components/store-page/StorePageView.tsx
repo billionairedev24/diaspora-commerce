@@ -45,9 +45,14 @@ const NETWORKS: { id: StoreSocialNetwork; name: string; example: string }[] = [
   { id: 'tiktok', name: 'TikTok', example: 'https://tiktok.com/@yourstore' },
   { id: 'x', name: 'X', example: 'https://x.com/yourstore' },
   { id: 'youtube', name: 'YouTube', example: 'https://youtube.com/@yourstore' },
-  { id: 'whatsapp', name: 'WhatsApp', example: 'https://wa.me/15551234567' },
-  { id: 'website', name: 'Website', example: 'https://yourstore.com' }
+  { id: 'whatsapp', name: 'WhatsApp', example: 'https://wa.me/15551234567' }
 ];
+
+/** A website link stored before the rule: it can stay or be removed, never added; the public page hides it until the store has earned it. */
+const LEGACY_WEBSITE = { id: 'website' as const, name: 'Website', example: 'https://yourstore.com' };
+
+/** The policy sentence shown beside every field of free text on the page. */
+const DIVERSION_POLICY = 'Off-platform sales and steering buyers away from AfroTransact are not allowed. Do not put phone numbers, emails, web addresses or social handles in your text: customers reach you through AfroTransact messages.';
 
 function Group({ title, help, children, id }: { title: string; help?: string; children: React.ReactNode; id: string }) {
   return (
@@ -278,7 +283,7 @@ export function StorePageView() {
           ]}
           onChange={(style) => patch((d) => ({ ...d, hero: { ...d.hero, style } }))}
         />
-        <TextField label="Tagline" help={`${draft.hero.tagline.length}/140. One line that says what you sell.`} value={draft.hero.tagline} error={err('hero.tagline')} maxLength={160} disabled={!editable} onChange={(e) => patch((d) => ({ ...d, hero: { ...d.hero, tagline: e.target.value } }))} />
+        <TextField label="Tagline" help={`${draft.hero.tagline.length}/140. One line that says what you sell, with no contact details.`} value={draft.hero.tagline} error={err('hero.tagline')} maxLength={160} disabled={!editable} onChange={(e) => patch((d) => ({ ...d, hero: { ...d.hero, tagline: e.target.value } }))} />
         <StoreImageField
           label="Banner picture"
           help="JPG, PNG or WebP up to 8 MB, at least 1600 x 700. Used by the Picture and Split styles; Colour ignores it."
@@ -414,7 +419,7 @@ export function StorePageView() {
         </Group>
       ) : null}
 
-      <Group id="sp-about" title="Our story" help="Plain text. A blank line starts a new paragraph. No HTML.">
+      <Group id="sp-about" title="Our story" help={`Plain text. A blank line starts a new paragraph. No HTML. ${DIVERSION_POLICY}`}>
         <TextField label="Heading" value={draft.about.heading} placeholder="Our story" error={err('about.heading')} disabled={!editable} onChange={(e) => patch((d) => ({ ...d, about: { ...d.about, heading: e.target.value } }))} />
         <Field label="Story" help={`${draft.about.body.length}/2000`} error={err('about.body')}>
           {(a11y) => <textarea {...a11y} className={fieldStyles.control} rows={6} value={draft.about.body} disabled={!editable} onChange={(e) => patch((d) => ({ ...d, about: { ...d.about, body: e.target.value } }))} />}
@@ -437,19 +442,19 @@ export function StorePageView() {
       </Group>
       )}
 
-      <Group id="sp-contact" title="Contact and hours" help="Only what you switch on is shown.">
-        <Switch label={`Show my email${s.contactEmail ? ` (${s.contactEmail})` : ''}`} checked={draft.contact.showEmail} disabled={!editable} onChange={(v) => patch((d) => ({ ...d, contact: { ...d.contact, showEmail: v } }))} />
-        <TextField label="Phone (optional)" inputMode="tel" value={draft.contact.phone} error={err('contact.phone')} disabled={!editable} onChange={(e) => patch((d) => ({ ...d, contact: { ...d.contact, phone: e.target.value } }))} />
+      <Group id="sp-contact" title="Contact and hours" help={`Opening hours are shown on your page. ${DIVERSION_POLICY}`}>
+        <p data-testid="contact-via-messages" className="m-0 text-sm text-muted">Customers write to you through AfroTransact messages. Your login email is never shown.</p>
+        <TextField label="Phone (optional)" help="Kept for you. It is not shown on your page: a customer sees it on their order only, for Pick up and FBA coordination." inputMode="tel" value={draft.contact.phone} error={err('contact.phone')} disabled={!editable} onChange={(e) => patch((d) => ({ ...d, contact: { ...d.contact, phone: e.target.value } }))} />
         {isProvider ? null : <TextField label="Hours (optional)" placeholder="Mon to Fri, 9 am to 5 pm" value={draft.contact.hours} error={err('contact.hours')} disabled={!editable} onChange={(e) => patch((d) => ({ ...d, contact: { ...d.contact, hours: e.target.value } }))} />}
       </Group>
 
-      <Group id="sp-social" title="Social links" help="Full https links to your own profiles.">
+      <Group id="sp-social" title="Social links" help="Full https links to your own profiles. Website links are no longer available: one you already have stays hidden on your page until your store has earned it, and you can remove it.">
         {draft.social.map((link, i) => (
           <div key={i} data-testid="social-row" className="grid gap-2 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:items-start sm:gap-x-3">
             <Field label="Network">
               {(a11y) => (
-                <select {...a11y} className={fieldStyles.control} value={link.network} disabled={!editable} onChange={(e) => patch((d) => ({ ...d, social: d.social.map((x, j) => (j === i ? { ...x, network: e.target.value as StoreSocialNetwork } : x)) }))}>
-                  {NETWORKS.map((n) => (
+                <select {...a11y} className={fieldStyles.control} value={link.network} disabled={!editable || link.network === 'website'} onChange={(e) => patch((d) => ({ ...d, social: d.social.map((x, j) => (j === i ? { ...x, network: e.target.value as StoreSocialNetwork } : x)) }))}>
+                  {(link.network === 'website' ? [LEGACY_WEBSITE] : NETWORKS).map((n) => (
                     <option key={n.id} value={n.id}>
                       {n.name}
                     </option>
@@ -457,9 +462,9 @@ export function StorePageView() {
                 </select>
               )}
             </Field>
-            <TextField label="Link" placeholder={NETWORKS.find((n) => n.id === link.network)?.example} value={link.url} error={err(`social.${i}.url`)} disabled={!editable} onChange={(e) => patch((d) => ({ ...d, social: d.social.map((x, j) => (j === i ? { ...x, url: e.target.value } : x)) }))} />
+            <TextField label="Link" placeholder={[...NETWORKS, LEGACY_WEBSITE].find((n) => n.id === link.network)?.example} value={link.url} error={err(`social.${i}.url`)} disabled={!editable} onChange={(e) => patch((d) => ({ ...d, social: d.social.map((x, j) => (j === i ? { ...x, url: e.target.value } : x)) }))} />
             <ControlRowAction>
-              <Button type="button" variant="neutral" className="max-sm:w-full" aria-label={`Remove ${NETWORKS.find((n) => n.id === link.network)?.name ?? link.network} link`} disabled={!editable} onClick={() => patch((d) => ({ ...d, social: d.social.filter((_, j) => j !== i) }))}>
+              <Button type="button" variant="neutral" className="max-sm:w-full" aria-label={`Remove ${[...NETWORKS, LEGACY_WEBSITE].find((n) => n.id === link.network)?.name ?? link.network} link`} disabled={!editable} onClick={() => patch((d) => ({ ...d, social: d.social.filter((_, j) => j !== i) }))}>
                 Remove
               </Button>
             </ControlRowAction>
