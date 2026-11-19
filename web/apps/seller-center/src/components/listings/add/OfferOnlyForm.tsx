@@ -15,7 +15,7 @@ import { sellerApi } from '@/lib/api';
 import { idempotencyKey } from '@/lib/format';
 import { useSeller } from '@/lib/session';
 
-import { asksCondition, chosenLocation, conditionsAllowed, emptyOffer, locationProblem, OFFER_FIELD, type OfferForm, offerProblemKey, offerProblems, optionsText, serverOfferField, toOfferInput } from './match-model';
+import { asksCondition, chosenLocation, conditionsAllowed, defaultOfferFulfilment, emptyOffer, locationProblem, OFFER_FIELD, type OfferForm, offerProblemKey, offerProblems, optionsText, serverOfferField, toOfferInput } from './match-model';
 import { type ReportKind,ReportPanel } from './ReportForms';
 
 const FULFILMENTS = ['SELLER', 'AFROTRANSACT_DELIVERY'] as const;
@@ -38,7 +38,7 @@ interface Props {
 export function OfferOnlyForm({ match, atin, onBack, onAnother }: Props) {
   const t = useT();
   const qc = useQueryClient();
-  const { orgId } = useSeller();
+  const { orgId, session } = useSeller();
   const api = sellerApi();
   const [f, setF] = useState<OfferForm>(emptyOffer);
   const [showAll, setShowAll] = useState(false);
@@ -50,6 +50,8 @@ export function OfferOnlyForm({ match, atin, onBack, onAnother }: Props) {
   const key = useRef(idempotencyKey());
   const shipFrom = useQuery(sellerQueries.shipFrom(api, orgId));
   const locations = shipFrom.data ?? [];
+  // Until the seller picks, a new offer follows the default location (S632); picking one stops the default following.
+  const [fulfilmentChosen, setFulfilmentChosen] = useState(false);
   const child = match.variants.find((v) => v.atin === atin);
   const options = optionsText(child?.options ?? match.variantOptions);
   // Condition is asked only where the category's listing rules allow used or renewed items; elsewhere it is not shown and the item is New.
@@ -57,7 +59,8 @@ export function OfferOnlyForm({ match, atin, onBack, onAnother }: Props) {
   const conditions = conditionsAllowed(match);
   // The place shown selected is the place sent: the one chosen, else the seller's default (or only) location.
   const locationId = chosenLocation(f.shipFromId, locations);
-  const sent: OfferForm = { ...(askCondition ? f : { ...f, condition: 'NEW', note: '' }), shipFromId: locationId };
+  const fulfilmentDefault = defaultOfferFulfilment(locations, session.approved);
+  const sent: OfferForm = { ...(askCondition ? f : { ...f, condition: 'NEW', note: '' }), shipFromId: locationId, fulfilment: fulfilmentChosen ? f.fulfilment : fulfilmentDefault };
   const patch = (p: Partial<OfferForm>) => {
     setF((prev) => ({ ...prev, ...p }));
     setServer({});
@@ -172,8 +175,8 @@ export function OfferOnlyForm({ match, atin, onBack, onAnother }: Props) {
             <legend className="mb-1 p-0 text-sm font-semibold">{t('sc.match.offer.fulfilment')}</legend>
             {FULFILMENTS.map((c) => (
               <div key={c} className="flex items-start gap-2 text-sm">
-                <input type="radio" id={`of-fulfilment-${c}`} name="of-fulfilment" className="mt-1 shrink-0" value={c} checked={f.fulfilment === c}
-                  onChange={() => patch({ fulfilment: c })} />
+                <input type="radio" id={`of-fulfilment-${c}`} name="of-fulfilment" className="mt-1 shrink-0" value={c} checked={sent.fulfilment === c}
+                  onChange={() => { setFulfilmentChosen(true); patch({ fulfilment: c }); }} />
                 <span className="flex items-center">
                   <label htmlFor={`of-fulfilment-${c}`} className="cursor-pointer font-semibold">{t(`sc.ff.choice.${c}` as MessageKey)}</label>
                   <FulfilmentTip mode={c === 'SELLER' ? 'pickup' : 'fba'} />
@@ -183,42 +186,25 @@ export function OfferOnlyForm({ match, atin, onBack, onAnother }: Props) {
           </fieldset>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            {f.fulfilment !== 'AFROTRANSACT' ? (
-              <TextField id={OFFER_FIELD.qty} label={t('sc.pf.field.qty')} inputMode="numeric" value={f.qty} error={shown(OFFER_FIELD.qty)} onChange={(e) => patch({ qty: e.target.value })} />
-            ) : null}
-            {f.fulfilment === 'SELLER' ? (
+            <TextField id={OFFER_FIELD.qty} label={t('sc.pf.field.qty')} inputMode="numeric" value={f.qty} error={shown(OFFER_FIELD.qty)} onChange={(e) => patch({ qty: e.target.value })} />
+            {sent.fulfilment === 'SELLER' ? (
               <Select id={OFFER_FIELD.handling} label={t('sc.pf.field.handling')} help={t('sc.pf.handlingHelp')} value={f.handling} error={shown(OFFER_FIELD.handling)}
                 options={HANDLING_DAYS.map((d) => ({ value: String(d), label: t('sc.pf.handlingDays', { count: d }) }))} onChange={(e) => patch({ handling: e.currentTarget.value })} />
             ) : null}
-            {f.fulfilment !== 'AFROTRANSACT' ? (
-              <div className="flex flex-col gap-1">
-                <Select id={OFFER_FIELD.shipFrom} label={t(f.fulfilment === 'SELLER' ? 'sc.match.offer.location.pickup' : 'sc.match.offer.location.fba')} value={locationId} error={shown(OFFER_FIELD.shipFrom)}
-                  help={locations.length ? undefined : t('sc.pf.shipFromNone')} placeholder={locationId ? undefined : t('sc.match.offer.locationNone')}
-                  options={locations.map((a) => ({ value: a.id, label: `${a.label} · ${a.city}, ${a.state}` }))} onChange={(e) => patch({ shipFromId: e.currentTarget.value })} />
-                {fix || (!locations.length && shown(OFFER_FIELD.shipFrom)) ? (
-                  <Link href={fix?.href ?? '/settings/locations'} className="text-sm" data-testid="location-fix">{t(fix?.label ?? 'sc.match.fix.locations')}</Link>
-                ) : null}
-              </div>
-            ) : null}
+            <div className="flex flex-col gap-1">
+              <Select id={OFFER_FIELD.shipFrom} label={t(sent.fulfilment === 'SELLER' ? 'sc.match.offer.location.pickup' : 'sc.match.offer.location.fba')} value={locationId} error={shown(OFFER_FIELD.shipFrom)}
+                help={locations.length ? undefined : t('sc.pf.shipFromNone')} placeholder={locationId ? undefined : t('sc.match.offer.locationNone')}
+                options={locations.map((a) => ({ value: a.id, label: `${a.label} · ${a.city}, ${a.state}` }))} onChange={(e) => patch({ shipFromId: e.currentTarget.value })} />
+              {fix || (!locations.length && shown(OFFER_FIELD.shipFrom)) ? (
+                <Link href={fix?.href ?? '/settings/locations'} className="text-sm" data-testid="location-fix">{t(fix?.label ?? 'sc.match.fix.locations')}</Link>
+              ) : null}
+            </div>
             <div className="flex flex-col gap-1" data-testid="catalog-code">
               <span className="text-sm font-semibold">{t('sc.match.offer.catalogCode')}</span>
               <output className="text-sm" aria-label={t('sc.match.offer.catalogCode')}>{atin}</output>
               <span className="text-xs text-muted">{t('sc.match.offer.catalogCodeHelp')}</span>
             </div>
           </div>
-
-          {f.fulfilment === 'AFROTRANSACT' ? (
-            <fieldset className="m-0 flex flex-col gap-2 border-0 p-0" id={OFFER_FIELD.pkg}>
-              <legend className="mb-1 p-0 text-sm font-semibold">{t('sc.pf.field.package')}</legend>
-              <span className="text-xs text-muted">{t('sc.match.offer.packageHelp')}</span>
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                {(['length', 'width', 'height', 'weight'] as const).map((k) => (
-                  <TextField key={k} id={`of-pkg-${k}`} label={t(`sc.match.offer.pkg.${k}` as MessageKey)} inputMode="decimal" value={f.pkg[k]} onChange={(e) => patch({ pkg: { ...f.pkg, [k]: e.target.value } })} />
-                ))}
-              </div>
-              {shown(OFFER_FIELD.pkg) ? <Message tone="error">{shown(OFFER_FIELD.pkg)}</Message> : null}
-            </fieldset>
-          ) : null}
 
           {form ? <Message tone="error">{form}</Message> : null}
           <FormActions>
