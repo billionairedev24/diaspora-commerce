@@ -109,6 +109,13 @@ describe('storefront sections come from the seller settings', () => {
     expect(screen.queryByText('hi@example.com')).toBeNull();
   });
 
+  it('never prints a login email or a phone number, even if the data carries them; hours stay', () => {
+    const m = model((c) => { c.contact.showEmail = true; c.contact.phone = '713 555 1234'; c.contact.hours = 'Mon to Fri, 9 am to 5 pm'; });
+    const { container } = render({ ...m, contactEmail: 'hi@example.com' });
+    expect(container.innerHTML).not.toMatch(/hi@example\.com|mailto:|tel:|713 555 1234/);
+    expect(screen.getByText(/Mon to Fri, 9 am to 5 pm/)).toBeInTheDocument();
+  });
+
   it('add to cart and buy now call the marketplace cart', () => {
     const c = commerce();
     const m = model();
