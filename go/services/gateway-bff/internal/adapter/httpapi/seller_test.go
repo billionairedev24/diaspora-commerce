@@ -788,6 +788,7 @@ func TestSellerContractConformance(t *testing.T) {
 
 	// Reviews (S324): list, reply once, report.
 	mustStatus(t, kb.do("GET", "/v1/seller/reviews?unanswered=true", nil), 200)
+	mustStatus(t, kb.do("POST", "/v1/seller/reviews/"+testkit.ReviewSeededID+"/reply", map[string]any{"text": "Thanks! Call me on 713-555-1234 or order direct"}), 422)
 	mustStatus(t, kb.do("POST", "/v1/seller/reviews/"+testkit.ReviewSeededID+"/reply", map[string]any{"text": "Thank you, Amara."}), 200)
 	mustStatus(t, kb.do("POST", "/v1/seller/reviews/"+testkit.ReviewSeededID+"/reply", map[string]any{"text": "Again"}), 409)
 	mustStatus(t, kb.do("POST", "/v1/seller/reviews/"+testkit.ReviewSeededID+"/reports", map[string]any{"reasonCode": "SPAM"}), 201)
