@@ -37,9 +37,7 @@ func (s *storefrontServiceImpl) buildProvider(ctx context.Context, src Storefron
 		y := src.Since.Year()
 		out.SellingSinceYear = &y
 	}
-	if cfg.Contact.ShowEmail {
-		out.ContactEmail = strPtr(src.ContactEmail)
-	}
+	out.Config = publicConfig(cfg, src.WebsiteEarned)
 	if s.bookings == nil {
 		return out
 	}

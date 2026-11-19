@@ -48,7 +48,7 @@ func (s *businessPageServiceImpl) Page(ctx context.Context, slug string) (domain
 		return domain.BusinessPage{}, mapErr("seller", err)
 	}
 	out := domain.BusinessPage{Slug: up.Slug, Kind: up.Kind, Name: up.Name, Description: strPtr(up.Description),
-		BrandColor: validBrandColor(up.BrandColor), LogoURL: strPtr(up.LogoURL), ContactEmail: strPtr(up.ContactEmail),
+		BrandColor: validBrandColor(up.BrandColor), LogoURL: strPtr(up.LogoURL),
 		Indexable: up.Approved, Services: []domain.BusinessPageService{}, Products: []domain.ProductSummary{}}
 	if up.Kind == "PROVIDER" && s.bookings != nil {
 		// Best effort: a provider without published services (or bookings down) still has its page.

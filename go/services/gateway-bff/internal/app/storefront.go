@@ -35,6 +35,23 @@ type StorefrontSource struct {
 	Config                                                domain.StoreConfig
 	Since                                                 time.Time
 	Preview                                               bool
+	// WebsiteEarned is whether the store may show its stored website links (EarnedWebsite); false hides them.
+	WebsiteEarned bool
+}
+
+// publicConfig is the config as the public sees it: no phone, no email switch, and website links only when earned.
+func publicConfig(cfg domain.StoreConfig, websiteEarned bool) domain.StoreConfig {
+	cfg.Contact.Phone = ""
+	cfg.Contact.ShowEmail = false
+	social := make([]domain.StoreSocialLink, 0, len(cfg.Social))
+	for _, l := range cfg.Social {
+		if l.Network == domain.NetworkWebsite && !websiteEarned {
+			continue
+		}
+		social = append(social, l)
+	}
+	cfg.Social = social
+	return cfg
 }
 
 const (
@@ -53,6 +70,7 @@ type storefrontServiceImpl struct {
 	ratings  port.SellerRatingsClient
 	bookings port.CustomerBookingsClient
 	policy   domain.StorePolicy
+	gate     WebsiteGate
 	clock    Clock
 	cache    *ttlCache[port.UpStorefront]
 	built    *ttlCache[domain.Storefront]
@@ -68,6 +86,16 @@ type StorefrontOption func(*storefrontServiceImpl)
 // Without it a seller's page never shows a rating.
 func WithSellerRatings(r port.SellerRatingsClient) StorefrontOption {
 	return func(s *storefrontServiceImpl) { s.ratings = r }
+}
+
+// WebsiteGate says whether a store has earned showing its website links.
+type WebsiteGate interface {
+	WebsiteEarned(ctx context.Context, orgID string) bool
+}
+
+// WithWebsiteGate sets who decides whether a store's stored website links are shown. Without it they are always hidden.
+func WithWebsiteGate(g WebsiteGate) StorefrontOption {
+	return func(s *storefrontServiceImpl) { s.gate = g }
 }
 
 // WithProviders sets bookings, which makes provider pages bookable: their services, schedule, area, team and rating.
@@ -140,9 +168,14 @@ func (s *storefrontServiceImpl) Get(ctx context.Context, slug string) (domain.St
 	v, _, err := s.built.get(up.Slug, s.clock.now(), func() (domain.Storefront, error) {
 		kind := kindOf(up.Kind)
 		return s.Build(ctx, StorefrontSource{Kind: kind, OrgID: up.OrgID, Slug: up.Slug, Name: up.Name, Description: up.Description, LogoURL: up.LogoURL,
-			ContactEmail: up.ContactEmail, Config: s.config(up.Config, kind), Since: up.OrgCreatedAt})
+			Config: s.config(up.Config, kind), Since: up.OrgCreatedAt, WebsiteEarned: s.websiteEarned(ctx, up.OrgID)})
 	})
 	return v, err
+}
+
+// websiteEarned asks the optional website gate; without one every website link stays hidden (the safe default).
+func (s *storefrontServiceImpl) websiteEarned(ctx context.Context, orgID string) bool {
+	return s.gate != nil && s.gate.WebsiteEarned(ctx, orgID)
 }
 
 func (s *storefrontServiceImpl) Products(ctx context.Context, slug string, q domain.StorefrontQuery) (domain.StorefrontProducts, error) {
@@ -235,9 +268,9 @@ func (s *storefrontServiceImpl) Build(ctx context.Context, src StorefrontSource)
 		y := src.Since.Year()
 		out.SellingSinceYear = &y
 	}
-	if cfg.Contact.ShowEmail {
-		out.ContactEmail = strPtr(src.ContactEmail)
-	}
+	// The organisation's login email is never public (ContactEmail stays null for old clients); the phone number is never part
+	// of the public page (it reaches a customer on their order only).
+	out.Config = publicConfig(cfg, src.WebsiteEarned)
 	out.Reviews = s.sellerReviews(ctx, src.OrgID)
 	out.Pickup = s.pickupOf(ctx, src.OrgID, cfg)
 	out.Indexable = !src.Preview && len(first.Hits) > 0

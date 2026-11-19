@@ -9,6 +9,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/diversion"
 )
 
 // StoreConfigVersion is the schema version of StoreConfig.
@@ -74,8 +76,11 @@ var socialHosts = map[string][]string{
 	"x":         {"x.com", "twitter.com"},
 	"youtube":   {"youtube.com", "youtu.be"},
 	"whatsapp":  {"wa.me", "whatsapp.com", "api.whatsapp.com"},
-	"website":   nil,
 }
+
+// NetworkWebsite is the old "website" link. A seller can no longer choose it: one that is already stored stays (hidden on the
+// public page until the store has earned it, see EarnedWebsite) and can be removed.
+const NetworkWebsite = "website"
 
 // StoreConfig is how a seller's storefront looks and which sections it has. Plain text only; images from AfroTransact
 // media only; links https only (contract: components.schemas.StoreConfig).
@@ -171,6 +176,13 @@ type StorePolicy struct {
 	Kind string
 	// MediaPrefixes are the URL prefixes of AfroTransact media ("https://media.example.com/", "http://localhost:9000/media/").
 	MediaPrefixes []string
+	// ExistingWebsite are the website links already stored for the organisation: the only ones a save may keep.
+	ExistingWebsite []string
+	// Strict applies the tighter off-platform text rules (stores staff flagged).
+	Strict bool
+	// OnDiversionReject is called with the field path whenever the off-platform scan refuses a value (the metric
+	// diversion_text_rejected_total{field}); never with the text. Nil in the public sanitising pass.
+	OnDiversionReject func(field string)
 }
 
 // ForKind is the policy for one organisation kind.
@@ -287,7 +299,7 @@ func SafeLink(u string) (string, bool) {
 	return out, len(out) <= 2048
 }
 
-// SocialLink returns the link when it is https on a host that belongs to the network ("website" accepts any public host).
+// SocialLink returns the link when it is https on a host that belongs to the network. The "website" network is not a choice.
 func SocialLink(network, raw string) (string, bool) {
 	hosts, known := socialHosts[network]
 	if !known {
@@ -296,9 +308,6 @@ func SocialLink(network, raw string) (string, bool) {
 	clean, ok := SafeLink(raw)
 	if !ok {
 		return "", false
-	}
-	if hosts == nil {
-		return clean, true
 	}
 	parsed, _ := url.Parse(clean)
 	h := bareHost(parsed.Hostname())
@@ -361,6 +370,13 @@ func ValidateStoreConfig(in StoreConfig, p StorePolicy) (StoreConfig, map[string
 				errs[path] = fmt.Sprintf("At most %d characters", max)
 			} else {
 				errs[path] = "Plain text only: remove the HTML"
+			}
+			return s
+		}
+		if msg := DiversionProblem(s, p.Strict); msg != "" {
+			errs[path] = msg
+			if p.OnDiversionReject != nil {
+				p.OnDiversionReject(path)
 			}
 		}
 		return s
@@ -481,7 +497,9 @@ func ValidateStoreConfig(in StoreConfig, p StorePolicy) (StoreConfig, map[string
 	out.About.PhotoURL = image("about.photoUrl", in.About.PhotoURL)
 	out.Policies.Shipping = text("policies.shipping", in.Policies.Shipping, 600, false)
 	out.Policies.Returns = text("policies.returns", in.Policies.Returns, 600, false)
-	out.Contact.ShowEmail = in.Contact.ShowEmail
+	// The login email is never shown: ShowEmail is accepted from old clients and dropped. Customers write to the seller through
+	// AfroTransact messages.
+	out.Contact.ShowEmail = false
 	if ph := strings.TrimSpace(in.Contact.Phone); ph != "" {
 		if phoneRe.MatchString(ph) {
 			out.Contact.Phone = ph
@@ -498,6 +516,15 @@ func ValidateStoreConfig(in StoreConfig, p StorePolicy) (StoreConfig, map[string
 		if i >= 6 {
 			break
 		}
+		if l.Network == NetworkWebsite {
+			// Only a link that is already stored may stay (it can be removed, not added).
+			if clean, ok := SafeLink(l.URL); ok && contains(p.ExistingWebsite, clean) {
+				out.Social = append(out.Social, StoreSocialLink{Network: l.Network, URL: clean})
+			} else {
+				errs[fmt.Sprintf("social.%d.url", i)] = "Website links are no longer available. Remove it and use your social profile links"
+			}
+			continue
+		}
 		clean, ok := SocialLink(l.Network, l.URL)
 		if !ok {
 			errs[fmt.Sprintf("social.%d.url", i)] = "Use the full https link of your profile"
@@ -511,6 +538,15 @@ func ValidateStoreConfig(in StoreConfig, p StorePolicy) (StoreConfig, map[string
 // SanitizeStoreConfig is the defensive pass on a stored config before it goes to the public: whatever fails validation is
 // replaced by its default, never an error (a bad value must not take a live page down, and never reaches a browser).
 func SanitizeStoreConfig(in StoreConfig, p StorePolicy) StoreConfig {
+	p.OnDiversionReject = nil
+	// Whatever website links the store has stored stay in the data (the public page hides them until earned).
+	for _, l := range in.Social {
+		if l.Network == NetworkWebsite {
+			if clean, ok := SafeLink(l.URL); ok {
+				p.ExistingWebsite = append(p.ExistingWebsite, clean)
+			}
+		}
+	}
 	out, errs := ValidateStoreConfig(in, p)
 	if len(errs) == 0 {
 		return out
@@ -569,7 +605,7 @@ func SanitizeStoreConfig(in StoreConfig, p StorePolicy) StoreConfig {
 	if errs["policies.returns"] == "" {
 		res.Policies.Returns = out.Policies.Returns
 	}
-	res.Contact.ShowEmail = out.Contact.ShowEmail
+	res.Contact.ShowEmail = false
 	if errs["contact.phone"] == "" {
 		res.Contact.Phone = out.Contact.Phone
 	}
@@ -588,4 +624,9 @@ func contains(list []string, v string) bool {
 		}
 	}
 	return false
+}
+
+// DiversionProblem is what to tell the seller when text points customers away from AfroTransact; "" when it is fine.
+func DiversionProblem(text string, strict bool) string {
+	return diversion.Message(diversion.Default().Scan(text, diversion.Options{Strict: strict}))
 }

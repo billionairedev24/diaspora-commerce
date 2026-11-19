@@ -110,7 +110,7 @@ func TestLinksAreHTTPSOnAllowedHosts(t *testing.T) {
 		{"facebook", "https://m.facebook.com/laserfeet", true},
 		{"x", "https://twitter.com/laserfeet", true},
 		{"whatsapp", "https://wa.me/15551234567", true},
-		{"website", "https://laserfeet.example.com/shop", true},
+		{"website", "https://laserfeet.example.com/shop", false},
 		{"website", "https://127.0.0.1/x", false},
 		{"website", "https://localhost/x", false},
 		{"website", "javascript:alert(1)", false},
@@ -188,5 +188,47 @@ func TestFeaturedIsBoundedAndShaped(t *testing.T) {
 	}
 	if _, errs := ValidateStoreConfig(cfg, testPolicy); errs["featured"] == "" {
 		t.Fatal("nine featured accepted")
+	}
+}
+
+func TestStoreTextRefusesOffPlatformContact(t *testing.T) {
+	var rejected []string
+	p := StorePolicy{OnDiversionReject: func(f string) { rejected = append(rejected, f) }}
+	cfg := DefaultStoreConfig()
+	cfg.Hero.Style = "image"
+	cfg.Hero.Tagline = "Call 713-555-1234"
+	cfg.About.Body = "Order direct at mystore.com"
+	cfg.Contact.Hours = "Mon-Fri 9 am to 5 pm"
+	_, errs := ValidateStoreConfig(cfg, p)
+	if errs["hero.tagline"] == "" || errs["about.body"] == "" {
+		t.Fatalf("contact text accepted: %+v", errs)
+	}
+	if errs["contact.hours"] != "" {
+		t.Fatalf("normal opening hours refused: %q", errs["contact.hours"])
+	}
+	if len(rejected) != 2 {
+		t.Fatalf("metric hook called %v", rejected)
+	}
+	// The public pass never counts and never errors: the offending field falls back to its default.
+	got := SanitizeStoreConfig(cfg, p)
+	if got.Hero.Tagline != "" || got.Contact.Hours == "" || len(rejected) != 2 {
+		t.Fatalf("sanitize: %+v rejected=%v", got.Hero, rejected)
+	}
+}
+
+func TestWebsiteLinksCannotBeAddedAndEmailSwitchIsDropped(t *testing.T) {
+	cfg := DefaultStoreConfig()
+	cfg.Contact.ShowEmail = true
+	cfg.Social = []StoreSocialLink{{Network: "website", URL: "https://shop.example.com/"}}
+	out, errs := ValidateStoreConfig(cfg, StorePolicy{})
+	if errs["social.0.url"] == "" || out.Contact.ShowEmail {
+		t.Fatalf("new website link or email switch kept: %+v %+v", errs, out.Contact)
+	}
+	out, errs = ValidateStoreConfig(cfg, StorePolicy{ExistingWebsite: []string{"https://shop.example.com/"}})
+	if errs["social.0.url"] != "" || len(out.Social) != 1 {
+		t.Fatalf("stored website link must stay: %+v", errs)
+	}
+	if s := SanitizeStoreConfig(cfg, StorePolicy{}); len(s.Social) != 1 || s.Contact.ShowEmail {
+		t.Fatalf("sanitize drops stored link or keeps email: %+v", s)
 	}
 }
