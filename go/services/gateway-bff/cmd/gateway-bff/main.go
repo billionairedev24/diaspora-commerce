@@ -239,7 +239,6 @@ func run() error {
 		SellerCases:        app.NewSellerCasesService(sellerDeps),
 		SellerReviews:      app.NewSellerReviewsService(sellerDeps, onDiversion),
 		SellerTax:          app.NewSellerTaxService(sellerDeps),
-		SellerFba:          app.NewSellerFbaService(sellerDeps),
 	}
 	// Lola in Seller Center: looks things up through the seller services above, as the signed-in seller.
 	services.SellerAssistant = app.NewSellerAssistantService(sellerDeps, app.AssistantDeps{Model: upstreams.NewAssistantModel(client("ai-gateway", up.AIGateway)),
