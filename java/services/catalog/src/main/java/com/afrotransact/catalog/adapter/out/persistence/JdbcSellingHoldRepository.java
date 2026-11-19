@@ -18,7 +18,7 @@ class JdbcSellingHoldRepository implements SellingHoldRepository {
     /** A category and everything below it, by code(s). */
     private static final String SUBTREE = "p.category_id in (with recursive sub as (select id from category where code in "
             + "(:codes) union all select c.id from category c join sub on c.parent_id = sub.id) select id from sub)";
-    private static final String BRAND = "regexp_replace(lower(coalesce(p.attributes->>'brand', '')), '[^[:alnum:]]+', '', 'g')";
+    private static final String BRAND = "brand_key(coalesce(p.attributes->>'brand', ''))";
 
     private final JdbcClient jdbc;
 
