@@ -20,3 +20,15 @@ Status: accepted (owner decision, 2026-11-17). Corrects [ADR 0011 (two fulfilmen
   its own; sending stock to AfroTransact answers 410 `FBA_INBOUND_RETIRED`; reading earlier inbound plans, stock and lots still works.
 - Seller Center: no "Inventory & FBA" stock-send flow, no fulfilment-centre wording; the modes are explained in tooltips.
 - Open data question for the owner: stock that sellers already sent to AfroTransact (return it, or buy it). Nothing here touches it.
+
+## Addendum (S632): defaults and what was removed
+
+- **Default for a new offer:** Fulfilled by AfroTransact when the seller's default location (or only location) has AfroTransact collection switched on, the
+  address is located and the organisation is approved; otherwise Pick up. The seller can change it on the offer (`defaultOfferFulfilment`, Seller Center).
+- **Removed:** the seller gateway relay `/v1/seller/fba/**` (every write already answered 410; no screen used it), its OpenAPI paths and schemas, the Zod
+  client and mocks, the `FBA_INBOUND_RETIRED` code, the offers listener that turned a received seller plan into a stock-held offer, the seeder's seller inbound
+  shipments, lots, counts and transfer (counts and the transfer now use AfroTransact Retail's lots), the Seller Center Inbound column and tile, the nav name
+  "Inventory & FBA" (now "Inventory"), and the help article that told sellers to send stock to a fulfilment centre.
+- **Kept on purpose (history and Retail):** the inventory service, its inbound, lot and node tables and endpoints (earlier seller plans, AfroTransact Retail's
+  receiving), the staff console inventory hub (Retail), `FBA_AFROTRANSACT` shipment mode and offer `AFROTRANSACT` for existing rows and Retail, stored fee fields
+  and lines (refunds of old orders), and the seller terms draft wording (needs counsel).

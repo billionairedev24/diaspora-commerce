@@ -33,7 +33,6 @@ class ListenersDeadLetterTest {
         return Stream.of(
                 Arguments.of(CatalogEventListener.class, "catalog.product.created", "onMessage", true, "some.other.event"),
                 Arguments.of(InventoryEventListener.class, "inventory.availability.changed", "onMessage", true, "some.other.event"),
-                Arguments.of(InventoryInboundEventListener.class, "inventory.inbound.received", "onMessage", true, "some.other.event"),
                 Arguments.of(OrderStockEventListener.class, "orders.order.placed", "onMessage", true, "some.other.event"),
                 Arguments.of(RetailEventListener.class, "retail.item.updated", "onMessage", true, "some.other.event"),
                 Arguments.of(SellerEventListener.class, "seller.org.approved", "onMessage", true, "some.other.event")

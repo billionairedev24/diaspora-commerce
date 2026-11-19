@@ -86,7 +86,11 @@ lot's currency; they must add up to the unit cost, default all goods).
 - Migration V7 backfills existing lots and allocations as USD at rate 1 (everything was costed in the retail base
   currency; FBA stock at zero).
 
-## Send stock to AfroTransact (S257, FBA inbound)
+## Send stock to AfroTransact (S257, FBA inbound) — retired for marketplace sellers (ADR 0013, S632)
+
+> History only. AfroTransact keeps no marketplace seller stock: Seller Center and the seller gateway (`/v1/seller/fba/**`) no longer
+> reach these endpoints and the offers service no longer turns a received plan into an offer. The tables and the endpoints stay for
+> earlier plans, lots and AfroTransact Retail's own receiving; nothing is deleted.
 
 Extends the `POST /v1/inbound` ASN (still available for single-SKU expected units) into inbound shipments:
 

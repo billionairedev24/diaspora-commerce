@@ -113,7 +113,7 @@ export function FlowPanel() {
       <Card>
         <h2 className="m-0 text-xl font-black">From purchase order to “Sold &amp; shipped by AfroTransact”</h2>
         <p className="m-0 text-sm text-muted">
-          Stock enters the platform only through receiving: a purchase order (AfroTransact Retail) or a seller’s inbound plan (FBA) announces what is coming and which batches are in it, the
+          Stock enters the platform only through receiving: a purchase order (AfroTransact Retail) announces what is coming and which batches are in it, the
           fulfilment centre counts it at the dock, every batch becomes a lot with its expiry, and available lots flow to the offer, the search index and the product page.
         </p>
       </Card>

@@ -6,7 +6,7 @@ description: How stock is announced, received, counted, kept by batch and expiry
 ---
 
 This page follows one case of goods from a purchase order to a product page. It covers both AfroTransact Retail (1P),
-which buys from suppliers, and sellers who send stock to AfroTransact fulfilment centres (FBA). It answers four
+which buys from suppliers. (Marketplace sellers no longer send stock to AfroTransact: ADR 0013 retired the seller inbound plans and the seller FBA routes; the retail flow below is unchanged.) It answers four
 questions: how stock data comes in, how we record what a shipment holds, how counts, lots and expiry dates are kept,
 and how the stock reaches the storefront. Story S281.
 
@@ -118,7 +118,6 @@ Two links were broken and are now fixed (S281):
 | Expiry | `/v1/staff/inventory/lots/markdown`, `/lots/markdown-runs`, `/lots/expiry-runs` | inventory |
 | Cycle counts | `/v1/staff/inventory/cycle-counts[/{id}[/counts\|/post\|/cancel]]` | inventory `/v1/cycle-counts` |
 | Retail | `/v1/staff/retail/{items,suppliers,purchase-orders,shipments,receipts,invoices}/…` | retail |
-| Seller FBA | `/v1/seller/fba/{inbound,lots,…}` (active org only) | inventory |
 
 Module levels: View reads, Edit creates and receives, Approve approves over-receipts, write-offs, POs and suppliers.
 The BFF checks them, and every upstream checks its own permissions again.

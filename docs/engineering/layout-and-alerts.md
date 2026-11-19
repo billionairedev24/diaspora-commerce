@@ -32,8 +32,8 @@ Do:
 
 ```tsx
 <Alert variant="warning" title="1 SKU is running low on stock."
-  action={<AlertAction onClick={plan}>Create inbound plan</AlertAction>}>
-  Send stock to AfroTransact to avoid stockouts.
+  action={<AlertAction onClick={adjust}>Adjust stock</AlertAction>}>
+  Update the counted quantities to avoid stockouts.
 </Alert>
 ```
 

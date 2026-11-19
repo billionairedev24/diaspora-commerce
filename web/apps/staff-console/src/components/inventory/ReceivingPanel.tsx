@@ -293,7 +293,7 @@ export function ReceivingPanel() {
                   <StatusPill tone={toneOf(s.status)}>{s.status === 'SHIPPED' ? 'Arriving' : 'Receiving'}</StatusPill>
                 </span>
                 <span className="text-xs text-muted">
-                  {s.source === 'RETAIL_ASN' ? 'Retail PO · goods receipt' : 'FBA'} · {s.nodeId} · {s.expectedUnits} units · ETA {shortDate(s.expectedArrival)}
+                  {s.source === 'RETAIL_ASN' ? 'Retail PO · goods receipt' : 'Earlier seller shipment'} · {s.nodeId} · {s.expectedUnits} units · ETA {shortDate(s.expectedArrival)}
                 </span>
               </button>
             </li>
@@ -324,7 +324,7 @@ export function ReceivingPanel() {
         ) : (
           <Card>
             <p className="m-0 text-sm text-muted">
-              Pick a shipment at the dock. FBA shipments are counted here line by line; AfroTransact Retail shipments open a goods receipt against their purchase order (over-receipts above 2 % need
+              Pick a shipment at the dock. AfroTransact Retail shipments open a goods receipt against their purchase order (over-receipts above 2 % need
               purchasing approval).
             </p>
           </Card>
