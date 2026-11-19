@@ -133,8 +133,6 @@ at:
       # S384: tax.classification.changed (a variant's decision was made or changed) releases offers held for tax.
       tax-topic: at.taxreturns.events
       inventory-topic: at.inventory.events
-      # S257: inventory.inbound.received (FBA stock received at a fulfilment centre) → Fulfilled by AfroTransact offer
-      inventory-inbound-topic: at.inventory-inbound.events
       seller-compliance-topic: at.seller-compliance.events
       seller-org-topic: at.seller-org.events
       # S281: AfroTransact Retail's item listing (LIVE / PAUSED) drives its first-party offer
