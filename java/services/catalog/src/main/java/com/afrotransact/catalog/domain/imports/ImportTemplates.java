@@ -19,7 +19,7 @@ public final class ImportTemplates {
             "Columns marked * are required when creating products. A product's title, description, images and "
                     + "details are read from its first row; variant rows only need SKU, options, price, quantity "
                     + "and barcode.",
-            "Images, method 1 (links): put a public https link to a JPG, PNG or WebP file in Main image URL and up to "
+            "Images, method 1 (links): put a public https link to a JPG, PNG, WebP or AVIF file in Main image URL and up to "
                     + "eight more in Other image URL 1 to 8; Swatch image "
                     + "URL is a small picture of the colour or pattern. We copy each image into AfroTransact and check "
                     + "it like an upload. Example: https://example.com/ankara-front.jpg.",

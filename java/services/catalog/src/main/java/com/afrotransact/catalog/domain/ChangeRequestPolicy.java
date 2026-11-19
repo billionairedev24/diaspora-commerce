@@ -116,7 +116,7 @@ public final class ChangeRequestPolicy {
         ProductImage image = new ProductImage(url.isEmpty() ? "x" : url, number(payload, "width"),
                 number(payload, "height"), number(payload, "bytes"), text(payload, "contentType"));
         if (!image.allowedType()) {
-            errors.put("payload.contentType", "Use a JPG, PNG or WebP file");
+            errors.put("payload.contentType", "Use a JPG, PNG, WebP or AVIF file");
         }
         if (image.bytes() <= 0 || image.bytes() > ProductImage.MAX_BYTES) {
             errors.put("payload.bytes", "At most 8 MB");

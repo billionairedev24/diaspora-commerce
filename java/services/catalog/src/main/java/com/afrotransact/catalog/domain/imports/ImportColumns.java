@@ -231,7 +231,7 @@ public final class ImportColumns {
         }
         out.add(new ImportColumn(KEYWORDS, "Search keywords", "Words shoppers might search for, separated by commas "
                 + "(up to 20).", false, ColumnKind.TEXT, List.of(), "ankara, wax print, owambe", true));
-        out.add(new ImportColumn(IMAGES, "Image URLs", "Public https links to JPG, PNG or WebP images, or file names "
+        out.add(new ImportColumn(IMAGES, "Image URLs", "Public https links to JPG, PNG, WebP or AVIF images, or file names "
                 + "from your image library, separated by spaces, new lines or \"|\". The first is the main image; up to 10. "
                 + "Leave empty to use the library images named after the SKU (SKU.MAIN.jpg, SKU.PT01.jpg …).", true,
                 ColumnKind.URLS, List.of(), "https://example.com/ankara-front.jpg", true));
@@ -488,7 +488,7 @@ public final class ImportColumns {
                         "Hand-finished wax print wrap dress with puff sleeves.", true),
                 new ImportColumn(CONDITION, "Condition", "New unless stated.", false, ColumnKind.ENUM,
                         conditionLabels(), "New", true),
-                new ImportColumn(IMAGES, "Image URLs", "Public https links to JPG, PNG or WebP images, or file names from your image library, separated by spaces, "
+                new ImportColumn(IMAGES, "Image URLs", "Public https links to JPG, PNG, WebP or AVIF images, or file names from your image library, separated by spaces, "
                         + "new lines or \"|\". The first is the main image; up to 10. Leave empty to use the library "
                         + "images named after the SKU (SKU.MAIN.jpg, SKU.PT01.jpg …).", true,
                         ColumnKind.URLS, List.of(), "https://example.com/ankara-front.jpg", true),
