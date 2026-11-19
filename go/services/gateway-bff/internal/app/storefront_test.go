@@ -202,10 +202,19 @@ func TestContactAndPickupOnlyWhenTheSellerShowsThem(t *testing.T) {
 
 	cfg := domain.DefaultStoreConfig()
 	cfg.Contact.ShowEmail, cfg.Pickup.Show = true, true
+	cfg.Contact.Phone = "713 555 1234"
+	cfg.Social = []domain.StoreSocialLink{{Network: "instagram", URL: "https://instagram.com/laserfeet"}, {Network: "website", URL: "https://laserfeet.example.com/"}}
 	on, _ := storefrontSvc(t, cfg, hits, []port.PickupLocation{place})
 	g, _ = on.Get(context.Background(), "laserfeet")
-	if g.ContactEmail == nil || *g.ContactEmail != "hi@example.com" || g.Pickup == nil || g.Pickup.Zip != "77002" {
-		t.Fatalf("contact/pickup missing: %+v %+v", g.ContactEmail, g.Pickup)
+	if g.Pickup == nil || g.Pickup.Zip != "77002" {
+		t.Fatalf("pickup missing: %+v", g.Pickup)
+	}
+	// The login email, the phone number and (until earned) website links are never on the public page.
+	if g.ContactEmail != nil || g.Config.Contact.ShowEmail || g.Config.Contact.Phone != "" {
+		t.Fatalf("private contact leaked: %+v %+v", g.ContactEmail, g.Config.Contact)
+	}
+	if len(g.Config.Social) != 1 || g.Config.Social[0].Network != "instagram" {
+		t.Fatalf("website link shown before it is earned: %+v", g.Config.Social)
 	}
 
 	// shown by the seller but not switched on (or not the seller's own place): never claimed
