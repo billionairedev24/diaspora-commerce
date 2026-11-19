@@ -655,3 +655,15 @@ func money(minor float64, currency string) string {
 	}
 	return currency + " " + strconv.FormatFloat(minor/100, 'f', 2, 64)
 }
+
+func matchIn(table []opsRoute, r OpsRequest) (opsRoute, string, bool) {
+	for _, rt := range table {
+		if rt.area != r.Area || rt.method != r.Method {
+			continue
+		}
+		if m := rt.pattern.FindStringSubmatch(r.Path); m != nil {
+			return rt, expand(rt, m), true
+		}
+	}
+	return opsRoute{}, "", false
+}

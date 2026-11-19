@@ -72,9 +72,6 @@ const (
 	// is the default, or the seller does not ship that package themselves). CodeSelfShippingDisabled is the seller's side: they
 	// cannot set a shipping charge while the switch is off.
 	CodeSelfShippingUnavailable = "SELF_SHIPPING_UNAVAILABLE"
-	// CodeFbaInboundRetired: a seller tried to send stock to AfroTransact. AfroTransact keeps no seller stock: Fulfilled by AfroTransact
-	// means it collects from the seller's pickup location and delivers. Reading existing plans still works.
-	CodeFbaInboundRetired = "FBA_INBOUND_RETIRED"
 	CodeSelfShippingDisabled    = "SELF_SHIPPING_DISABLED"
 	// CodeCheckoutItemBlocked: a cart line can't be sold yet (its tax decision is not definite); remove it or wait.
 	CodeCheckoutItemBlocked = "CHECKOUT_ITEM_BLOCKED"

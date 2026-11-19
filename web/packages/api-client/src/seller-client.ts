@@ -2,7 +2,6 @@ import { z } from 'zod';
 
 import { type AddressSearchOptions } from './address-lookup';
 import { type ApiClientOptions, createDownloader, createRequester, type DownloadedFile } from './http';
-import { createSellerFbaApi } from './inventory-hub';
 import { type ExportDataset, type ExportFormat, type ExportJob, type ExportJobList, ExportJobListSchema, ExportJobSchema, type TableExportQuery } from './schemas/exports';
 import { type AddressSuggestions, AddressSuggestionsSchema, type PostalAddress, PostalAddressSchema } from './schemas/location';
 import { type ReviewReportInput, type ReviewReportResult, ReviewReportResultSchema, type SellerReview, type SellerReviewPage, SellerReviewPageSchema, SellerReviewSchema } from './schemas/reviews';
@@ -715,9 +714,6 @@ export function createSellerApiClient(options: ApiClientOptions) {
       request('/v1/seller/provider/cancellation-policy', CancellationPolicySchema, { method: 'PUT', body: input }),
     getEarnings: (from: string | undefined, to: string | undefined, signal?: AbortSignal): Promise<Earnings> =>
       request('/v1/seller/provider/earnings', EarningsSchema, { query: { from, to }, signal }),
-
-    /* Send to AfroTransact (S281): inbound plans, labels, lots and expiry for the active organisation */
-    fba: createSellerFbaApi(request, options),
 
     /* Add a product starts with the barcode (S382): lookup, offer-only offers, change requests, Improve your image tasks (S391) */
     matching: createSellerMatchingApi(request)
