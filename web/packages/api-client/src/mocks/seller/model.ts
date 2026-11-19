@@ -40,7 +40,7 @@ export const SELLER_MODULES: ModuleDef[] = [
   m('sOrders', 'disputes', 'Disputes', 'commerce', 'disputes and A-to-z claims against you'),
   m('sListings', 'listings', 'Listings', 'commerce', 'product listings'),
   m('sListings', 'reviews', 'Reviews', 'commerce', 'reviews of your products and your replies'),
-  m('sInventory', 'inventory', 'Inventory & FBA', 'commerce', 'stock levels'),
+  m('sInventory', 'inventory', 'Inventory', 'commerce', 'stock levels'),
   m('sAds', 'coupons', 'Coupons', 'growth', 'promotional codes for your listings'),
   m('sPayouts', 'payouts', 'Payouts', 'finance', 'payouts and balances'),
   m('sPayouts', 'fees', 'Fees & commission', 'finance', 'commission and fees'),
