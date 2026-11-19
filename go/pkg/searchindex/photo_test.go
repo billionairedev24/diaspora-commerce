@@ -14,6 +14,10 @@ func TestPhotoOK(t *testing.T) {
 	}{
 		{"https photo", "https://cdn.afrotransact.com/p/jollof.jpg", true},
 		{"http photo", "http://cdn.example.com/a.webp", true},
+		{"avif photo", "https://cdn.afrotransact.com/p/jollof.avif", true},
+		{"avif upper case with query", "https://cdn.afrotransact.com/p/JOLLOF.AVIF?w=800", true},
+		{"png photo", "https://cdn.afrotransact.com/p/jollof.png", true},
+		{"avif placeholder", "https://cdn.afrotransact.com/p/placeholder.avif", false},
 		{"site relative", "/media/p/1.jpg", true},
 		{"empty", "", false},
 		{"blank", "   ", false},
