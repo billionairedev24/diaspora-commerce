@@ -24,8 +24,8 @@ class Seller:
     city: str
     region: str
     zip: str
-    node: str  # AfroTransact fulfilment centre that holds its FBA stock
-    fulfilment: str = "AFROTRANSACT"  # default for its offers: AFROTRANSACT (FBA from AfroTransact stock; never self-shipping)
+    node: str  # inventory node of AfroTransact Retail's own stock (only the retail seller has stock there; marketplace sellers count stock on the offer)
+    fulfilment: str = "AFROTRANSACT_DELIVERY"  # marketplace sellers: FBA from their own location when it can (ADR 0013), else Pick up
     kind: str = "SELLER"
 
 
@@ -388,7 +388,7 @@ PRODUCTS: list[Product] = [
     # ---------------------------------------------------------------------------------------- fresh & frozen
     P("smoked-catfish", "Smoked Catfish, Whole", MEAT, "lagos-larder", "Lagos Larder", "Nigerian", "Nigeria",
       ["Wood-smoked, ready for pepper soup and ogbono", "Delivered frozen"], [("1 lb", 1599), ("2 lb", 2899)],
-      ["smoked fish", "catfish", "dried fish"], unit="1 lb", fulfilment="AFROTRANSACT",
+      ["smoked fish", "catfish", "dried fish"], unit="1 lb",
       attrs={"ingredients": "Catfish", "allergens": "Contains fish", "temp": "Frozen (≤ 0°F)"}),
     P("goat-meat", "Halal Goat Meat, Cubed", MEAT, "mama-put", "Mama Put", "West African", "United States",
       ["Bone-in cubes for stew and pepper soup", "Halal, delivered frozen"], [("2 lb", 2499), ("5 lb", 5499)],
@@ -617,6 +617,17 @@ LOCATIONS: list[Location] = [
     Location("patel", "Store", "1600 Oak Tree Rd", "Edison", "NJ", "08820", "+17325550144", ("fba", "pickup")),
     Location("bamako", "Studio", "740 Flatbush Ave", "Brooklyn", "NY", "11226", "+17185550145", ("fba",)),
     Location("addis", "Shop", "8484 Georgia Ave", "Silver Spring", "MD", "20910", "+13015550146", ("pickup",)),
+    # Every marketplace seller needs a location: nothing is held at AfroTransact (ADR 0013, S632), so an offer is Fulfilled by
+    # AfroTransact from here or Pick up from here. Demo addresses geo's local fixture list can place; Atlanta, Miami and Columbus
+    # have no AfroTransact delivery zone in the demo, so those sellers are Pick up.
+    Location("accra-market", "Shop", "116 W 125th St", "New York", "NY", "10027", "+12125550147", ("fba",)),
+    Location("dakar", "Studio", "88 Halsey St", "Newark", "NJ", "07102", "+19735550148", ("fba",)),
+    Location("owambe", "Studio", "123 Main St", "Houston", "TX", "77002", "+17135550149", ("fba",)),
+    Location("kente-co", "Showroom", "3500 Peachtree Rd NE", "Atlanta", "GA", "30326", "+14045550150", ("pickup",)),
+    Location("bonwire", "Workshop", "3500 Peachtree Rd NE", "Atlanta", "GA", "30326", "+14045550151", ("pickup",), "Unit 2"),
+    Location("books", "Bookshop", "3500 Peachtree Rd NE", "Atlanta", "GA", "30326", "+14045550152", ("pickup",), "Unit 3"),
+    Location("kingston", "Kitchen", "2200 NW 7th Ave", "Miami", "FL", "33127", "+13055550153", ("pickup",)),
+    Location("tamale", "Shop", "1030 E Main St", "Columbus", "OH", "43205", "+16145550154", ("pickup",)),
 ]
 LOCATION_BY_SELLER = {loc.seller: loc for loc in LOCATIONS}
 # AfroTransact delivery zones the FBA locations above sit in (geo DELIVERY zones; Houston is created by the ops step too).
@@ -626,9 +637,9 @@ DELIVERY_ZONES = [
     {"name": "New York and New Jersey", "ownerId": "afrotransact-delivery", "type": "DELIVERY", "centerLat": 40.7128,
      "centerLon": -74.006, "radiusMiles": 40, "active": True},
 ]
-# Products offered from their seller's own FBA location (offer fulfilment AFROTRANSACT_DELIVERY, shipFrom that location,
-# stock counted on the offer) instead of from stock held at an AfroTransact fulfilment centre. All others are FBA from stock.
-LOCATION_FBA = {"poundo-yam", "kuli-kuli", "turmeric", "mango-pickle", "namkeen"}
+# Every marketplace offer comes from its seller's own location with the stock counted on the offer: Fulfilled by AfroTransact
+# (offer fulfilment AFROTRANSACT_DELIVERY) when the location lets AfroTransact collect, else Pick up (SELLER). Only AfroTransact
+# Retail holds stock at AfroTransact.
 
 # ---------------------------------------------------------------------------------------- home content
 # Images: (key, queries). Campaigns replace the image-less placements of content's V2 migration (same copy).

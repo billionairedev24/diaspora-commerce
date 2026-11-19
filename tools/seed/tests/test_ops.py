@@ -63,7 +63,6 @@ class OpsDatasetTest(unittest.TestCase):
     def test_every_product_key_is_in_the_catalog_dataset(self):
         keys = [it.product for it in O.ITEMS]
         keys += [ln.product for po in O.PURCHASE_ORDERS for ln in po.lines]
-        keys += [ln.product for ib in O.INBOUND for ln in ib.lines]
         keys += [ln.product for o in O.ORDERS + [O.SELLER_PICKUP["order"]] for pkg in o.packages for ln in pkg.lines]
         keys += [O.SELLER_PICKUP["product"], O.TRANSFER[0]]
         for key in keys:
@@ -99,18 +98,13 @@ class OpsDatasetTest(unittest.TestCase):
                       if x.supplier == po.supplier and x is not po]
             self.assertNotIn(signature, others, "supplier + lines identify a purchase order")
 
-    def test_inbound_shipments_cover_every_stage_in_whole_cases(self):
-        self.assertEqual({ib.target for ib in O.INBOUND}, {"WORKING", "SHIPPED", "RECEIVING", "CLOSED"})
-        shipped = [ib for ib in O.INBOUND if ib.target == "SHIPPED"]
-        self.assertTrue(any(ib.arrives_in_days > 0 for ib in shipped), "one in transit")
-        self.assertTrue(any(ib.arrives_in_days <= 0 for ib in shipped), "one arrived, waiting to be received")
-        lines = [ln for ib in O.INBOUND for ln in ib.lines]
-        self.assertTrue(all(ln.qty % 12 == 0 for ln in lines))
-        self.assertTrue(any(ln.hold for ln in lines), "a QC hold")
-        self.assertTrue(any(ln.damaged for ln in lines), "damaged units")
-        self.assertTrue(any(ln.expires_in_days <= 1 for ln in lines), "a lot that expires now")
-        self.assertTrue(any(30 <= ln.expires_in_days <= 60 for ln in lines), "markdown candidates")
-        self.assertEqual(len({ln.lot for ln in lines}), len(lines))
+    def test_there_is_no_seller_inbound_stock(self):
+        # AfroTransact keeps no marketplace seller stock (ADR 0013): the seed creates no inbound plan, lot or FC stock for a seller.
+        self.assertFalse(hasattr(O, "INBOUND"))
+        self.assertFalse(hasattr(O, "Inbound"))
+        retail_products = {ln.product for po in O.PURCHASE_ORDERS for ln in po.lines}
+        self.assertTrue(set(O.COUNT_SKUS) <= retail_products and O.TRANSFER[0] in retail_products,
+                        "counts and the transfer work on AfroTransact Retail's own lots")
 
     def test_orders_cover_the_two_fulfilment_modes_and_every_delivery_state(self):
         orders = O.ORDERS + [O.SELLER_PICKUP["order"]]

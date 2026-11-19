@@ -293,7 +293,7 @@ class Seeder:
         self.up: dict[str, bool] = {}
         self._rules: dict[str, L.Rules | None] = {}  # listing rules by category code
         self.products: dict[str, dict[str, Any]] = {}  # dataset key -> catalog product
-        self.locations: dict[str, dict[str, Any] | None] = {}  # seller key -> its Fulfilled by AfroTransact location (None: none)
+        self.locations: dict[str, tuple[dict[str, Any] | None, bool]] = {}  # seller key -> (its location, AfroTransact collects there) (None: none)
         self._zones_ready = False
         self.charts: dict[str, dict[str, Any]] = {}  # dataset size chart key -> catalog size chart
         self.tax_atins: dict[str, str] = {}  # variant ATIN -> product title, every variant of this run's products
@@ -452,13 +452,13 @@ class Seeder:
     def step_locations(self) -> None:
         self.log("== seller locations: Fulfilled by AfroTransact (pickup hours, located address, delivery zone) and Seller pickup")
         if not self.up.get("seller"):
-            self.log("  ! seller-service is down: no locations; their products are offered from AfroTransact stock instead")
+            self.log("  ! seller-service is down: no locations, so marketplace sellers have no offers (nothing is held at AfroTransact)")
             self.report.add("locations", "skipped", len(D.LOCATIONS))
             return
         for loc in D.LOCATIONS:
-            address = self._ensure_location(loc)
+            address, _ = self._ensure_location(loc)
             modes = " + ".join({"fba": "Fulfilled by AfroTransact", "pickup": "Seller pickup"}[m] for m in loc.modes)
-            if address is not None or "fba" not in loc.modes:
+            if address is not None:
                 self.log(f"  ✓ {D.SELLER_BY_KEY[loc.seller].name} · {loc.line1}, {loc.city}: {modes}")
 
     def _ensure_zones(self) -> None:
@@ -474,11 +474,12 @@ class Seeder:
         except ApiError as e:
             self._problem(f"delivery zones (geo): {e}")
 
-    def _location(self, seller_key: str) -> dict[str, Any] | None:
-        """The seller's location that is Fulfilled by AfroTransact, or None (the seller has none, or it could not be set up)."""
+    def _location(self, seller_key: str) -> tuple[dict[str, Any] | None, bool]:
+        """The seller's location and whether AfroTransact collects there: (None, False) when the seller has none or it could not
+        be set up. Nothing is held at AfroTransact (ADR 0013), so every marketplace offer comes from a location."""
         loc = D.LOCATION_BY_SELLER.get(seller_key)
-        if loc is None or "fba" not in loc.modes or not self.up.get("seller"):
-            return None
+        if loc is None or not self.up.get("seller"):
+            return None, False
         if seller_key not in self.locations:
             self.locations[seller_key] = self._ensure_location(loc)
         return self.locations[seller_key]
@@ -486,7 +487,8 @@ class Seeder:
     def _ensure_location(self, loc: D.Location) -> dict[str, Any] | None:
         """Creates the location with pickup hours (the seller service then turns Fulfilled by AfroTransact on by default when the
         address is located at street level inside a delivery zone), makes sure it is on, and gives Seller pickup places a
-        carrier-gateway pickup point. Returns the address when it is Fulfilled by AfroTransact, else None. Never invents a mode."""
+        carrier-gateway pickup point. Returns (address, whether AfroTransact collects there); (None, False) when it could not be set up.
+        Never invents a mode."""
         seller = D.SELLER_BY_KEY[loc.seller]
         sel = self.svc["seller"]
         fba = "fba" in loc.modes
@@ -518,12 +520,14 @@ class Seeder:
                 address = sel.put(f"/v1/orgs/{seller.org_id}/ship-from-addresses/{address['id']}/afrotransact-pickup", put) or address
             if "pickup" in loc.modes:
                 self._customer_pickup(seller, loc, address, hours)
-            if fba and not (address.get("afrotransactPickup") or {}).get("enabled"):
-                raise ValueError("Fulfilled by AfroTransact is not on after enabling it")
-            return address if fba else None
+            collects = bool((address.get("afrotransactPickup") or {}).get("enabled"))
+            if fba and not collects:
+                self._problem(f"location of {seller.name} ({loc.line1}): Fulfilled by AfroTransact is not on after enabling it; "
+                              "its products are offered as Pick up")
+            return address, collects
         except (ApiError, ValueError, KeyError) as e:
-            self._problem(f"location of {seller.name} ({loc.line1}): {e}; its products are offered from AfroTransact stock")
-            return None
+            self._problem(f"location of {seller.name} ({loc.line1}): {e}; its products have no offer until it has a location")
+            return None, False
 
     def _customer_pickup(self, seller: D.Seller, loc: D.Location, address: dict[str, Any], hours: list[dict[str, str]]) -> None:
         """Seller pickup: the location is an active SELLER pickup point customers can collect from (carrier-gateway)."""
@@ -987,7 +991,9 @@ class Seeder:
             self.sleep(1)
 
     def _offers(self, p: D.Product, product: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
-        """Creates the sellers' offers; returns {seller key: [offer per variant]} of the offers that need FBA stock."""
+        """Creates the sellers' offers; returns {seller key: [offer per variant]} of the offers that need stock received at AfroTransact:
+        only AfroTransact Retail's. A marketplace seller's offer comes from its own location (Fulfilled by AfroTransact when AfroTransact
+        collects there, else Pick up) and its stock is counted on the offer; nothing is held at AfroTransact (ADR 0013)."""
         main = D.SELLER_BY_KEY[p.seller]
         sellers = [(main, 1.0)] + [(D.SELLER_BY_KEY[k], f) for k, f in p.also]
         retail_wanted = any(s.org_id == D.RETAIL_ORG for s, _ in sellers)
@@ -1011,12 +1017,15 @@ class Seeder:
                     stocked[seller.key].append(retail)
                     self.report.add("offers", "ready")
                     continue
-                site = self._location(seller.key) if p.key in D.LOCATION_FBA else None
-                fulfilment = "AFROTRANSACT_DELIVERY" if site else "AFROTRANSACT"
+                site, collects = self._location(seller.key)
+                if site is None:
+                    self._problem(f"{seller.name} has no usable location: no offer for {v['atin']} (nothing is held at AfroTransact)")
+                    continue
+                fulfilment = "AFROTRANSACT_DELIVERY" if collects else "SELLER"
                 existing = self._list_offers(seller.org_id, v["atin"])
-                legacy = [o for o in existing if o.get("fulfilment") in ("SELLER", "CARRIER") or (
-                    site and o.get("fulfilment") == "AFROTRANSACT")]
-                for o in legacy:  # an offer from before self-shipping was retired: withdrawn, replaced below
+                legacy = [o for o in existing if o.get("fulfilment") in ("CARRIER", "AFROTRANSACT")
+                          or (o.get("fulfilment") in ("SELLER", "AFROTRANSACT_DELIVERY") and o.get("fulfilment") != fulfilment)]
+                for o in legacy:  # an offer from before the FBA redefinition (stock held, carrier) or in the wrong mode: withdrawn, replaced below
                     self.svc["offers"].post(f"/v1/offers/{o['id']}/withdraw")
                     self.report.add("offers", f"{o.get('fulfilment', '?').lower()} offer withdrawn")
                 existing = [o for o in existing if o not in legacy]
@@ -1035,18 +1044,14 @@ class Seeder:
                         "atin": v["atin"], "sellerOrgId": seller.org_id, "sellerSku": v["sellerSku"] if seller is main
                         else sku_for(seller.key, p.key, v.get("options") or {}), "inventorySku": v["atin"],
                         "condition": "NEW", "priceMinor": price_minor, "currency": "USD", "fulfilment": fulfilment,
-                        "shippingMinor": 0, "quantity": 0, "handlingDays": 1}
+                        "shippingMinor": 0, "quantity": p.stock if seller is main else max(6, p.stock // 3), "handlingDays": 1}
                     if listp:
                         body["listPriceMinor"] = listp
-                    if site:  # Fulfilled by AfroTransact from the seller's own location: the stock is counted on the offer
-                        body["quantity"] = p.stock
-                        body["shipFrom"] = {"city": loc_city(site, seller), "region": site.get("state") or seller.region,
-                                            "country": "US", "postalCode": site.get("postalCode") or seller.zip,
-                                            "locationId": site["id"]}
+                    body["shipFrom"] = {"city": loc_city(site, seller), "region": site.get("state") or seller.region,
+                                        "country": "US", "postalCode": site.get("postalCode") or seller.zip,
+                                        "locationId": site["id"]}
                     offer = self.svc["offers"].post("/v1/offers", body)
                     self.report.add("offers", "created")
-                if fulfilment == "AFROTRANSACT":
-                    stocked[seller.key].append(offer)
             if retail is not None and not retail_wanted and retail.get("status") == "ACTIVE":
                 self.svc["offers"].post(f"/v1/offers/{retail['id']}/withdraw")
                 self.report.add("offers", "retail auto-offer withdrawn")
