@@ -167,6 +167,7 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("GET /v1/seller/catalog/categories", h.categoryTree)
 	route("GET /v1/seller/catalog/product-types/{code}", h.productType)
 	route("GET /v1/seller/catalog/listing-rules", h.listingRules)
+	route("GET /v1/seller/picture-rules", h.pictureRules)
 	route("GET /v1/seller/catalog/gtin/{code}", h.checkGTIN)
 	route("GET /v1/seller/category-requests", h.categoryRequests)
 	route("POST /v1/seller/category-requests", h.requestCategory)
@@ -1082,4 +1083,11 @@ func (h *handlersImpl) sellerTaxStatementExport(w http.ResponseWriter, r *http.R
 		return
 	}
 	sendFile(w, f)
+}
+
+// pictureRules answers the picture rules in force (profile, knobs, formats and the rule in plain words) so Seller Center words
+// its messages from the active rule. Public data: it is the rule sellers are held to.
+func (h *handlersImpl) pictureRules(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "public, max-age=15")
+	h.reply(w, r, http.StatusOK, app.PictureRulesView(app.CurrentPictureRules(r.Context())), nil)
 }

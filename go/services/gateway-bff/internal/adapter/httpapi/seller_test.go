@@ -287,6 +287,10 @@ func TestSellerContractConformance(t *testing.T) {
 	}
 	mustStatus(t, b.do("GET", "/v1/seller/catalog/listing-rules?categoryCode=nope", nil), 404)
 	mustStatus(t, b.do("GET", "/v1/seller/catalog/listing-rules", nil), 422)
+	// The active picture rule, so the form says "at least 1 photo, at least 500 px" and not a fixed rule.
+	if r := b.do("GET", "/v1/seller/picture-rules", nil); r.status != 200 || r.json(t)["profile"] == nil || r.json(t)["summary"] == nil {
+		t.Fatalf("picture rules = %d %s", r.status, r.body)
+	}
 	mustStatus(t, b.do("GET", "/v1/seller/catalog/gtin/4006381333931", nil), 200)
 	mustStatus(t, b.do("GET", "/v1/seller/category-requests", nil), 200)
 	mustStatus(t, b.do("POST", "/v1/seller/category-requests", map[string]any{"parentPath": "Fashion › Women", "name": "Bridal aso-ebi sets",
@@ -795,7 +799,7 @@ func TestSellerContractConformance(t *testing.T) {
 
 	for _, op := range []string{"getSellerSession", "setActiveOrg", "getOnboarding", "getCompliance", "getDashboard", "listSellerOrders", "getSellerOrder",
 		"updateShipmentStatus", "quoteShippingRates", "buyShippingLabel", "listListings", "setListingActive", "submitProduct", "getCategoryTree", "getSellerCatalogScope", "listSellerDepartments", "requestSellerDepartment",
-		"getProductType", "checkGtin", "listCategoryRequests", "requestCategory", "requestUpload", "completeUpload", "getInventory", "adjustStock",
+		"getProductType", "getSellerPictureRules", "checkGtin", "listCategoryRequests", "requestCategory", "requestUpload", "completeUpload", "getInventory", "adjustStock",
 		"getPayouts", "requestPayout", "getSellerFees", "getBilling", "changePlan", "makeDefaultPaymentMethod", "removePaymentMethod", "getTeam", "inviteMember",
 		"assignRole", "removeMember", "revokeInvitation", "lookupInvitation", "acceptInvitation", "getCalendar", "listBookingRequests", "actOnBooking", "getWorkingHours", "saveWorkingHours", "listServices", "createService",
 		"updateService", "getCancellationPolicy", "saveCancellationPolicy", "getEarnings",

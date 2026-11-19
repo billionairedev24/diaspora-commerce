@@ -39,12 +39,15 @@ type Query struct {
 	// EligibleOnly restricts hits and facet counts to what a shopper may be shown: live, in stock and with a real photo
 	// (photo_ok). It also asks for DistinctSellers. Used by the home, nav, footer and sitemap counts (S415).
 	EligibleOnly bool
-	NearLat      float64
-	NearLon      float64
-	WithinMiles  int
-	Sort         Sort
-	Page         int
-	Size         int
+	// AnyPhoto drops the real-photo part of EligibleOnly (live and in stock stay): set by the searcher when the platform picture
+	// rules do not require a real photo for the storefront (profile testing, or the knob off). Never read from the request.
+	AnyPhoto    bool
+	NearLat     float64
+	NearLon     float64
+	WithinMiles int
+	Sort        Sort
+	Page        int
+	Size        int
 	// Ads asks for sponsored products at the configured slots (results pages only; rails and Lola leave it off).
 	Ads bool
 	// Track records the search in analytics (search.query.performed); rails and Lola send track=false.

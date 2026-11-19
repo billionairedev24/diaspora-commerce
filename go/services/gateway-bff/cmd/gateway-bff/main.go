@@ -22,6 +22,7 @@ import (
 	pkgconfig "github.com/billionairedev24/diaspora-commerce/go/pkg/config"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/httpserver"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/logging"
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/picturerules"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/telemetry"
 	gatewaybff "github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/diversionmetrics"
@@ -91,6 +92,10 @@ func run() error {
 			BreakerFailures: u.Breaker.Failures, BreakerCooldown: u.Breaker.Cooldown, Metrics: metrics})
 	}
 	up := cfg.Upstreams
+	// The platform picture rules (profile and knobs owned by catalog), read with a 30 second cache; the storefront eligibility rule,
+	// Seller Center's messages and the staff page all read this one source. Before catalog answers, the environment's profile.
+	app.UsePictureRules(picturerules.NewClient(up.Catalog.URL, &http.Client{Timeout: 3 * time.Second}, picturerules.DefaultTTL,
+		picturerules.FromEnv(loader.Env(), cfg.PictureRules.Profile)))
 	// One client (and circuit breaker) per upstream, shared by the storefront and seller routes.
 	catalogClient, inventoryClient, identityClient := client("catalog", up.Catalog), client("inventory", up.Inventory), client("identity", up.Identity)
 	paymentsClient, ordersClient, offersClient := client("payments", up.Payments), client("orders", up.Orders), client("offers", up.Offers)

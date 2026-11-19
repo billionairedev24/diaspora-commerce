@@ -122,7 +122,7 @@ func buildFilter(q domain.Query) string {
 	if q.InStockOnly || q.EligibleOnly {
 		f = append(f, "in_stock = true")
 	}
-	if q.EligibleOnly {
+	if q.EligibleOnly && !q.AnyPhoto {
 		f = append(f, "photo_ok = true")
 	}
 	if q.OnSale {

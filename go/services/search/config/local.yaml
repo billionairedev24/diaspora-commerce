@@ -44,3 +44,8 @@ ads:
 telemetry:
   otlpEndpoint: localhost:4318
   sampleRatio: 1.0
+# Platform picture rules (profile strict | startup | testing; staff change them in Settings > Picture rules, owned by catalog,
+# docs/engineering/picture-rules.md). `profile` is only the FALLBACK until catalog has answered; local starts on testing.
+pictureRules:
+  catalogUrl: http://localhost:8101
+  profile: testing
