@@ -2377,3 +2377,9 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - No brand or Handmade (reason, no brand named) in a brand-gated category without barcode is not sent to staff; a named brand, staff's gated list and the known GS1 brand rule still are (GtinExemptionServiceImplTest)
 - Docs: listing-rules 7.5 and 7.6
 - Not verified: Flyway inside the services and Testcontainers ITs (no Docker)","E24","","High","3","seller-center catalog brand listing-rules","catalog","In Review"
+"S640","Story","Keep sales on AfroTransact: off-platform diversion guard","Seller off-platform diversion guard (owner decisions): one shared detector for contact text, website network removed and hidden until earned, login email and phone never public, policy warning. Slice 1 done; order phone, message the seller, staff queue and report store are open. See docs/engineering/off-platform-diversion.md.","- One detector in Go and Java, both passing contracts/diversion/vectors.json including the legit set
+- Store text, listing title and description and review replies refuse urls, emails, phones, spelled digits, handles and contact phrases with a plain message; metric diversion_text_rejected_total{field}
+- Website is not a choice; stored website links hidden publicly unless earned (default hides all)
+- Login email never public; showEmail ignored; phone not on the public page or structured data
+- NOT YET: phone on the order page for Pick up and FBA, Message the seller relay, staff queue with names and actions, diversion:manage thresholds and per-store grant, Report this store, existing-content flag job
+- Tests: Go, Java and vitest as listed in the doc; Docker integration tests not run","E24","","High","8","seller-center gateway-bff catalog trust policy","seller-center","In Review"
