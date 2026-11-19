@@ -43,6 +43,7 @@ import com.afrotransact.catalog.port.ProductRepository;
 import com.afrotransact.catalog.port.SizeChartRepository;
 import com.afrotransact.catalog.port.TaxResolver;
 import com.afrotransact.catalog.testsupport.RulesFixtures;
+import com.afrotransact.catalog.domain.pictures.PictureRules;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.AdditionalAnswers;
@@ -89,7 +90,7 @@ class ProductWriterImageTest {
             }
         };
         ImageGate gate = new ImageGateImpl(verifier,
-                new ImageSettings(Mode.ENFORCE, 60, false, 50, Duration.ofSeconds(30), Duration.ofDays(30)));
+                new ImageSettings(Mode.ENFORCE, 60, false, 50, Duration.ofSeconds(30), Duration.ofDays(30)), PictureRules::strict);
         writer = new ProductWriterImpl(products, categories, mock(CategoryRequestRepository.class),
                 mock(ProductDraftRepository.class), ids, new DefaultProductDraftPolicy(), new DefaultSizeChartPolicy(),
                 mock(SizeChartRepository.class), mock(ProductEvents.class), brands, new UnrestrictedScopeGuard(),

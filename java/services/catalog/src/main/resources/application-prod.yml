@@ -20,6 +20,8 @@ at:
     media:
       # In-cluster service name of media-service (Helm chart `media`, port 8080).
       base-url: ${MEDIA_URL:http://media:8080}
+    picture-rules:
+      profile: ${PICTURE_RULES_PROFILE:startup}  # initial profile for prod: startup (owner decision; tighten with product later, docs/engineering/picture-rules.md)
     images:
       mode: ${CATALOG_IMAGE_MODE:enforce}  # owner decision: the main-image rules are enforced (shadow: CATALOG_IMAGE_MODE=shadow)
     oauth:

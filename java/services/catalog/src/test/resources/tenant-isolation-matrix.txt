@@ -108,6 +108,9 @@ GET /v1/identifiers/gtin/{code}/prefill | ORG_OWNED | GtinPrefillServiceImpl.pre
 GET /v1/seller/catalog-scope | ORG_SCOPED_LIST | SellerCatalogScopeServiceImpl.mine: scope of the actor's own organisation | CatalogTenantIsolationTest
 GET /v1/listing-rules | PUBLIC | marketplace listing rules, no tenant data | -
 @CatalogSettingsController | STAFF_ONLY | CatalogSettingsServiceImpl: catalog:moderate [principal-guard] | -
+GET /v1/public/picture-rules | PUBLIC | the picture rules every seller is held to (profile and knobs), no tenant data | -
+GET /v1/catalog/picture-rules | STAFF_ONLY | PictureRulesServiceImpl.view: catalog:moderate or catalog:picture-rules.manage [principal-guard] | -
+PUT /v1/catalog/picture-rules | STAFF_ONLY | PictureRulesServiceImpl.update: catalog:picture-rules.manage [principal-guard] | -
 @BakeryClaimController | SERVICE_ONLY | BakeryClaimServiceImpl: service-read permission | -
 GET /v1/public/products/{atin}/rating | PUBLIC | aggregate rating of a live product | -
 GET /v1/public/sellers/{orgId}/rating | PUBLIC | aggregate rating over a seller's published reviews (no per-person data) | -

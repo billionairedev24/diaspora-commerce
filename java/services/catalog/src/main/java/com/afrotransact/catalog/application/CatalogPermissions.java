@@ -7,6 +7,8 @@ public final class CatalogPermissions {
     /** Read-only catalog access (service clients such as offers-service): GTIN lookups. */
     public static final String READ = "catalog:read";
     public static final String MODERATE = "catalog:moderate";
+    /** Changes the picture rules profile and knobs (Settings > Picture rules); catalog:moderate may only read them. */
+    public static final String PICTURE_RULES_MANAGE = "catalog:picture-rules.manage";
     public static final String TAXONOMY = "catalog:taxonomy";
     /** The staff tax permission (tax-returns, gateway-bff): reads the live-without-tax-decision audit. */
     public static final String TAX_READ = "tax:read";
