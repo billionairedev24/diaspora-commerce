@@ -1,7 +1,7 @@
 """The `ops` step: operations demo data through the services' APIs (seedlib/ops_dataset.py describes it).
 
 AfroTransact Retail (suppliers, items, purchase orders in every state with shipments, receipts and three-way matched
-invoices), inventory (FBA inbound shipments in every stage, short-dated, held and damaged lots, cycle counts, a
+invoices), inventory (AfroTransact Retail lots: short-dated, held and damaged ones, cycle counts, a
 transfer), orders in every state placed by the test customers and moved through the fulfilment centre and
 the Delivery desk (staff take Fulfilled by AfroTransact deliveries: picked up, out for delivery, delivered with photo proof,
 failed, returned to the seller), Seller pickup (ready, collected with the customer's code), returns, an A-to-z claim and a
@@ -391,70 +391,14 @@ class OpsSeeder:
 
     # ------------------------------------------------------------------------------------------------ inventory
     def inventory(self) -> None:
-        self.log("  · Inventory: FBA inbound shipments, lots, cycle counts, a transfer")
-        for ib in O.INBOUND:
-            try:
-                self._inbound(ib)
-            except ApiError as e:
-                self.problem(f"inbound {ib.name}: {e}")
+        self.log("  · Inventory: AfroTransact Retail lots, cycle counts, a transfer (no marketplace seller stock: ADR 0013)")
         self._release_short_dated()
         self._counts()
         self._transfer()
 
-    def _inbound(self, ib: O.Inbound) -> None:
-        inv = self.svc["inventory"]
-        seller = D.SELLER_BY_KEY[ib.owner]
-        found = next((s for s in items_of(inv.get("/v1/inbound/shipments", params={
-            "ownerOrg": seller.org_id, "size": 200})) if s.get("name") == ib.name and s.get("status") != "CANCELLED"),
-            None)
-        today = _today()
-        if found is None:
-            found = inv.post("/v1/inbound/shipments", {
-                "ownerOrg": seller.org_id, "name": ib.name, "nodeId": seller.node,
-                "expectedArrival": _iso(today + dt.timedelta(days=ib.arrives_in_days)),
-                "shipFrom": {"name": seller.name, "line1": "1200 Commerce St", "city": seller.city,
-                             "region": seller.region, "postalCode": seller.zip, "country": "US"},
-                "lines": [{"atin": self.atin(ln.product, ln.variant), "qty": ln.qty, "casePack": 12,
-                           "lotNo": ln.lot, "mfgDate": _iso(today - dt.timedelta(days=ln.made_days_ago)),
-                           "expDate": _iso(today + dt.timedelta(days=ln.expires_in_days))} for ln in ib.lines]})
-            self.add("inbound shipments", "created")
-        else:
-            self.add("inbound shipments", "existing")
-        sid = found["id"]
-        if ib.target == "WORKING":
-            return
-        if found["status"] == "WORKING":
-            if ib.tracking:
-                inv.put(f"/v1/inbound/shipments/{sid}/tracking", {"carrier": ib.carrier, "trackingNumber": ib.tracking})
-            found = inv.post(f"/v1/inbound/shipments/{sid}/ship")
-        if ib.target == "SHIPPED" or found["status"] in ("CLOSED", "CANCELLED"):
-            return
-        if found["status"] == "SHIPPED":
-            lines = []
-            for ln, fl in zip(ib.lines, found.get("lines") or []):
-                good = ln.qty - ln.damaged if ln.received < 0 else ln.received
-                if good <= 0 and not ln.damaged:
-                    continue
-                line = {"sku": fl.get("sku") or self.atin(ln.product, ln.variant), "qtyGood": good,
-                        "qtyDamaged": ln.damaged, "lotNo": ln.lot,
-                        "mfgDate": _iso(today - dt.timedelta(days=ln.made_days_ago)),
-                        "expDate": _iso(today + dt.timedelta(days=ln.expires_in_days)),
-                        "bin": f"F-{stable(ln.lot, 2)}-01"}
-                if ln.hold:
-                    line["holdReason"] = ln.hold
-                lines.append(line)
-            found = inv.post(f"/v1/inbound/shipments/{sid}/receipts", {"lines": lines},
-                             headers={"Idempotency-Key": f"seed-ops-inbound-{sid}"})
-            found = found.get("shipment") or inv.get(f"/v1/inbound/shipments/{sid}")
-            self.add("inbound receipts", "received")
-        if ib.target == "CLOSED" and found.get("status") == "RECEIVING":
-            inv.post(f"/v1/inbound/shipments/{sid}/close")
-            self.add("inbound shipments", "closed")
-
     def _seeded_lots(self) -> list[dict[str, Any]]:
         inv = self.svc["inventory"]
-        lot_nos = {ln.lot for ib in O.INBOUND for ln in ib.lines}
-        lot_nos |= {self._lot_no(po, i) for po in O.PURCHASE_ORDERS for i in range(len(po.lines))}
+        lot_nos = {self._lot_no(po, i) for po in O.PURCHASE_ORDERS for i in range(len(po.lines))}
         out = []
         for status in ("QUARANTINE", "SELLABLE", "DAMAGED", "EXPIRED"):
             for lot in items_of(inv.get("/v1/lots", params={"status": status, "size": 500})):
@@ -483,8 +427,9 @@ class OpsSeeder:
         inv = self.svc["inventory"]
         lots = [x for x in self._seeded_lots() if x.get("status") == "SELLABLE"]
         for i, key in enumerate(O.COUNT_SKUS):
-            lot = next((x for x in lots if x.get("lotNo") in {ln.lot for ib in O.INBOUND for ln in ib.lines
-                                                              if ln.product == key}), None)
+            wanted = {self._lot_no(po, n) for po in O.PURCHASE_ORDERS for n, line in enumerate(po.lines)
+                      if line.product == key}
+            lot = next((x for x in lots if x.get("lotNo") in wanted), None)
             if lot is None:
                 self.log(f"    cycle count of {key}: no received lot yet")
                 continue
@@ -519,9 +464,9 @@ class OpsSeeder:
             return
         lots = [x for x in items_of(inv.get("/v1/lots", params={"nodeId": "HOU-FC", "status": "SELLABLE",
                                                                   "size": 500}))
-                if (x.get("sku") == atin or x.get("lotNo", "").startswith("MPP-GAR")) and x.get("qtyAvailable", 0) > qty]
+                if x.get("sku") == atin and x.get("qtyAvailable", 0) > qty]
         if not lots:
-            self.log("    transfer skipped: no sellable garri at HOU-FC")
+            self.log("    transfer skipped: no sellable Retail pepper sauce at HOU-FC")
             return
         inv.post(f"/v1/lots/{lots[0]['id']}/transfer", {"toNodeId": to_node, "qty": qty, "reason": reason},
                  headers={"Idempotency-Key": f"seed-ops-transfer-{lots[0]['id']}"})
