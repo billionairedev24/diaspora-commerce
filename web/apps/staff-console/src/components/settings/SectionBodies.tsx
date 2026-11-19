@@ -18,6 +18,7 @@ import { useT } from '@/i18n/t';
 import { type SettingsKey } from '@/lib/settings-sections';
 
 import { AiSpendView } from './AiSpendView';
+import { PictureRulesView } from './PictureRulesView';
 import { StaffAccountsView } from './StaffAccountsView';
 
 /** The body of each section page: an existing screen of the console, unchanged, or one of the new Access screens. */
@@ -42,6 +43,8 @@ export function SectionBody({ section }: { section: SettingsKey }): ReactNode {
       return <AccessView />;
     case 'ai':
       return <AiSpendView />;
+    case 'picture-rules':
+      return <PictureRulesView />;
     case 'payments':
       return (
         <div className="flex flex-col gap-3">

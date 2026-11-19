@@ -6,8 +6,9 @@ import { useState } from 'react';
 
 import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
+import { maxBytesOf, usePictureRules } from '@/lib/picture-rules';
 
-import { EXTRA_PHOTOS_TARGET, fieldId, type FormImage, IMAGE_TYPES, MAX_IMAGE_BYTES, MAX_IMAGES, MIN_IMAGE_PX } from '../form-model';
+import { EXTRA_PHOTOS_TARGET, fieldId, type FormImage, IMAGE_TYPES, MAX_IMAGES } from '../form-model';
 import { extraPhotoCount, verdictOf } from './image-rules';
 import { MainPhotoRules } from './MainPhotoRules';
 import { AddPhotoTile, PhotoFindings, PhotoThumb } from './PhotoSlots';
@@ -53,6 +54,7 @@ export function ImagesField({ images, update, error, context }: Props) {
   const t = useT();
   const labels = useFormLabels();
   const api = sellerApi();
+  const pictures = usePictureRules();
   const [note, setNote] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
@@ -72,8 +74,8 @@ export function ImagesField({ images, update, error, context }: Props) {
         message = t('sc.pf.images.type', { name: file.name });
         continue;
       }
-      if (file.size > MAX_IMAGE_BYTES) {
-        message = t('sc.pf.images.size', { name: file.name });
+      if (file.size > maxBytesOf(pictures)) {
+        message = t('sc.pf.images.size', { name: file.name, mb: pictures.knobs.maxMegabytes });
         continue;
       }
       // The first picture is the main one and is judged by the strict main photo rules; media answers with the verdict and every finding.
@@ -95,7 +97,7 @@ export function ImagesField({ images, update, error, context }: Props) {
         const rejected = verdict === 'REJECT' || asset.status === 'REJECTED';
         const held = !rejected && (verdict === 'HOLD' || asset.status === 'FLAGGED');
         // An answer without a verdict (an older media): the size rule is the one we can still read from the picture.
-        const small = !verdict && slot === 'MAIN' && Math.max(width, height) < MIN_IMAGE_PX;
+        const small = !verdict && slot === 'MAIN' && Math.max(width, height) < pictures.knobs.minLongSidePx;
         // A photo we are checking has no public URL: the form keeps its asset id and submits that, and the listing waits for our answer.
         patch(id, { url: rejected || held ? null : asset.url || ticket.publicUrl || null, assetId: held ? ticket.assetId : null, width, height, bytes: asset.bytes ?? file.size,
           status: rejected ? 'rejected' : held ? 'held' : small ? 'low' : 'ready', slot, verdict, checks: asset.checks });

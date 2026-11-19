@@ -89,6 +89,7 @@ import {
   DeliveryUploadTicketSchema
 } from './schemas/staff-delivery';
 import { createStaffAccessApi } from './staff-access';
+import { createStaffPictureRulesApi } from './picture-rules';
 import { createStaffAiSpendApi } from './staff-ai-spend';
 import { createStaffContentApi } from './staff-content';
 import { createStaffDeliveryFeesApi } from './staff-delivery-fees';
@@ -281,6 +282,7 @@ export function createStaffApiClient(options: ApiClientOptions) {
     markets: createStaffMarketsApi(request),
     access: createStaffAccessApi(request),
     aiSpend: createStaffAiSpendApi(request),
+    pictureRules: createStaffPictureRulesApi(request),
     /* Fees & commissions → Sales tax: /v1/staff/tax/** (category profiles, review queue, provider code maps, method, shadow report) */
     tax: createStaffTaxApi(request),
     /* Settings → Published pages: /v1/staff/content/** (index, legal and help editors, drafts, publication, rollback) */

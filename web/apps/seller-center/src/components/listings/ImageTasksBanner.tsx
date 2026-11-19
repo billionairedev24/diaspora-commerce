@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { Notice } from '@/components/ui/Notice';
 import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
+import { usePictureRules } from '@/lib/picture-rules';
 import { useSeller } from '@/lib/session';
 
 import { taskDeadline, taskReasonText, taskSummary } from './form/ImageTaskReasons';
@@ -22,6 +23,7 @@ const SHOWN = 5;
  */
 export function ImageTasksBanner() {
   const t = useT();
+  const pictures = usePictureRules();
   const { orgId, can } = useSeller();
   const editable = can('listings');
   const tasks = useQuery(matchingQueries.imageTasks(sellerApi().matching, orgId));
@@ -43,7 +45,7 @@ export function ImageTasksBanner() {
                 <span className="text-sm text-muted">{taskSummary(t, task)}</span>
                 <ul className="m-0 list-disc ps-5 text-sm">
                   {task.reasons.map((r) => (
-                    <li key={r.code}>{taskReasonText(t, r)}</li>
+                    <li key={r.code}>{taskReasonText(t, r, pictures)}</li>
                   ))}
                 </ul>
                 {deadline ? <span className="text-xs text-muted">{deadline}</span> : null}

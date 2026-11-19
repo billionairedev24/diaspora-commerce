@@ -2264,6 +2264,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/picture-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The picture rules in force, who changed them last, the profiles to compare and the audit trail
+         * @description catalog `GET /v1/catalog/picture-rules`. Needs catalog:moderate or catalog:picture-rules.manage. People are named, never shown as ids. The ETag is the version to send as If-Match when changing. Not cached.
+         */
+        get: operations["getPictureRules"];
+        /**
+         * Change the picture rules profile and knobs
+         * @description catalog `PUT /v1/catalog/picture-rules`. Needs the catalog:picture-rules.manage permission (403 otherwise). `profile` is strict (the documented standard), startup (relaxed launch) or testing (pictures optional); `overrides` change single knobs on top of it (an empty object returns every knob to the profile). `reason` is 3 to 300 characters and is logged with who and when. `If-Match` is the version loaded (428 `VERSION_REQUIRED` without it, 409 when someone else saved first). Reaches media, search, the storefront and Seller Center within 30 seconds. The answer is the new state, like the GET.
+         */
+        put: operations["setPictureRules"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/access/log": {
         parameters: {
             query?: never;
@@ -7450,6 +7474,101 @@ export interface components {
              */
             resetsAt: string;
             byFeature: components["schemas"]["AiSpendFeature"][];
+        };
+        PictureKnobs: {
+            /** @description Pictures a listing needs before it can be published (0: none needed) */
+            minImages: number;
+            /** @description The longest side of the main picture, in pixels (the zoom rule) */
+            minLongSidePx: number;
+            /** @description The shortest side of every picture, in pixels */
+            minShortSidePx: number;
+            /** @description One file's size cap (the platform ceiling of 20 MB always applies) */
+            maxMegabytes: number;
+            /** @description Ask for a plain white background and a product that fills the frame (main picture) */
+            checkBackground: boolean;
+            /** @description Warn about very wide or very tall pictures */
+            checkAspect: boolean;
+            /** @description Hold pictures that carry text, logos or watermarks for review */
+            checkTextOverlay: boolean;
+            /** @description Home, rails and search show only products with a real photo */
+            requireRealPhotoForStorefront: boolean;
+            /** @description A page without a real photo is not offered as a match to sellers */
+            requirePhotoForMatching: boolean;
+            /** @description A stand-in image counts as a real photo */
+            allowPlaceholders: boolean;
+        };
+        /** @description Knobs changed on top of the profile; an absent key keeps the profile's value */
+        PictureOverrides: {
+            minImages?: number;
+            minLongSidePx?: number;
+            minShortSidePx?: number;
+            maxMegabytes?: number;
+            checkBackground?: boolean;
+            checkAspect?: boolean;
+            checkTextOverlay?: boolean;
+            requireRealPhotoForStorefront?: boolean;
+            requirePhotoForMatching?: boolean;
+            allowPlaceholders?: boolean;
+        };
+        PictureRules: {
+            /** @enum {string} */
+            profile: "strict" | "startup" | "testing";
+            knobs: components["schemas"]["PictureKnobs"];
+            /** @description Names of the knobs staff changed on top of the profile */
+            overridden: string[];
+            /** @description Accepted image types under every profile; SVG, HTML and executables are never accepted */
+            formats: ("image/jpeg" | "image/png" | "image/webp" | "image/avif")[];
+            /**
+             * Format: int64
+             * @description The stored version; 0 while the environment default is in force
+             */
+            version: number;
+            /** @description The rule in plain words, for messages ("at least 1 photo, at least 500 px on the longest side, ...") */
+            summary?: string;
+            /** @description Any rule is looser than the strict standard */
+            relaxed?: boolean;
+        };
+        PictureRulesChange: {
+            /** Format: int64 */
+            version: number;
+            /** @enum {string|null} */
+            previousProfile?: "strict" | "startup" | "testing" | null;
+            /** @enum {string} */
+            profile: "strict" | "startup" | "testing";
+            overridden: string[];
+            /** @description Who saved it, by name */
+            changedBy: string;
+            /** Format: date-time */
+            changedAt: string;
+            reason: string;
+        };
+        PictureRulesView: {
+            rules: components["schemas"]["PictureRules"];
+            overrides: components["schemas"]["PictureOverrides"];
+            /** @description Who saved the rules in force, by name; absent while the environment default is in force */
+            updatedBy?: string | null;
+            /** Format: date-time */
+            updatedAt?: string | null;
+            /** @description The caller holds catalog:picture-rules.manage */
+            canChange: boolean;
+            /**
+             * @description The profile this environment starts on (local and dev testing, uat and prod startup)
+             * @enum {string}
+             */
+            environmentDefault: "strict" | "startup" | "testing";
+            /** @description Any rule is looser than the strict standard: the console shows a warning */
+            relaxed: boolean;
+            /** @description The default knobs of every profile, for the comparison table */
+            profiles: components["schemas"]["PictureRules"][];
+            /** @description Newest first */
+            history: components["schemas"]["PictureRulesChange"][];
+        };
+        PictureRulesUpdate: {
+            /** @enum {string} */
+            profile: "strict" | "startup" | "testing";
+            overrides?: components["schemas"]["PictureOverrides"];
+            /** @description Why: logged with the person's name */
+            reason: string;
         };
         AiSpendCap: {
             /**
@@ -15735,6 +15854,67 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            428: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getPictureRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The rules */
+            200: {
+                headers: {
+                    /** @description The rules' version ("<version>") */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PictureRulesView"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    setPictureRules: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PictureRulesUpdate"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    /** @description The new version ("<version>") */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PictureRulesView"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             428: components["responses"]["Problem"];
             502: components["responses"]["Problem"];

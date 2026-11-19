@@ -5,8 +5,9 @@ import { Plus } from '@phosphor-icons/react/ssr';
 import { type DragEvent, type HTMLAttributes, type ReactNode, useRef } from 'react';
 
 import { type MessageKey, useT } from '@/i18n/t';
+import { usePictureRules } from '@/lib/picture-rules';
 
-import { type FormImage, IMAGE_TYPES, MIN_IMAGE_PX } from '../form-model';
+import { type FormImage, IMAGE_TYPES } from '../form-model';
 import { checkVars, type Verdict, verdictOf, visibleChecks } from './image-rules';
 
 /** The dot on a thumbnail: the verdict as a colour and, for everyone else, as words (the dot itself is hidden from screen readers). */
@@ -27,14 +28,16 @@ const SHORT: Record<string, MessageKey> = {
 /** One line saying why a photo is not (fully) accepted, or null for a photo that passed or is still uploading. */
 export function useShortReason(im: FormImage): string | null {
   const t = useT();
+  const pictures = usePictureRules();
   if (im.status === 'error') return t('sc.pf.images.failed');
   const verdict = verdictOf(im);
   if (!verdict || verdict === 'PASS') return null;
   const first = visibleChecks(im)[0];
   const code = first?.code;
   const key = (code && SHORT[code]) || (verdict === 'HOLD' ? 'sc.pf.photo.short.held' : verdict === 'WARN' ? 'sc.pf.photo.short.better' : 'sc.pf.photo.short.rejected');
-  const vars = first ? checkVars(first, im) : { px: MIN_IMAGE_PX };
-  return t(key, { px: code === 'TOO_SMALL' ? vars.min ?? MIN_IMAGE_PX : vars.px ?? MIN_IMAGE_PX });
+  const fallbackPx = pictures.knobs.minLongSidePx;
+  const vars = first ? checkVars(first, im) : { px: fallbackPx };
+  return t(key, { px: code === 'TOO_SMALL' ? vars.min ?? pictures.knobs.minShortSidePx : vars.px ?? fallbackPx });
 }
 
 interface ThumbProps {

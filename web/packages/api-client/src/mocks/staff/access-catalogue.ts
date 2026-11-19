@@ -32,6 +32,7 @@ export const MOCK_PERMISSIONS: { key: string; module: string; description: strin
   { key: "bookings:team:manage", module: "bookings", description: "Assign team members to services and manage their calendars" },
   { key: "cart:service", module: "cart", description: "Service access to clear checked-out cart lines" },
   { key: "catalog:moderate", module: "catalog", description: "Approve or reject listings" },
+  { key: "catalog:picture-rules.manage", module: "catalog", description: "Change the picture rules: the profile (strict, startup, testing) and how many photos, how large, which checks" },
   { key: "catalog:retail", module: "catalog", description: "List products as AfroTransact Retail (1P)" },
   { key: "catalog:taxonomy", module: "catalog", description: "Manage categories, product types and category requests" },
   { key: "catalog:write", module: "catalog", description: "Create and edit products, variants and listings" },
