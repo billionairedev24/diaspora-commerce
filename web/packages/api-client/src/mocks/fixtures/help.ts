@@ -29,11 +29,11 @@ export const HELP_ARTICLES: HelpArticle[] = [
     ]
   },
   {
-    slug: 'fulfilled-by-afrotransact', topic: 'SELLING', topicTitle: 'Selling & advertising', title: 'Fulfilled by AfroTransact', summary: 'Store your stock with us and we pick, pack and deliver.', updatedAt: UPDATED,
+    slug: 'fulfilled-by-afrotransact', topic: 'SELLING', topicTitle: 'Selling & advertising', title: 'Fulfilled by AfroTransact', summary: 'We collect the order from your pickup location and deliver it to your customer.', updatedAt: UPDATED,
     sections: [
-      { heading: 'We ship for you', body: 'Send your stock to an AfroTransact fulfilment centre and we pick, pack and deliver every order.' },
-      { heading: 'Faster delivery', body: 'Fulfilled by AfroTransact items qualify for same-day or next-day AfroTransact Delivery in Houston, Edison/Iselin and Atlanta.' },
-      { heading: 'Get started', body: '[Sell on AfroTransact](/sell), then send an inbound shipment from Seller Center → Inventory & FBA.' }
+      { heading: 'We collect and deliver', body: 'With Fulfilled by AfroTransact you keep your stock. When a customer orders, AfroTransact collects the packed order from your pickup location and delivers it to the customer. You send nothing to us and pay no fulfilment fee.' },
+      { heading: 'Delivery', body: 'The customer pays the normal AfroTransact delivery fee (free when their membership plan includes free delivery). Delivery covers the areas AfroTransact serves around your location.' },
+      { heading: 'Get started', body: '[Sell on AfroTransact](/sell), add a pickup location in Seller Center under Settings, Locations, and switch on that AfroTransact collects there. New offers then default to Fulfilled by AfroTransact; you can choose Pick up on any listing.' }
     ]
   },
   {

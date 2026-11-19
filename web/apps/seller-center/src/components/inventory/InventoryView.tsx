@@ -26,7 +26,6 @@ const columns: ColumnDef<StockPosition>[] = [
     id: 'available', accessorFn: (p) => p.available, header: 'Available', size: 120, meta: { kind: 'number', align: 'end' },
     cell: ({ row }) => <span className={row.original.lowStock ? 'font-semibold text-danger' : undefined}>{row.original.available}</span>
   },
-  { id: 'inbound', accessorFn: (p) => p.inbound, header: 'Inbound', size: 110, meta: { kind: 'number', align: 'end' } },
   // Low stock (10 or fewer available) is a column, so the one search finds it ("low") and exports chart it.
   { id: 'alert', accessorFn: (p) => (p.lowStock ? 'Low stock' : 'In stock'), header: 'Stock alert', size: 120, meta: { kind: 'status' },
     cell: ({ row }) => (row.original.lowStock ? <span className="font-semibold text-danger">Low stock</span> : <span className="text-muted">In stock</span>) }
@@ -40,7 +39,7 @@ const REASONS: { value: StockReason; label: string }[] = [
   { value: 'OTHER', label: 'Other' }
 ];
 
-/** Inventory & FBA: stock by warehouse, shipments to AfroTransact (S281) and lots with expiry. */
+/** Inventory: the counts you keep per listing and the stock AfroTransact still holds from earlier shipments (read only; nothing new is sent, ADR 0013). */
 export function InventoryView() {
   const router = useRouter();
   const pathname = usePathname();
@@ -61,7 +60,7 @@ export function InventoryView() {
   );
 }
 
-/** FBA stock by warehouse (inventory) and quantity adjustments for seller-shipped SKUs (offers). */
+/** Stock AfroTransact still holds from earlier shipments (read only) and quantity adjustments for your own SKUs (offers). */
 function StockView({ adjusting: open, setAdjusting: setOpen }: { adjusting: boolean; setAdjusting: (v: boolean) => void }) {
   const api = sellerApi();
   const qc = useQueryClient();
@@ -97,12 +96,11 @@ function StockView({ adjusting: open, setAdjusting: setOpen }: { adjusting: bool
           items={[
             { id: 'available', label: 'Available', value: t.available },
             { id: 'reserved', label: 'Reserved', value: t.reserved },
-            { id: 'inbound', label: 'Inbound', value: t.inbound },
             { id: 'low', label: 'Low-stock SKUs', value: t.lowStockSkus, tone: t.lowStockSkus > 0 ? 'attention' : 'neutral', onSelect: t.lowStockSkus > 0 ? () => state.setSearchInput('low stock') : undefined }
           ]}
         />
       ) : null}
-      <DataTable<StockPosition> id="seller.inventory" label="Stock AfroTransact holds" columns={columns} data={q.data?.positions ?? []} getRowId={(p) => `${p.sku}@${p.nodeId}`}
+      <DataTable<StockPosition> id="seller.inventory" label="Stock AfroTransact still holds from earlier shipments" columns={columns} data={q.data?.positions ?? []} getRowId={(p) => `${p.sku}@${p.nodeId}`}
         rowLabel={(p) => `${p.sku} at ${p.nodeId}`} state={state} mode="client" loading={q.isPending} fetching={q.isFetching}
         error={q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : undefined}
         searchPlaceholder="Search SKU, warehouse, quantities, “low stock”…"

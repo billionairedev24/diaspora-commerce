@@ -30,7 +30,7 @@ test.describe('seller center · shell navigation by role', () => {
     await expect(nav).toBeVisible();
     await expect(nav).toContainText('Owner');
     await expandAllGroups(page);
-    for (const label of ['Home', 'Orders', 'Listings', 'Inventory & FBA', 'Payouts', 'Fees & commission', 'Plan & billing', 'Account health', 'Team & roles']) {
+    for (const label of ['Home', 'Orders', 'Listings', 'Inventory', 'Payouts', 'Fees & commission', 'Plan & billing', 'Account health', 'Team & roles']) {
       await expect(navLink(page, label)).toBeVisible();
     }
     await navLink(page, 'Orders').click();
@@ -49,7 +49,7 @@ test.describe('seller center · shell navigation by role', () => {
     const nav = sidebar(page);
     await expect(nav).toContainText('Fulfilment');
     await expandAllGroups(page);
-    for (const label of ['Orders', 'Inventory & FBA']) await expect(navLink(page, label)).toBeVisible();
+    for (const label of ['Orders', 'Inventory']) await expect(navLink(page, label)).toBeVisible();
     for (const label of ['Payouts', 'Plan & billing', 'Team & roles', 'Account health']) {
       await expect(navLink(page, label)).toHaveCount(0);
     }
@@ -65,7 +65,7 @@ test.describe('seller center · shell navigation by role', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Payouts' })).toBeVisible();
     await expandAllGroups(page);
     for (const label of ['Payouts', 'Plan & billing', 'Account health']) await expect(navLink(page, label)).toBeVisible();
-    for (const label of ['Listings', 'Inventory & FBA', 'Team & roles']) await expect(navLink(page, label)).toHaveCount(0);
+    for (const label of ['Listings', 'Inventory', 'Team & roles']) await expect(navLink(page, label)).toHaveCount(0);
   });
 
   test('seller home has no serious axe violations @a11y', async ({ page }, testInfo) => {
