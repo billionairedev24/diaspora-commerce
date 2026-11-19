@@ -90,6 +90,38 @@ class GtinExemptionServiceImplTest {
     }
 
     @Test
+    void anUnbrandedOrHandmadeItemInABrandGatedCategoryNeedsNoStaffApprovalForTheMissingBarcode() {
+        assertThat(service.requirement(rules("CLO", "brand_gated"), "dress", Map.of(BrandKeys.REASON, "UNBRANDED"))).isEmpty();
+        assertThat(service.requirement(rules("CLO", "brand_gated"), "dress", Map.of(BrandKeys.REASON, "handmade"))).isEmpty();
+    }
+
+    @Test
+    void aNamedBrandInABrandGatedCategoryStillFollowsTheGateEvenWithAReasonLeftOver() {
+        assertThat(service.requirement(rules("CLO", "brand_gated"), "dress", Map.of(BrandKeys.NAME, "Gucci",
+                BrandKeys.ID, BRAND_ID, BrandKeys.REASON, "HANDMADE"))).contains(ExemptionRequirement.BRAND_GATED_CATEGORY);
+        assertThat(service.requirement(rules("CLO", "brand_gated"), "dress", Map.of(BrandKeys.NAME, "Gucci")))
+                .contains(ExemptionRequirement.BRAND_GATED_CATEGORY);
+    }
+
+    @Test
+    void anUnknownReasonOrNoReasonIsNotUnbranded() {
+        assertThat(service.requirement(rules("CLO", "brand_gated"), "dress", Map.of(BrandKeys.REASON, "WHATEVER")))
+                .contains(ExemptionRequirement.BRAND_GATED_CATEGORY);
+        assertThat(service.requirement(rules("CLO", "brand_gated"), "dress", Map.of(BrandKeys.REASON, " ")))
+                .contains(ExemptionRequirement.BRAND_GATED_CATEGORY);
+    }
+
+    @Test
+    void staffsOwnGatedListAndRegulatedLevelsAreNotRelaxedByNoBrand() {
+        assertThat(service.requirement(rules("PERFUME", "open"), "fragrance", Map.of(BrandKeys.REASON, "UNBRANDED")))
+                .contains(ExemptionRequirement.BRAND_GATED_CATEGORY);
+        assertThat(service.requirement(rules("BEAUTY", "open"), "PERFUME", Map.of(BrandKeys.REASON, "HANDMADE")))
+                .contains(ExemptionRequirement.BRAND_GATED_CATEGORY);
+        // a regulated category is not brand_gated: it never reached this rule, and it still does not
+        assertThat(service.requirement(rules("MED", "approval"), "tablet", Map.of(BrandKeys.REASON, "UNBRANDED"))).isEmpty();
+    }
+
+    @Test
     void aCategoryOrProductTypeStaffAddedToTheGatedListNeedsStaffApproval() {
         assertThat(service.requirement(rules("PERFUME", "open"), "fragrance", Map.of()))
                 .contains(ExemptionRequirement.BRAND_GATED_CATEGORY);

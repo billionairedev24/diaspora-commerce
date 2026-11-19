@@ -18,6 +18,7 @@ import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductChangeRequest;
 import com.afrotransact.catalog.domain.StaleVersionException;
 import com.afrotransact.catalog.domain.brand.BrandKeys;
+import com.afrotransact.catalog.domain.brand.UnbrandedReason;
 import com.afrotransact.catalog.domain.rules.CategoryRules;
 import com.afrotransact.catalog.port.GtinExemptionRepository;
 import com.afrotransact.catalog.port.ProductRepository;
@@ -60,8 +61,12 @@ class GtinExemptionServiceImpl implements GtinExemptionService {
     public Optional<ExemptionRequirement> requirement(CategoryRules rules, String productTypeCode,
                                                       Map<String, String> attributes) {
         CatalogPolicy policy = settings.current();
-        boolean gated = BRAND_GATED.equals(rules.approval()) || policy.exemptionGatedCategoryCodes().contains(rules.code())
+        // A brand-gated category exists to stop a made-up "no barcode" hiding a copy of a brand. An item the seller says
+        // has no brand (No brand, Handmade) names nothing to copy, so that rule alone does not send it to staff. Staff's own
+        // gated list (policy) and every other gate (regulated, child safety, hygiene: selling approvals) are unchanged.
+        boolean listed = policy.exemptionGatedCategoryCodes().contains(rules.code())
                 || policy.exemptionGatedCategoryCodes().contains(productTypeCode);
+        boolean gated = listed || BRAND_GATED.equals(rules.approval()) && !declaredUnbranded(attributes);
         if (gated) {
             return Optional.of(ExemptionRequirement.BRAND_GATED_CATEGORY);
         }
@@ -71,6 +76,14 @@ class GtinExemptionServiceImpl implements GtinExemptionService {
             return Optional.of(ExemptionRequirement.KNOWN_GS1_BRAND);
         }
         return Optional.empty();
+    }
+
+    /** The seller chose "No brand" or "Handmade": a valid reason and no brand named or chosen. */
+    private static boolean declaredUnbranded(Map<String, String> attributes) {
+        String name = attributes.get(BrandKeys.NAME);
+        String id = attributes.get(BrandKeys.ID);
+        return (name == null || name.isBlank()) && (id == null || id.isBlank())
+                && UnbrandedReason.ofCode(attributes.get(BrandKeys.REASON)).isPresent();
     }
 
     @Override

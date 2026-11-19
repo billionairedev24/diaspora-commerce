@@ -429,7 +429,7 @@ One combobox (`BrandField`, backed by `GET /v1/seller/catalog/brands`, `.../bran
 ### 7.3 Brand gating, hygiene gating and the barcode path
 
 - Gating (D2) is by brand **name**, through the selling rules (`BRAND` and `BRAND_IN_CATEGORY` scopes, names compared without
-  case, spaces and punctuation), and is independent of the registry status. In a `brand_gated` category (clothing, bags,
+  case, accents, spaces and punctuation: section 7.5), and is independent of the registry status. In a `brand_gated` category (clothing, bags,
   electronics, perfume) a listing needs the seller's approval only when its brand name is a gated brand. A listing with an
   unbranded reason, or a new brand whose name is not gated, goes live like an open category. A pending brand never blocks a listing.
   A `PENDING` brand whose name equals a gated brand still triggers the gate, because the gate reads the name, not the status, so
@@ -438,14 +438,38 @@ One combobox (`BrandField`, backed by `GET /v1/seller/catalog/brands`, `.../bran
   type it and add it as a new brand." Nothing waits on staff; the new brand is usable at once.
 - Hygiene (D9): condition is hidden; the brand stays asked (brand or reason) for hygiene, feminine hygiene and diapers so recalls
   and shopper trust work.
-- Barcode (D14): unchanged. In a brand-gated category a listing without a barcode needs staff to accept the exemption (reason
-  `BRAND_GATED_CATEGORY`) whatever its brand. Outside gated categories a no-barcode listing is checked against the "known GS1
+- Barcode (D14): in a brand-gated category a listing without a barcode needs staff to accept the exemption (reason
+  `BRAND_GATED_CATEGORY`), except an item the seller declared without a brand (No brand or Handmade with its reason, no brand
+  named or chosen): see section 7.6. Outside gated categories a no-barcode listing is checked against the "known GS1
   brand" rule using the brand's id (a brand with enough pages that carry barcodes). A new pending brand has none, so it is not
   flagged; once staff merge it into a known brand its listings are.
 - Merge: the products of the merged brand are repointed to the target and republished (search facets follow).
 
 ### 7.4 Things this change does not do
 
-- The seller service compares gated brand names without folding accents ("Hermès" and "Hermes" are different gate keys); the
-  catalog registry does fold them, so a typed name resolves to the registry spelling first. Folding the gate key needs a data
-  migration of stored selling-rule keys and is left for the owner (see the backlog story).
+- Nothing outstanding about brand names: the gate key folds accents since 7.5.
+
+### 7.5 Gated brand names fold accents like the registry (S631)
+
+- `SellingScope.normaliseBrand` (seller) is the same normalisation as the catalog `BrandNames.normalise` and the Postgres
+  `brand_key`: lower case, accents folded, only letters and digits kept. "Hermès", "HERMES" and "Hermes" are one gated brand, in
+  `BRAND` scopes and in the brand half of `BRAND_IN_CATEGORY` (`hermes|bags`). The category half is untouched.
+- Seller migration `V93__fold_brand_selling_keys.sql` folds the keys stored in `selling_rule`, `selling_approval` and
+  `selling_application`. Nothing is lost: every changed key and every merged row is written, with the full old row, to
+  `selling_scope_key_fold_log` (read-only history). Two rules that fold to one key merge into the active, stricter one (their audit
+  history, approvals and applications follow it; a `MERGE` row in `selling_rule_audit` keeps the other's old content). Two approvals
+  of one organisation merge the same way (never across organisations). Two open applications of one organisation for one brand keep
+  the first and close the second as a duplicate with an application event. Running it again changes nothing.
+- Catalog migration `V11__fold_brand_selling_hold_keys.sql` folds `product_selling_hold` keys, and the live-listing lookup for a brand
+  scope compares `brand_key(brand)`, so accented listing brands are found when a rule or approval changes.
+- Verified: the SQL on PostgreSQL 16 (collision, second organisation untouched, second run), and the domain tests. Not verified: the
+  Flyway run inside the services and a Testcontainers IT (no Docker).
+
+### 7.6 Brand-gated category, no barcode, no brand (S631)
+
+- `GtinExemptionServiceImpl.requirement`: the `brand_gated` approval level alone no longer sends a no-barcode listing to staff when
+  the seller declared it without a brand (`brand_reason` UNBRANDED or HANDMADE, and no brand name or id). A named brand, including a
+  seller-proposed pending one, follows the gate as before.
+- Unchanged on purpose: staff's own gated list (`exemptionGatedCategoryCodes`, for example perfume), the known GS1 brand rule, and every
+  safety, hygiene or regulated gate (selling approvals or the category's own approval level, not this barcode rule).
+- Tests: `GtinExemptionServiceImplTest`.
