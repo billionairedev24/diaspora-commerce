@@ -253,12 +253,16 @@ describe('Add a product starts with one search box, the barcode is an optional s
     await user.click(await screen.findByRole('button', { name: 'Yes, sell this' }, LOOKUP));
     expect(await screen.findByRole('heading', { level: 1, name: 'Sell this product' })).toBeInTheDocument();
     const form = within(screen.getByRole('form', { name: 'Sell this product' }));
-    for (const label of ['Price (USD)', 'Compare-at price', 'Quantity', 'Pickup location']) expect(form.getByLabelText(new RegExp(label.replace(/[()]/g, '\\$&')))).toBeInTheDocument();
+    for (const label of ['Price (USD)', 'Compare-at price', 'Quantity']) expect(form.getByLabelText(new RegExp(label.replace(/[()]/g, '\\$&')))).toBeInTheDocument();
     // A body butter is never sold used, so Condition is not asked; the page already has its own code, so no SKU is asked either.
     for (const gone of ['Condition', 'SKU']) expect(form.queryByLabelText(gone)).not.toBeInTheDocument();
     expect(form.getByTestId('catalog-code')).toHaveTextContent('ATSHEAV001');
     expect(form.getByText('How do customers get it?')).toBeInTheDocument();
-    expect(form.getByRole('radio', { name: 'Pick up' })).toBeChecked();
+    // The mock seller's default location lets AfroTransact collect and the organisation is approved: new offers default to FBA (S632).
+    expect(form.getByRole('radio', { name: 'Fulfilled by AfroTransact (FBA)' })).toBeChecked();
+    expect(form.getByRole('radio', { name: 'Pick up' })).not.toBeChecked();
+    await user.click(form.getByRole('radio', { name: 'Pick up' }));
+    expect(form.getByLabelText(/Pickup location/)).toBeInTheDocument();
     for (const gone of ['Product title', 'Category', 'Description', 'Brand']) expect(screen.queryByLabelText(gone)).not.toBeInTheDocument();
     expect(screen.queryByTestId('image-input')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Photos' })).not.toBeInTheDocument();
@@ -504,8 +508,18 @@ describe('Pick up at a location (the owner’s case: an address exists and is se
     await user.type(screen.getByLabelText('Quantity'), '300');
   };
 
+  it('an untouched new offer follows the default location: AfroTransact collects there, so it is sent as Fulfilled by AfroTransact (S632)', async () => {
+    const user = await openForm();
+    expect(screen.getByRole('radio', { name: 'Fulfilled by AfroTransact (FBA)' })).toBeChecked();
+    await fill(user);
+    await user.click(screen.getByRole('button', { name: 'Start selling this product' }));
+    expect(await screen.findByTestId('offer-result')).toHaveAttribute('data-status', 'ACTIVE');
+    expect(getSellerDb().matching?.offers.find((o) => o.orgId === SELLER_ORG)).toMatchObject({ fulfilment: 'AFROTRANSACT_DELIVERY', shipFromLocationId: 'sfa-store' });
+  });
+
   it('sends the location that is shown selected, and the listing goes live', async () => {
     const user = await openForm();
+    await user.click(screen.getByRole('radio', { name: 'Pick up' }));
     // The default location is shown selected, not a "default" stand-in the server cannot read.
     const where = screen.getByLabelText('Pickup location') as HTMLSelectElement;
     await waitFor(() => expect(where.selectedOptions[0]?.textContent).toBe('Warehouse · Houston, TX'));
@@ -517,6 +531,7 @@ describe('Pick up at a location (the owner’s case: an address exists and is se
 
   it('says exactly what is missing at the chosen location, next to the location, with a link to fix it, and never on the price', async () => {
     const user = await openForm();
+    await user.click(screen.getByRole('radio', { name: 'Pick up' }));
     await fill(user);
     await user.selectOptions(screen.getByLabelText('Pickup location'), 'sfa-katy');
     await user.click(screen.getByRole('button', { name: 'Start selling this product' }));

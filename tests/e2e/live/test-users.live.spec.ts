@@ -98,7 +98,7 @@ test('seller.owner signs in to Seller Center acting for Mama Put Pantry and sees
   await expect(page.getByText('Seller · Owner')).toBeVisible();
   await shot(page, 'live-seller-owner.png');
   await page.goto(`${SELLER}/inventory`);
-  await expect(page.getByRole('heading', { name: 'Inventory & FBA' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Inventory' })).toBeVisible();
   // Mama Put Pantry's FBA stock received by `make seed` at the Houston fulfilment centre.
   await expect(page.getByRole('cell', { name: 'HOU-FC' }).first()).toBeVisible();
   await context.close();
