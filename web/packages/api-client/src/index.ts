@@ -76,6 +76,7 @@ export { type SlotQuery } from './shopper-client';
 export * from './size-chart-table';
 export * from './size-charts';
 export * from './staff-access';
+export * from './picture-rules';
 export * from './staff-ai-spend';
 export { createStaffApiClient, type ResourceQuery, type StaffApiClient } from './staff-client';
 export * from './staff-content';

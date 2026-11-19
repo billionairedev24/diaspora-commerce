@@ -15,6 +15,7 @@ import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { type MessageKey, useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 import { money, time } from '@/lib/format';
+import { usePictureRules } from '@/lib/picture-rules';
 import { useSellingStatus } from '@/lib/selling-status';
 import { useSeller } from '@/lib/session';
 
@@ -101,6 +102,7 @@ export function ProductForm({ productId, start }: { productId?: string; start?: 
   const router = useRouter();
   const params = useSearchParams();
   const { orgId, has, can } = useSeller();
+  const pictures = usePictureRules();
   const editableCharts = can('listings');
   const editing = Boolean(productId);
   const draftParam = params.get('draft') ?? '';
@@ -192,7 +194,7 @@ export function ProductForm({ productId, start }: { productId?: string; start?: 
   const lockedSkus = live ? (detail.data?.variants.map((v) => v.sellerSku) ?? []) : [];
   const sections = sectionsFor(type, rules);
   const categoryStatus = tree.data ? leavesOf(tree.data).find((l) => l.id === s.categoryId)?.taxStatus : undefined;
-  const problems: Problems = { ...validateForm(s, type, { lockedSkus, sizeChart: chart, linkedSizeChartId: detail.data?.listing.sizeChartId, categoryStatus, rules }), ...serverProblems };
+  const problems: Problems = { ...validateForm(s, type, { lockedSkus, sizeChart: chart, linkedSizeChartId: detail.data?.listing.sizeChartId, categoryStatus, rules, pictures }), ...serverProblems };
   const ordered = orderedProblems(problems, sections);
   const err = (id: string) => (shown(id) && problems[id] ? t(problems[id].key, problems[id].vars) : undefined);
   /** Jump to a field from the quality panel: its message shows (so the field is announced with it) and the field takes focus. */

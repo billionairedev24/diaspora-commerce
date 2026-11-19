@@ -3,8 +3,9 @@
 import { UploadSimple } from '@phosphor-icons/react/ssr';
 import { useId, useState } from 'react';
 
-import { IMAGE_TYPES, MAX_IMAGE_BYTES } from '@/components/listings/form-model';
+import { IMAGE_TYPES } from '@/components/listings/form-model';
 import { sellerApi } from '@/lib/api';
+import { maxBytesOf, usePictureRules } from '@/lib/picture-rules';
 
 interface Props {
   label: string;
@@ -44,14 +45,15 @@ function dimensions(file: File): Promise<{ w: number; h: number }> {
  * own crop around the focal point, so a phone and a desktop both show what matters.
  */
 export function StoreImageField({ label, help, value, onChange, minWidth, minHeight, focal, aspect, disabled, testId }: Props) {
+  const pictures = usePictureRules();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const hint = useId();
 
   const pick = async (file: File | undefined) => {
     if (!file) return;
-    if (!(IMAGE_TYPES as readonly string[]).includes(file.type)) return setError('Use a JPG, PNG or WebP image');
-    if (file.size > MAX_IMAGE_BYTES) return setError('The image must be 8 MB or smaller');
+    if (!(IMAGE_TYPES as readonly string[]).includes(file.type)) return setError('Use a JPG, PNG, WebP or AVIF image');
+    if (file.size > maxBytesOf(pictures)) return setError(`The image must be ${pictures.knobs.maxMegabytes} MB or smaller`);
     setError('');
     setBusy(true);
     try {

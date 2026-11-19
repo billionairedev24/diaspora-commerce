@@ -1,13 +1,13 @@
-import { type ImageTask } from '@afrotransact/api-client';
+import { type ImageTask, type PictureRules, STRICT_PICTURE_RULES } from '@afrotransact/api-client';
 
 import { type MessageKey, type Translator } from '@/i18n/t';
 
-import { MAIN_FILL_PERCENT, MIN_IMAGE_PX } from '../form-model';
+import { MAIN_FILL_PERCENT } from '../form-model';
 
 /** The reasons of an Improve-your-image task in plain words: translated by code (the English message is the fallback for a code we do not know). */
-export function taskReasonText(t: Translator<MessageKey>, reason: ImageTask['reasons'][number]): string {
+export function taskReasonText(t: Translator<MessageKey>, reason: ImageTask['reasons'][number], rules: PictureRules = STRICT_PICTURE_RULES): string {
   const key = `sc.img.check.${reason.code}` as MessageKey;
-  const text = t(key, { px: MIN_IMAGE_PX, min: 500, fill: MAIN_FILL_PERCENT, w: 0, h: 0, mb: 8 });
+  const text = t(key, { px: rules.knobs.minLongSidePx, min: rules.knobs.minShortSidePx, fill: MAIN_FILL_PERCENT, w: 0, h: 0, mb: rules.knobs.maxMegabytes });
   // The catalogue answers the key itself for a code it does not have.
   return text === key || !text ? reason.message : text;
 }

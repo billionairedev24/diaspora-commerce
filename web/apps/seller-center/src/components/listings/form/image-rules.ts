@@ -52,13 +52,13 @@ const CONTENT_FAIL = ['BORDER', 'PLACEHOLDER', 'MAIN_PROPS', 'PROHIBITED', 'REVI
  * is known from the picture's own size; the others come from media's verdict for the MAIN slot. A photo that was judged as an extra photo and
  * then made the main one is checked against the other three rules when the listing is submitted.
  */
-export function mainRuleStates(main: FormImage | undefined): Record<RuleId, RuleState> {
+export function mainRuleStates(main: FormImage | undefined, minPx: number = MIN_IMAGE_PX): Record<RuleId, RuleState> {
   const todo: Record<RuleId, RuleState> = { size: 'todo', white: 'todo', fill: 'todo', content: 'todo' };
   if (!main || main.status === 'error') return todo;
   if (main.status === 'uploading') return { size: 'pending', white: 'pending', fill: 'pending', content: 'pending' };
   const codes = codesOf(main);
   const longest = Math.max(main.width, main.height);
-  const small = codes.has('MAIN_TOO_SMALL') || codes.has('TOO_SMALL') || main.status === 'low' || (longest > 0 && longest < MIN_IMAGE_PX);
+  const small = codes.has('MAIN_TOO_SMALL') || codes.has('TOO_SMALL') || main.status === 'low' || (longest > 0 && longest < minPx);
   const size: RuleState = small ? 'fail' : longest > 0 || main.verdict ? 'ok' : 'todo';
   if (main.slot !== 'MAIN' || !main.verdict) return { ...todo, size };
   const held = HELD.some((c) => codes.has(c));

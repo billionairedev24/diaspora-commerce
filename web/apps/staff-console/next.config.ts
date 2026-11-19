@@ -18,7 +18,7 @@ const nextConfig: NextConfig = {
   // only serves its dev assets and HMR to hosts listed here (comma-separated, set by tools/dev/local.sh).
   allowedDevOrigins: (process.env.NEXT_ALLOWED_DEV_ORIGINS ?? '').split(',').map((h) => h.trim()).filter(Boolean),
   experimental: { optimizePackageImports: ['@phosphor-icons/react', 'recharts'], agentUpgrade: 'security' },
-  images: { unoptimized: true },
+  images: { unoptimized: true, formats: ['image/avif', 'image/webp'] },
   // Links made before the module path was /organisations (…/orgs?resource=connect-accounts) still work.
   async redirects() {
     return [

@@ -5,8 +5,9 @@ import { Trash } from '@phosphor-icons/react/ssr';
 
 import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
+import { maxBytesOf, usePictureRules } from '@/lib/picture-rules';
 
-import { fieldId, type FormImage, IMAGE_TYPES, MAX_IMAGE_BYTES } from '../form-model';
+import { fieldId, type FormImage, IMAGE_TYPES } from '../form-model';
 import { AddPhotoTile } from './PhotoSlots';
 
 interface Props {
@@ -32,11 +33,12 @@ const dims = (file: File) =>
 export function LabelPhotoField({ image, onChange, error, optional }: Props) {
   const t = useT();
   const api = sellerApi();
+  const pictures = usePictureRules();
   const labels = useFormLabels();
 
   const pick = async (file: File | undefined) => {
     if (!file) return;
-    if (!(IMAGE_TYPES as readonly string[]).includes(file.type) || file.size > MAX_IMAGE_BYTES) {
+    if (!(IMAGE_TYPES as readonly string[]).includes(file.type) || file.size > maxBytesOf(pictures)) {
       onChange({ id: 'img-label', previewUrl: '', url: null, width: 0, height: 0, bytes: file.size, contentType: file.type, status: 'error', alt: '' });
       return;
     }

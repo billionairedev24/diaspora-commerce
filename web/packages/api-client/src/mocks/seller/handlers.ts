@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { categoryClosed, taxQuestionsOf } from '../../fact-rules';
 import { type BookingTakeHome, type SellerRateCard } from '../../fee-rates';
 import { applyBps } from '../../fees';
+import { PICTURE_FORMATS, PICTURE_PROFILE_KNOBS, type PictureProfile, summaryOfKnobs } from '../../picture-rules';
 import { bffProblemType } from '../../problem-types';
 import { ExportColumnKindSchema, ExportFormatSchema, type ExportJob } from '../../schemas/exports';
 import { REVIEW_REASON_CODES, SELLER_REPLY_MAX } from '../../schemas/reviews';
@@ -147,6 +148,13 @@ import { applyToSell, resubmitSelling, sellingApplication, sellingApplications, 
 import { sellerSettingsHandlers } from './settings';
 import { chartProblems, type MockSizeChart, readSizeChartCsv, sizeChartTemplateCsv, sizeProblems, suggestionsFor } from './size-charts';
 import { emptyStorePage, validateMockStoreConfig } from './store-page';
+
+let mockPictureProfile: PictureProfile = 'strict';
+
+/** Test hook: the picture rules profile the mock seller BFF reports (strict, today's behaviour, by default). */
+export function setMockSellerPictureProfile(profile: PictureProfile): void {
+  mockPictureProfile = profile;
+}
 
 export const MOCK_ROLE_COOKIE = 'at_mock_role';
 
@@ -2110,6 +2118,14 @@ export const sellerHandlers = [
       const t = PRODUCT_TYPES[p.code ?? ''];
       if (!t) throw notFound('Unknown product type.');
       return t;
+    })
+  ),
+  // The picture rule in force: the strict standard until a test picks another profile (setMockSellerPictureProfile).
+  http.get(
+    `${W}/picture-rules`,
+    route(() => {
+      const knobs = PICTURE_PROFILE_KNOBS[mockPictureProfile];
+      return { profile: mockPictureProfile, knobs, overridden: [], formats: [...PICTURE_FORMATS], version: 0, summary: summaryOfKnobs(knobs), relaxed: mockPictureProfile !== 'strict' };
     })
   ),
   http.get(
