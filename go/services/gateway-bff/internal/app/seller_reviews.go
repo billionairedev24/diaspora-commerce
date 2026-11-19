@@ -19,14 +19,20 @@ type SellerReviewsService interface {
 }
 
 type sellerReviewsImpl struct {
-	r *orgResolver
+	r           *orgResolver
+	onDiversion func(field string)
 }
 
 var _ SellerReviewsService = (*sellerReviewsImpl)(nil)
 
 // NewSellerReviewsService returns the SellerReviewsService; d.Reviews is catalog's review API (nil answers 503).
-func NewSellerReviewsService(d SellerDeps) SellerReviewsService {
-	return &sellerReviewsImpl{r: newResolver(d)}
+// onDiversion (optional) is told the field of a reply refused for steering customers away (the metric hook).
+func NewSellerReviewsService(d SellerDeps, onDiversion ...func(field string)) SellerReviewsService {
+	s := &sellerReviewsImpl{r: newResolver(d)}
+	if len(onDiversion) > 0 {
+		s.onDiversion = onDiversion[0]
+	}
+	return s
 }
 
 func (s *sellerReviewsImpl) List(ctx context.Context, c *domain.Caller, q domain.SellerReviewQuery) (domain.SellerReviewsPage, error) {
@@ -63,6 +69,12 @@ func (s *sellerReviewsImpl) Reply(ctx context.Context, c *domain.Caller, reviewI
 	text = strings.TrimSpace(text)
 	if text == "" || len([]rune(text)) > domain.ReviewMaxReply {
 		return domain.SellerReview{}, domain.ValidationProblem(map[string]string{"text": "Write 1 to 1,000 characters"})
+	}
+	if msg := domain.DiversionProblem(text, false); msg != "" {
+		if s.onDiversion != nil {
+			s.onDiversion("review.reply")
+		}
+		return domain.SellerReview{}, domain.ValidationProblem(map[string]string{"text": msg})
 	}
 	r, err := s.r.d.Reviews.Reply(ctx, c.BearerToken, reviewID, text)
 	if err != nil {
