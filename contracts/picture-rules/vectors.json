@@ -1,0 +1,729 @@
+{
+ "_comment": "Golden vectors for the picture rules, run by Go (go/pkg/picturerules) and Java (catalog PictureRules). Samples are headers-only where noted: dimensions are read from headers, nothing is decoded.",
+ "profiles": {
+  "strict": {
+   "minImages": 1,
+   "minLongSidePx": 1000,
+   "minShortSidePx": 500,
+   "maxMegabytes": 8,
+   "checkBackground": true,
+   "checkAspect": true,
+   "checkTextOverlay": true,
+   "requireRealPhotoForStorefront": true,
+   "requirePhotoForMatching": true,
+   "allowPlaceholders": false
+  },
+  "startup": {
+   "minImages": 1,
+   "minLongSidePx": 500,
+   "minShortSidePx": 300,
+   "maxMegabytes": 8,
+   "checkBackground": false,
+   "checkAspect": false,
+   "checkTextOverlay": false,
+   "requireRealPhotoForStorefront": true,
+   "requirePhotoForMatching": true,
+   "allowPlaceholders": false
+  },
+  "testing": {
+   "minImages": 0,
+   "minLongSidePx": 1,
+   "minShortSidePx": 1,
+   "maxMegabytes": 8,
+   "checkBackground": false,
+   "checkAspect": false,
+   "checkTextOverlay": false,
+   "requireRealPhotoForStorefront": false,
+   "requirePhotoForMatching": false,
+   "allowPlaceholders": true
+  }
+ },
+ "envDefaults": {
+  "local": "testing",
+  "dev": "testing",
+  "uat": "startup",
+  "prod": "startup"
+ },
+ "images": [
+  {
+   "name": "png 800x600",
+   "hex": "89504e470d0a1a0a0000000d49484452000003200000025808020000001514152700000aa849444154789cedd6410900300cc0c0fa37bd9a080cca9d823c330f0080d4fc0e0000b8c6600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c160040cc600100c40c1600406c0158e44f5d145110d30000000049454e44ae426082",
+   "type": "image/png",
+   "width": 800,
+   "height": 600
+  },
+  {
+   "name": "jpeg 1200x900",
+   "hex": "ffd8ffe000104a46494600010100000100010000ffc0000b08038404b001011100ffd9",
+   "type": "image/jpeg",
+   "width": 1200,
+   "height": 900
+  },
+  {
+   "name": "webp lossy 640x480",
+   "hex": "524946461800000057454250565038200c0000001002009d012a8002e0010000",
+   "type": "image/webp",
+   "width": 640,
+   "height": 480
+  },
+  {
+   "name": "webp lossless 500x500",
+   "hex": "5249464612000000574542505650384c060000002ff3c17c0000",
+   "type": "image/webp",
+   "width": 500,
+   "height": 500
+  },
+  {
+   "name": "webp extended 1000x700",
+   "hex": "524946461600000057454250565038580a00000000000000e70300bb0200",
+   "type": "image/webp",
+   "width": 1000,
+   "height": 700
+  },
+  {
+   "name": "avif 1024x768",
+   "hex": "0000001c667479706176696600000000617669666d6966316d696166000000306d6574610000000000000024697072700000001c6970636f0000001469737065000000000000040000000300",
+   "type": "image/avif",
+   "width": 1024,
+   "height": 768
+  },
+  {
+   "name": "avis sequence 400x400",
+   "hex": "0000001c66747970617669730000000061766973617669666d736631000000306d6574610000000000000024697072700000001c6970636f0000001469737065000000000000019000000190",
+   "type": "image/avif",
+   "width": 400,
+   "height": 400
+  },
+  {
+   "name": "avif brand only in compatible list",
+   "hex": "00000018667479706d696631000000006d69663161766966000000306d6574610000000000000024697072700000001c6970636f0000001469737065000000000000012c000000c8",
+   "type": "image/avif",
+   "width": 300,
+   "height": 200
+  }
+ ],
+ "rejected": [
+  {
+   "name": "svg with script declared as png",
+   "hex": "3c73766720786d6c6e733d22687474703a2f2f7777772e77332e6f72672f323030302f737667222077696474683d22313022206865696768743d223130223e3c7363726970743e616c6572742831293c2f7363726970743e3c2f7376673e",
+   "reason": "not an image type"
+  },
+  {
+   "name": "html page",
+   "hex": "3c21646f63747970652068746d6c3e3c68746d6c3e3c7363726970743e616c6572742831293c2f7363726970743e3c2f68746d6c3e",
+   "reason": "not an image type"
+  },
+  {
+   "name": "heic is not avif",
+   "hex": "00000018667479706865696300000000686569636d696631000000306d6574610000000000000024697072700000001c6970636f0000001469737065000000000000032000000258",
+   "reason": "heic brand"
+  },
+  {
+   "name": "isobmff with unknown brand",
+   "hex": "000000186674797069736f6d0000000069736f6d6d703431000000306d6574610000000000000024697072700000001c6970636f0000001469737065000000000000032000000258",
+   "reason": "video brand"
+  },
+  {
+   "name": "riff wave",
+   "hex": "524946462400000057415645666d74200000000000000000000000000000000000000000",
+   "reason": "RIFF but not WEBP"
+  },
+  {
+   "name": "windows executable",
+   "hex": "4d5a900003000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "reason": "executable"
+  },
+  {
+   "name": "elf executable",
+   "hex": "7f454c46020101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "reason": "executable"
+  },
+  {
+   "name": "shell script",
+   "hex": "23212f62696e2f73680a6563686f2068690a",
+   "reason": "script"
+  },
+  {
+   "name": "gif",
+   "hex": "4749463839610100010000000000000000000000",
+   "reason": "gif is not accepted"
+  },
+  {
+   "name": "empty",
+   "hex": "",
+   "reason": "empty"
+  }
+ ],
+ "polyglots": [
+  {
+   "name": "png header then html",
+   "hex": "89504e470d0a1a0a0000000d4948445200000064000000640802000000ff800203000000e549444154789cedd0410d00200cc0c0f9370d16d61721b953d0740e6bf33ae02766056605660566056605660566056605660566056605660566056605660566056605660566056605660566056605660566056605660566056605660566056605660566056605660566056605660566056605660566056605660566056605660566056605660566056605660566056605660566056605660566056605660566056605660566056605660566056605660566056605660566056605660566056605660566056605660566056605660566056605660566056605660566056605660566056605172dc3c19dad3cf3c10000000049454e44ae4260823c68746d6c3e3c7363726970743e616c6572742831293c2f7363726970743e3c2f68746d6c3e"
+  },
+  {
+   "name": "jpeg comment with script tag",
+   "hex": "ffd8fffe001e3c7363726970743e616c6572742831293c2f7363726970743effc0000b080258032001011100ffd9"
+  },
+  {
+   "name": "webp with svg payload",
+   "hex": "524946461600000057454250565038580a000000000000001f03005702003c737667206f6e6c6f61643d616c6572742831293e"
+  },
+  {
+   "name": "avif with iframe appended",
+   "hex": "0000001c667479706176696600000000617669666d6966316d696166000000306d6574610000000000000024697072700000001c6970636f00000014697370650000000000000320000002583c696672616d65207372633d2f2f6576696c3e3c2f696672616d653e"
+  }
+ ],
+ "urls": [
+  {
+   "url": "https://media.afrotransact.com/p/shoe.jpg",
+   "class": "real",
+   "expect": {
+    "strict": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    },
+    "startup": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    },
+    "testing": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    }
+   }
+  },
+  {
+   "url": "https://media.afrotransact.com/p/shoe.JPEG",
+   "class": "real",
+   "expect": {
+    "strict": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    },
+    "startup": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    },
+    "testing": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    }
+   }
+  },
+  {
+   "url": "https://media.afrotransact.com/p/shoe.png",
+   "class": "real",
+   "expect": {
+    "strict": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    },
+    "startup": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    },
+    "testing": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    }
+   }
+  },
+  {
+   "url": "https://media.afrotransact.com/p/shoe.webp",
+   "class": "real",
+   "expect": {
+    "strict": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    },
+    "startup": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    },
+    "testing": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    }
+   }
+  },
+  {
+   "url": "https://media.afrotransact.com/p/shoe.avif",
+   "class": "real",
+   "expect": {
+    "strict": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    },
+    "startup": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    },
+    "testing": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    }
+   }
+  },
+  {
+   "url": "https://cdn.example.com/p/12345",
+   "class": "real",
+   "expect": {
+    "strict": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    },
+    "startup": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    },
+    "testing": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    }
+   }
+  },
+  {
+   "url": "/images/shoe.webp",
+   "class": "real",
+   "expect": {
+    "strict": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    },
+    "startup": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    },
+    "testing": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    }
+   }
+  },
+  {
+   "url": "/images/shoe.avif?w=800",
+   "class": "real",
+   "expect": {
+    "strict": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    },
+    "startup": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    },
+    "testing": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    }
+   }
+  },
+  {
+   "url": "https://media.afrotransact.com/p/shoe.svg",
+   "class": "none",
+   "expect": {
+    "strict": {
+     "photoOK": false,
+     "showOnStorefront": false,
+     "matchable": false
+    },
+    "startup": {
+     "photoOK": false,
+     "showOnStorefront": false,
+     "matchable": false
+    },
+    "testing": {
+     "photoOK": false,
+     "showOnStorefront": true,
+     "matchable": true
+    }
+   }
+  },
+  {
+   "url": "https://media.afrotransact.com/p/icon.ico",
+   "class": "none",
+   "expect": {
+    "strict": {
+     "photoOK": false,
+     "showOnStorefront": false,
+     "matchable": false
+    },
+    "startup": {
+     "photoOK": false,
+     "showOnStorefront": false,
+     "matchable": false
+    },
+    "testing": {
+     "photoOK": false,
+     "showOnStorefront": true,
+     "matchable": true
+    }
+   }
+  },
+  {
+   "url": "data:image/png;base64,AAAA",
+   "class": "none",
+   "expect": {
+    "strict": {
+     "photoOK": false,
+     "showOnStorefront": false,
+     "matchable": false
+    },
+    "startup": {
+     "photoOK": false,
+     "showOnStorefront": false,
+     "matchable": false
+    },
+    "testing": {
+     "photoOK": false,
+     "showOnStorefront": true,
+     "matchable": true
+    }
+   }
+  },
+  {
+   "url": "javascript:alert(1)",
+   "class": "none",
+   "expect": {
+    "strict": {
+     "photoOK": false,
+     "showOnStorefront": false,
+     "matchable": false
+    },
+    "startup": {
+     "photoOK": false,
+     "showOnStorefront": false,
+     "matchable": false
+    },
+    "testing": {
+     "photoOK": false,
+     "showOnStorefront": true,
+     "matchable": true
+    }
+   }
+  },
+  {
+   "url": "",
+   "class": "none",
+   "expect": {
+    "strict": {
+     "photoOK": false,
+     "showOnStorefront": false,
+     "matchable": false
+    },
+    "startup": {
+     "photoOK": false,
+     "showOnStorefront": false,
+     "matchable": false
+    },
+    "testing": {
+     "photoOK": false,
+     "showOnStorefront": true,
+     "matchable": true
+    }
+   }
+  },
+  {
+   "url": "   ",
+   "class": "none",
+   "expect": {
+    "strict": {
+     "photoOK": false,
+     "showOnStorefront": false,
+     "matchable": false
+    },
+    "startup": {
+     "photoOK": false,
+     "showOnStorefront": false,
+     "matchable": false
+    },
+    "testing": {
+     "photoOK": false,
+     "showOnStorefront": true,
+     "matchable": true
+    }
+   }
+  },
+  {
+   "url": "ftp://x/y.jpg",
+   "class": "none",
+   "expect": {
+    "strict": {
+     "photoOK": false,
+     "showOnStorefront": false,
+     "matchable": false
+    },
+    "startup": {
+     "photoOK": false,
+     "showOnStorefront": false,
+     "matchable": false
+    },
+    "testing": {
+     "photoOK": false,
+     "showOnStorefront": true,
+     "matchable": true
+    }
+   }
+  },
+  {
+   "url": "https://x.com/images/placeholder.png",
+   "class": "placeholder",
+   "expect": {
+    "strict": {
+     "photoOK": false,
+     "showOnStorefront": false,
+     "matchable": false
+    },
+    "startup": {
+     "photoOK": false,
+     "showOnStorefront": false,
+     "matchable": false
+    },
+    "testing": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    }
+   }
+  },
+  {
+   "url": "https://x.com/images/no-image.jpg",
+   "class": "placeholder",
+   "expect": {
+    "strict": {
+     "photoOK": false,
+     "showOnStorefront": false,
+     "matchable": false
+    },
+    "startup": {
+     "photoOK": false,
+     "showOnStorefront": false,
+     "matchable": false
+    },
+    "testing": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    }
+   }
+  },
+  {
+   "url": "https://x.com/images/image-not-available.webp",
+   "class": "placeholder",
+   "expect": {
+    "strict": {
+     "photoOK": false,
+     "showOnStorefront": false,
+     "matchable": false
+    },
+    "startup": {
+     "photoOK": false,
+     "showOnStorefront": false,
+     "matchable": false
+    },
+    "testing": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    }
+   }
+  },
+  {
+   "url": "https://x.com/icons/box.png",
+   "class": "placeholder",
+   "expect": {
+    "strict": {
+     "photoOK": false,
+     "showOnStorefront": false,
+     "matchable": false
+    },
+    "startup": {
+     "photoOK": false,
+     "showOnStorefront": false,
+     "matchable": false
+    },
+    "testing": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    }
+   }
+  },
+  {
+   "url": "https://x.com/p/coming-soon.avif",
+   "class": "placeholder",
+   "expect": {
+    "strict": {
+     "photoOK": false,
+     "showOnStorefront": false,
+     "matchable": false
+    },
+    "startup": {
+     "photoOK": false,
+     "showOnStorefront": false,
+     "matchable": false
+    },
+    "testing": {
+     "photoOK": true,
+     "showOnStorefront": true,
+     "matchable": true
+    }
+   }
+  }
+ ],
+ "overrides": [
+  {
+   "name": "strict with min images 3",
+   "profile": "strict",
+   "overrides": {
+    "minImages": 3
+   },
+   "overridden": [
+    "minImages"
+   ],
+   "knobs": {
+    "minImages": 3,
+    "minLongSidePx": 1000,
+    "minShortSidePx": 500,
+    "maxMegabytes": 8,
+    "checkBackground": true,
+    "checkAspect": true,
+    "checkTextOverlay": true,
+    "requireRealPhotoForStorefront": true,
+    "requirePhotoForMatching": true,
+    "allowPlaceholders": false
+   }
+  },
+  {
+   "name": "startup with placeholders allowed",
+   "profile": "startup",
+   "overrides": {
+    "allowPlaceholders": true
+   },
+   "overridden": [
+    "allowPlaceholders"
+   ],
+   "knobs": {
+    "minImages": 1,
+    "minLongSidePx": 500,
+    "minShortSidePx": 300,
+    "maxMegabytes": 8,
+    "checkBackground": false,
+    "checkAspect": false,
+    "checkTextOverlay": false,
+    "requireRealPhotoForStorefront": true,
+    "requirePhotoForMatching": true,
+    "allowPlaceholders": true
+   }
+  },
+  {
+   "name": "testing storefront requirement on",
+   "profile": "testing",
+   "overrides": {
+    "requireRealPhotoForStorefront": true,
+    "maxMegabytes": 4
+   },
+   "overridden": [
+    "maxMegabytes",
+    "requireRealPhotoForStorefront"
+   ],
+   "knobs": {
+    "minImages": 0,
+    "minLongSidePx": 1,
+    "minShortSidePx": 1,
+    "maxMegabytes": 4,
+    "checkBackground": false,
+    "checkAspect": false,
+    "checkTextOverlay": false,
+    "requireRealPhotoForStorefront": true,
+    "requirePhotoForMatching": false,
+    "allowPlaceholders": true
+   }
+  }
+ ],
+ "invalid": [
+  {
+   "name": "too many images",
+   "knobs": {
+    "minImages": 11,
+    "minLongSidePx": 500,
+    "minShortSidePx": 300,
+    "maxMegabytes": 8,
+    "checkBackground": false,
+    "checkAspect": false,
+    "checkTextOverlay": false,
+    "requireRealPhotoForStorefront": true,
+    "requirePhotoForMatching": true,
+    "allowPlaceholders": false
+   }
+  },
+  {
+   "name": "short over long",
+   "knobs": {
+    "minImages": 1,
+    "minLongSidePx": 500,
+    "minShortSidePx": 900,
+    "maxMegabytes": 8,
+    "checkBackground": false,
+    "checkAspect": false,
+    "checkTextOverlay": false,
+    "requireRealPhotoForStorefront": true,
+    "requirePhotoForMatching": true,
+    "allowPlaceholders": false
+   }
+  },
+  {
+   "name": "huge file",
+   "knobs": {
+    "minImages": 1,
+    "minLongSidePx": 500,
+    "minShortSidePx": 300,
+    "maxMegabytes": 99,
+    "checkBackground": false,
+    "checkAspect": false,
+    "checkTextOverlay": false,
+    "requireRealPhotoForStorefront": true,
+    "requirePhotoForMatching": true,
+    "allowPlaceholders": false
+   }
+  },
+  {
+   "name": "zero px",
+   "knobs": {
+    "minImages": 1,
+    "minLongSidePx": 0,
+    "minShortSidePx": 300,
+    "maxMegabytes": 8,
+    "checkBackground": false,
+    "checkAspect": false,
+    "checkTextOverlay": false,
+    "requireRealPhotoForStorefront": true,
+    "requirePhotoForMatching": true,
+    "allowPlaceholders": false
+   }
+  }
+ ]
+}
