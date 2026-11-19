@@ -121,6 +121,19 @@ const LOCATION_PROBLEMS: Record<string, { message: MessageKey; fix: MessageKey; 
 export const locationProblem = (code: string | undefined): { message: MessageKey; fix: MessageKey; href: string } | undefined => (code ? LOCATION_PROBLEMS[code] : undefined);
 
 /** The location the form sends: the one chosen, else the seller's default (shown selected, so it is also what is sent), else the only one. */
+/**
+ * How a new offer is fulfilled until the seller chooses (ADR 0013, S632): Fulfilled by AfroTransact when the seller's default
+ * location lets AfroTransact collect there and the organisation is approved and the address is located, otherwise Pick up.
+ * The seller can change it on the offer.
+ */
+export function defaultOfferFulfilment(
+  locations: { id: string; isDefault: boolean; position: unknown; afrotransactPickup: { enabled: boolean } }[],
+  orgApproved: boolean
+): 'SELLER' | 'AFROTRANSACT_DELIVERY' {
+  const home = locations.find((l) => l.isDefault) ?? (locations.length === 1 ? locations[0] : undefined);
+  return orgApproved && home && home.afrotransactPickup.enabled && home.position ? 'AFROTRANSACT_DELIVERY' : 'SELLER';
+}
+
 export function chosenLocation(chosen: string, locations: { id: string; isDefault: boolean }[]): string {
   if (chosen && locations.some((l) => l.id === chosen)) return chosen;
   return (locations.find((l) => l.isDefault) ?? (locations.length === 1 ? locations[0] : undefined))?.id ?? '';
