@@ -37,7 +37,8 @@ class PublicStorefrontController {
 
     @Schema(name = "PublicStorefront")
     record PublicStorefrontResponse(@Schema(description = "SELLER or PROVIDER") String kind, String orgId, String slug, String name, String description, String logoUrl,
-                                    String brandColor, String contactEmail,
+                                    String brandColor,
+                                    @Schema(description = "Always null: a login email is never public", deprecated = true) String contactEmail,
                                     @Schema(description = "The published settings document") JsonNode config,
                                     Instant publishedAt, Instant orgCreatedAt) {
     }
@@ -50,7 +51,7 @@ class PublicStorefrontController {
         StorePage published = store.publishedFor(page.orgId()).orElseThrow(this::missing);
         Instant since = orgs.findById(page.orgId()).map(o -> o.createdAt()).orElse(null);
         return new PublicStorefrontResponse(page.kind(), page.orgId(), page.slug(), page.name(), page.description(), page.logoUrl(),
-                page.brandColor(), page.contactEmail(), json.readTree(published.published()), published.publishedAt(),
+                page.brandColor(), null, json.readTree(published.published()), published.publishedAt(),
                 since);
     }
 

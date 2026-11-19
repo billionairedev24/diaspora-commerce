@@ -24,13 +24,14 @@ class BusinessPageController {
     @Schema(name = "BusinessPage")
     record BusinessPageResponse(String orgId, String slug, String kind, String name, String description,
                                 @Schema(description = "#rrggbb, or null") String brandColor,
-                                @Schema(description = "https URL, or null") String logoUrl, String contactEmail,
+                                @Schema(description = "https URL, or null") String logoUrl,
+                                @Schema(description = "Always null: a login email is never public", deprecated = true) String contactEmail,
                                 @Schema(description = "false until the organisation is approved: keep it out of search "
                                         + "engines") boolean approved) {
 
         static BusinessPageResponse of(PublicBusinessPage p) {
             return new BusinessPageResponse(p.orgId(), p.slug(), p.kind(), p.name(), p.description(), p.brandColor(),
-                    p.logoUrl(), p.contactEmail(), p.approved());
+                    p.logoUrl(), null, p.approved());
         }
     }
 
