@@ -98,11 +98,6 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 		route("POST /v1/seller/coupons/{couponId}/status", h.sellerCouponStatus)
 		route("DELETE /v1/seller/coupons/{couponId}", h.sellerDeleteCoupon)
 	}
-	if h.s.SellerFba != nil {
-		for _, m := range []string{http.MethodGet, http.MethodPost, http.MethodPut} {
-			route(m+" /v1/seller/fba/{rest...}", h.sellerFba)
-		}
-	}
 	// Listings, builder, stock
 	route("GET /v1/seller/listings", h.listings)
 	route("POST /v1/seller/listings/{productId}/status", h.listingStatus)

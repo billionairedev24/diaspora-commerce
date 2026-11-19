@@ -1,5 +1,5 @@
 /* Mock BFF for the Inventory hub, AfroTransact Retail (1P) and Seller Center FBA (S281): an in-memory inventory and
-   retail back end behind /v1/staff/inventory/**, /v1/staff/retail/** and /v1/seller/fba/**, with the same rules the
+   retail back end behind /v1/staff/inventory/** and /v1/staff/retail/**, with the same rules the
    services apply (FEFO, whole cases, lots from receipts, cycle-count variances posted as ADJUST, over-receipt
    approval, three-way match). State is process-wide (the app server), so journeys run one at a time. */
 import { http, HttpResponse, type JsonBodyType } from 'msw';
@@ -1238,23 +1238,4 @@ function retailRoutes(W: string, gate: HubGate) {
 /** Staff console routes: `W` is the staff prefix (e.g. "*\/v1/staff"). */
 export function inventoryHubHandlers(W: string, gate: HubGate, rates: HubRates = () => []) {
   return [...staffInventoryRoutes(`${W}/inventory`, gate, rates), ...inventoryRoutes(`${W}/inventory`, gate, 'inventory'), ...retailRoutes(`${W}/retail`, gate)];
-}
-
-/** Seller Center routes: `W` is the seller prefix (e.g. "*\/v1/seller"); the gate names the active organisation. */
-export function sellerFbaHandlers(W: string, gate: HubGate) {
-  const h = (fn: Fn) => handler(gate, 'fba', 'VIEW', fn);
-  return [
-    ...inventoryRoutes(`${W}/fba`, gate, 'fba'),
-    http.get(`${W}/fba/inventory`, h((ctx) => {
-      const lots = visible(ctx, ctx.db.lots);
-      const keys = [...new Set(lots.map((l) => `${l.sku}|${l.nodeId}`))];
-      const items = keys.map((k) => {
-        const [sku, nodeId] = k.split('|');
-        const ls = lots.filter((l) => l.sku === sku && l.nodeId === nodeId);
-        const sell = ls.filter((l) => l.status === 'SELLABLE');
-        return { sku, atin: null, nodeId, onHand: sell.reduce((a, l) => a + l.qtyOnHand, 0), reserved: sell.reduce((a, l) => a + l.qtyReserved, 0), available: sell.reduce((a, l) => a + l.qtyAvailable, 0), inbound: visible(ctx, ctx.db.inbound).filter((s) => s.status === 'SHIPPED' && s.nodeId === nodeId).reduce((a, s) => a + s.lines.filter((x) => x.sku === sku).reduce((b, x) => b + x.inboundOpen, 0), 0), unfulfillable: ls.filter((l) => l.status !== 'SELLABLE').reduce((a, l) => a + l.qtyOnHand, 0), stranded: false };
-      });
-      return { ownerOrg: ctx.ownerOrg, items, total: items.length, page: 0, size: items.length };
-    }))
-  ];
 }

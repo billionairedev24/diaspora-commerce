@@ -309,7 +309,6 @@ func TestSellerContractConformance(t *testing.T) {
 	mustStatus(t, b.do("GET", "/v1/seller/inventory", nil), 200)
 	mustStatus(t, b.do("POST", "/v1/seller/inventory/adjustments", map[string]any{"sku": "OFADA-5LB", "quantity": 30, "reason": "STOCK_TAKE"}), 503)
 	mustStatus(t, b.do("POST", "/v1/seller/inventory/adjustments", map[string]any{"sku": "", "quantity": -1, "reason": "?"}), 422)
-	exerciseSellerFba(t, b)
 	exerciseSellerListing(t, bff, b)
 	exerciseSellerBulkModes(t, bff, b)
 	exerciseSellerSizeCharts(t, bff, b)

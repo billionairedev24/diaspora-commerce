@@ -69,7 +69,6 @@ import { cleanValue, sizesMissingFromChart, valueKey } from '../../size-charts';
 import { mockAddressSuggestions, mockResolveAddress } from '../addresses';
 import { miles } from '../delivery';
 import { exportFileOf } from '../export-file';
-import { type HubGate, sellerFbaHandlers } from '../inventory-hub';
 import { sessionHandlers } from '../session';
 import { SERVICE_PLACES } from '../shopper-state';
 import { buildStorefront, publishMockStore, searchStoreProducts, unpublishMockStore } from '../storefront';
@@ -919,18 +918,6 @@ function activeMember(ctx: Ctx, userId: string | undefined): TeamMember {
 }
 
 const owners = (ctx: Ctx) => (ctx.db.team[ctx.org.id] ?? []).filter((m) => m.status !== 'INVITED' && m.roleKey.endsWith('.owner')).length;
-
-/** Seller Center FBA routes (S281): approved seller organisations, Inventory module, lists limited to the active org. */
-const fbaGate: HubGate = (request, _area, level) => {
-  try {
-    const ctx = context(request);
-    require(ctx, 'inventory', level === 'VIEW' ? 'VIEW' : 'EDIT', 'SELLER');
-    return { ownerOrg: ctx.org.id, actor: ctx.role };
-  } catch (e) {
-    if (e instanceof SellerProblem) return { status: e.status, code: e.code, title: e.title, detail: e.message };
-    throw e;
-  }
-};
 
 /* ── The application wizard (S286, S289): see ./onboarding ── */
 
@@ -3248,7 +3235,6 @@ export const sellerHandlers = [
     return { created };
   }, (out) => ((out as { created: boolean }).created ? 201 : 200))),
   /* Send to AfroTransact (S281) */
-  ...sellerFbaHandlers(W, fbaGate),
   /* Anything else under /v1/seller is not part of the contract. */
   http.all(`${W}/*`, () => problemResponse(notFound('No such seller route.'))),
   /* My account (profile, sign-in & security, alerts, preferences): /v1/account/… */

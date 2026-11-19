@@ -1,5 +1,5 @@
 /* Inventory hub, AfroTransact Retail (1P) and Seller Center FBA (S281): the BFF routes that mirror inventory-service
-   (/v1/staff/inventory/**, /v1/seller/fba/**) and retail-service (/v1/staff/retail/**) — contracts/openapi/
+   (/v1/staff/inventory/**) and retail-service (/v1/staff/retail/**) — contracts/openapi/
    gateway-bff-staff.yaml (tags Inventory hub, Retail (1P)) and gateway-bff-seller.yaml (tag Inventory & FBA) — their Zod
    schemas, TanStack Query key factories and queryOptions, and the rules the consoles and the mock BFF share (expiry
    required for perishables, whole cases, over-receipt tolerance, FEFO order, expiry buckets). Money is in minor units;
@@ -776,7 +776,7 @@ const qs = (o: Record<string, string | number | undefined | null>) => {
   return out;
 };
 
-/** Inventory-service routes, shared by the staff hub (base /v1/staff/inventory) and Seller Center (/v1/seller/fba). */
+/** Inventory-service routes, used by the staff hub (base /v1/staff/inventory). */
 function inventoryRoutes(request: Requester, base: string) {
   return {
     nodes: (signal?: AbortSignal) => request(`${base}/nodes`, NodeListSchema, { signal }).then((r) => r.items),
@@ -884,17 +884,6 @@ export function createInventoryHubApi(request: Requester, options: ApiClientOpti
 }
 export type InventoryHubApi = ReturnType<typeof createInventoryHubApi>;
 
-/** Seller Center: Send to AfroTransact for the active organisation. */
-export function createSellerFbaApi(request: Requester, options: ApiClientOptions) {
-  const F = '/v1/seller/fba';
-  return {
-    ...inventoryRoutes(request, F),
-    stock: (signal?: AbortSignal) => request(`${F}/inventory`, FbaInventorySchema, { signal }),
-    labelsUrl: (id: string, kind: 'UNIT' | 'BOX', format: 'PDF' | 'ZPL' = 'PDF') => joinUrl(options.baseUrl, `${F}/inbound/${enc(id)}/labels`, { kind, format })
-  };
-}
-export type SellerFbaApi = ReturnType<typeof createSellerFbaApi>;
-
 /* ── Query keys and options ──────────────────────────────── */
 
 export const inventoryHubKeys = {
@@ -929,8 +918,7 @@ export const inventoryHubKeys = {
   receipts: () => [...inventoryHubKeys.retail(), 'receipts'] as const,
   receiptPage: (q: object) => [...inventoryHubKeys.receipts(), 'page', q] as const,
   receipt: (id: string) => [...inventoryHubKeys.receipts(), 'one', id] as const,
-  invoices: (q: object) => [...inventoryHubKeys.retail(), 'invoices', q] as const,
-  fbaStock: () => [...inventoryHubKeys.all, 'fba-stock'] as const
+  invoices: (q: object) => [...inventoryHubKeys.retail(), 'invoices', q] as const
 };
 
 type InvRoutes = ReturnType<typeof inventoryRoutes>;
@@ -972,6 +960,5 @@ export const inventoryHubQueries = {
     queryOptions({ queryKey: inventoryHubKeys.receiptPage(q), queryFn: ({ signal }) => api.retail.receipts(q, signal), placeholderData: keepPreviousData, staleTime: 10_000 }),
   receipt: (api: InventoryHubApi, id: string) => queryOptions({ queryKey: inventoryHubKeys.receipt(id), queryFn: ({ signal }) => api.retail.receipt(id, signal), staleTime: 5_000 }),
   invoices: (api: InventoryHubApi, q: Parameters<InventoryHubApi['retail']['invoices']>[0]) =>
-    queryOptions({ queryKey: inventoryHubKeys.invoices(q), queryFn: ({ signal }) => api.retail.invoices(q, signal), placeholderData: keepPreviousData, staleTime: 10_000 }),
-  fbaStock: (api: SellerFbaApi) => queryOptions({ queryKey: inventoryHubKeys.fbaStock(), queryFn: ({ signal }) => api.stock(signal), staleTime: 15_000 })
+    queryOptions({ queryKey: inventoryHubKeys.invoices(q), queryFn: ({ signal }) => api.retail.invoices(q, signal), placeholderData: keepPreviousData, staleTime: 10_000 })
 };
