@@ -99,7 +99,32 @@ func (s *sellerStorePageImpl) Get(ctx context.Context, c *domain.Caller) (domain
 
 // validate checks the config and turns a failure into the 422 the editor shows next to the field.
 func (s *sellerStorePageImpl) validate(in domain.StoreConfig, kind string) (domain.StoreConfig, error) {
-	clean, errs := domain.ValidateStoreConfig(in, s.policy.ForKind(kind))
+	return s.validateWith(in, kind, nil)
+}
+
+// existingWebsite is the website links in the stored draft and published copy.
+func existingWebsite(up port.UpStorePage) []string {
+	var out []string
+	for _, raw := range []json.RawMessage{up.Draft, up.Published} {
+		var c domain.StoreConfig
+		if len(raw) == 0 || json.Unmarshal(raw, &c) != nil {
+			continue
+		}
+		for _, l := range c.Social {
+			if l.Network == domain.NetworkWebsite {
+				if u, ok := domain.SafeLink(l.URL); ok {
+					out = append(out, u)
+				}
+			}
+		}
+	}
+	return out
+}
+
+func (s *sellerStorePageImpl) validateWith(in domain.StoreConfig, kind string, website []string) (domain.StoreConfig, error) {
+	pol := s.policy.ForKind(kind)
+	pol.ExistingWebsite = website
+	clean, errs := domain.ValidateStoreConfig(in, pol)
 	if len(errs) == 0 {
 		return clean, nil
 	}
@@ -118,7 +143,12 @@ func (s *sellerStorePageImpl) SaveDraft(ctx context.Context, c *domain.Caller, i
 	if err != nil {
 		return domain.StorePageSettings{}, err
 	}
-	clean, err := s.validate(in.Config, storeKind(sc))
+	// Website links already stored may stay (they cannot be added).
+	cur, err := s.r.d.Sellers.StorePage(ctx, c.BearerToken, sc.org.ID)
+	if err != nil {
+		return domain.StorePageSettings{}, mapErr("seller", err)
+	}
+	clean, err := s.validateWith(in.Config, storeKind(sc), existingWebsite(cur))
 	if err != nil {
 		return domain.StorePageSettings{}, err
 	}
@@ -150,7 +180,7 @@ func (s *sellerStorePageImpl) Publish(ctx context.Context, c *domain.Caller, in 
 	if json.Unmarshal(cur.Draft, &draft) != nil {
 		return domain.StorePageSettings{}, domain.ValidationProblem(map[string]string{"form": "The saved draft cannot be read. Save it again."})
 	}
-	if _, err := s.validate(draft, storeKind(sc)); err != nil {
+	if _, err := s.validateWith(draft, storeKind(sc), existingWebsite(cur)); err != nil {
 		return domain.StorePageSettings{}, err
 	}
 	up, err := s.r.d.Sellers.PublishStorePage(ctx, c.BearerToken, sc.org.ID, in.Version)

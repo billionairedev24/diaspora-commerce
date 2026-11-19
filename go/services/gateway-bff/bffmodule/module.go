@@ -16,6 +16,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/httpserver"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/module"
 	gatewaybff "github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff"
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/diversionmetrics"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/homemetrics"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/httpapi"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/httpclient"
@@ -244,7 +245,7 @@ func build(host Deps, ctx context.Context, closers *module.Closers) (Module, err
 		identityAPI: identity, serviceTokens: serviceTokens, offers: storefrontOffers, proofLinks: proofLinks, media: media, receipts: store, limiter: store, estimator: estimator, shippingSync: shippingSync,
 		taxMetrics: taxmetrics.New(reg), zipLookup: zipLookup, places: places, arrival: arrival}, services, log)
 	// A seller's branded storefront /b/{slug}: public read, and the Settings > Store page editor with its draft preview.
-	storePolicy := domain.StorePolicy{MediaPrefixes: cfg.StoreMediaPrefixes(loader.Env())}
+	storePolicy := domain.StorePolicy{MediaPrefixes: cfg.StoreMediaPrefixes(loader.Env()), OnDiversionReject: diversionmetrics.New(reg)}
 	if len(storePolicy.MediaPrefixes) == 0 {
 		log.Warn("storefront media: no allowed prefixes, set MEDIA_PUBLIC_URL; every storefront image will be refused")
 	} else {
