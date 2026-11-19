@@ -24,6 +24,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/logging"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/telemetry"
 	gatewaybff "github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff"
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/diversionmetrics"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/homemetrics"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/httpapi"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/httpclient"
@@ -120,6 +121,8 @@ func run() error {
 	orders := upstreams.NewOrders(ordersClient)
 	notifications := upstreams.NewNotifications(client("notifications", up.Notifications))
 	sellerCases := upstreams.NewSellerCases(client("tax-returns", up.TaxReturns), client("trust-ops", up.TrustOps))
+	// diversion_text_rejected_total{field}: seller text refused for steering customers away from AfroTransact.
+	onDiversion := diversionmetrics.New(reg)
 	sellerDeps := app.SellerDeps{
 		Cases: sellerCases, Content: content,
 		Orgs: upstreams.NewOrgAccess(identityClient), Sellers: upstreams.NewSellerService(client("seller", up.Seller)), Addresses: identity,
@@ -234,7 +237,7 @@ func run() error {
 		SellerOffers:       app.NewSellerOffersService(sellerDeps),
 		SellerCoupons:      app.NewSellerCouponsService(sellerDeps),
 		SellerCases:        app.NewSellerCasesService(sellerDeps),
-		SellerReviews:      app.NewSellerReviewsService(sellerDeps),
+		SellerReviews:      app.NewSellerReviewsService(sellerDeps, onDiversion),
 		SellerTax:          app.NewSellerTaxService(sellerDeps),
 		SellerFba:          app.NewSellerFbaService(sellerDeps),
 	}
@@ -247,7 +250,7 @@ func run() error {
 		identityAPI: identity, serviceTokens: serviceTokens, offers: storefrontOffers, proofLinks: proofLinks, media: media, receipts: store, limiter: store, estimator: estimator, shippingSync: shippingSync,
 		taxMetrics: taxmetrics.New(reg), zipLookup: zipLookup, places: places, arrival: arrival}, services, log)
 	// A seller's branded storefront /b/{slug}: public read, and the Settings > Store page editor with its draft preview.
-	storePolicy := domain.StorePolicy{MediaPrefixes: cfg.StoreMediaPrefixes(loader.Env())}
+	storePolicy := domain.StorePolicy{MediaPrefixes: cfg.StoreMediaPrefixes(loader.Env()), OnDiversionReject: onDiversion}
 	if len(storePolicy.MediaPrefixes) == 0 {
 		log.Warn("storefront media: no allowed prefixes, set MEDIA_PUBLIC_URL; every storefront image will be refused")
 	} else {
