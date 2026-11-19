@@ -8,8 +8,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 
 import com.afrotransact.catalog.domain.brand.BrandKeys;
+import com.afrotransact.catalog.domain.pictures.PictureRules;
 import com.afrotransact.catalog.domain.rules.CategoryRules;
 import com.afrotransact.catalog.domain.rules.ListingRuleChecker;
 import com.afrotransact.catalog.domain.rules.ListingSubmission;
@@ -18,6 +20,18 @@ import com.afrotransact.catalog.domain.tax.SellerSkus;
 
 /** The catalog rules from the product builder design, applied server-side so no client can skip them. */
 public class DefaultProductDraftPolicy implements ProductDraftPolicy {
+
+    private final Supplier<PictureRules> pictureRules;
+
+    /** The strict picture standard: for callers and tests that have no picture-rules setting. */
+    public DefaultProductDraftPolicy() {
+        this(PictureRules::strict);
+    }
+
+    /** The picture rules are read at every validation, so a staff change applies at once (the supplier is cached). */
+    public DefaultProductDraftPolicy(Supplier<PictureRules> pictureRules) {
+        this.pictureRules = pictureRules;
+    }
 
     @Override
     public void validate(ProductDraft draft, CategoryRules rules) {
@@ -41,8 +55,9 @@ public class DefaultProductDraftPolicy implements ProductDraftPolicy {
             }
         }
 
-        checkImages(draft.images(), errors);
-        checkVariants(draft, type, rules, errors);
+        PictureRules pictures = pictureRules.get();
+        checkImages(draft.images(), pictures, errors);
+        checkVariants(draft, type, rules, pictures, errors);
         checkDetails(draft.details(), rules, errors);
         if (rules != null) {
             ListingRuleChecker.check(rules, submission(draft, type)).forEach(errors::putIfAbsent);
@@ -63,14 +78,17 @@ public class DefaultProductDraftPolicy implements ProductDraftPolicy {
                 draft.details().sizeChartId() != null, type.identifierRule(), variants);
     }
 
-    private static void checkImages(List<ProductImage> all, Map<String, String> errors) {
+    private static void checkImages(List<ProductImage> all, PictureRules pictures, Map<String, String> errors) {
         List<ProductImage> images = all.stream().filter(i -> !i.isLabel()).toList();
         if (all.stream().filter(ProductImage::isLabel).count() > 1) {
             errors.put("labelPhoto", "Add one label photo");
         }
-        if (images.isEmpty()) {
-            errors.put("images", "Add at least one image");
-            return;
+        int min = pictures.knobs().minImages();
+        if (images.size() < min) {
+            errors.put("images", min == 1 ? "Add at least one image" : "Add at least " + min + " images");
+            if (images.isEmpty()) {
+                return;
+            }
         }
         if (images.size() > MAX_IMAGES) {
             errors.put("images", "Up to " + MAX_IMAGES + " images");
@@ -81,9 +99,9 @@ public class DefaultProductDraftPolicy implements ProductDraftPolicy {
                 continue;
             }
             if (!img.allowedType()) {
-                errors.put("images[" + i + "]", "Use JPG, PNG or WebP");
-            } else if (img.bytes() > ProductImage.MAX_BYTES) {
-                errors.put("images[" + i + "]", "Larger than 8 MB");
+                errors.put("images[" + i + "]", "Use JPG, PNG, WebP or AVIF");
+            } else if (img.bytes() > pictures.knobs().maxBytes()) {
+                errors.put("images[" + i + "]", "Larger than " + pictures.knobs().maxMegabytes() + " MB");
             }
         }
     }
@@ -112,7 +130,7 @@ public class DefaultProductDraftPolicy implements ProductDraftPolicy {
         }
     }
 
-    private static void checkVariants(ProductDraft draft, ProductType type, CategoryRules rules,
+    private static void checkVariants(ProductDraft draft, ProductType type, CategoryRules rules, PictureRules pictures,
                                       Map<String, String> errors) {
         VariationTheme theme = draft.variationTheme().isEmpty() ? null : type.theme(draft.variationTheme()).orElse(null);
         if (theme == null && !draft.variationTheme().isEmpty()) {
@@ -169,8 +187,8 @@ public class DefaultProductDraftPolicy implements ProductDraftPolicy {
             }
             if (v.images().size() > VariantDraft.MAX_IMAGES) {
                 errors.put(p + "images", "Up to " + VariantDraft.MAX_IMAGES + " images per variant");
-            } else if (v.images().stream().anyMatch(img -> !img.allowedType() || img.bytes() > ProductImage.MAX_BYTES)) {
-                errors.put(p + "images", "Use JPG, PNG or WebP of at most 8 MB");
+            } else if (v.images().stream().anyMatch(img -> !img.allowedType() || img.bytes() > pictures.knobs().maxBytes())) {
+                errors.put(p + "images", "Use JPG, PNG, WebP or AVIF of at most " + pictures.knobs().maxMegabytes() + " MB");
             }
         }
     }

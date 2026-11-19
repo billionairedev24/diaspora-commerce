@@ -758,7 +758,7 @@ public final class ImportValidator {
                 int dot = path.lastIndexOf('.');
                 if (dot > path.lastIndexOf('/') && !IMAGE_EXTENSIONS.contains(path.substring(dot + 1))) {
                     add(first, RowMessage.warning(ImportColumns.IMAGES, idx(ImportColumns.IMAGES),
-                            "Not a JPG, PNG or WebP link; it may be refused: " + abbreviate(u)));
+                            "Not a JPG, PNG, WebP or AVIF link; it may be refused: " + abbreviate(u)));
                 }
                 out.add(u);
             }

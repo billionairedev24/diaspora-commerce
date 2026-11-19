@@ -42,6 +42,7 @@ import com.afrotransact.catalog.port.ProductTaxHoldRepository;
 import com.afrotransact.catalog.port.TaxDecisionAuthority;
 import com.afrotransact.catalog.port.TaxGateMetrics;
 import com.afrotransact.platform.security.PermissionChecker;
+import com.afrotransact.catalog.domain.pictures.PictureRules;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -82,7 +83,7 @@ class TaxGateMediaOutageTest {
     @BeforeEach
     void setUp() {
         ImageGate images = new ImageGateImpl(mediaDown,
-                new ImageSettings(Mode.ENFORCE, 60, false, 50, Duration.ofSeconds(30), Duration.ofDays(30)));
+                new ImageSettings(Mode.ENFORCE, 60, false, 50, Duration.ofSeconds(30), Duration.ofDays(30)), PictureRules::strict);
         TaxAuthorityCheck authority = new TaxAuthorityCheck(mock(TaxDecisionAuthority.class), metrics);
         gate = new ProductLiveGateImpl(products, holds, mock(CategoryRepository.class), events,
                 mock(SellingPublishGate.class), metrics, authority, images, Clock.fixed(NOW, ZoneOffset.UTC));

@@ -47,6 +47,7 @@ import com.afrotransact.catalog.port.SizeChartRepository;
 import com.afrotransact.catalog.port.TaxResolver;
 import com.afrotransact.catalog.testsupport.RulesFixtures;
 import com.afrotransact.platform.web.error.ConflictException;
+import com.afrotransact.catalog.domain.pictures.PictureRules;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.AdditionalAnswers;
@@ -82,7 +83,7 @@ class ProductWriterExemptionTest {
         BrandResolver brands = mock(BrandResolver.class);
         when(brands.resolve(any(), any(), any(), any(), any())).thenAnswer(i -> i.getArgument(3));
         ImageGate gate = new ImageGateImpl(mock(ImageVerifier.class),
-                new ImageSettings(Mode.OFF, 60, false, 50, Duration.ofSeconds(30), Duration.ofDays(30)));
+                new ImageSettings(Mode.OFF, 60, false, 50, Duration.ofSeconds(30), Duration.ofDays(30)), PictureRules::strict);
         writer = new ProductWriterImpl(products, categories, mock(CategoryRequestRepository.class),
                 mock(ProductDraftRepository.class), ids, new DefaultProductDraftPolicy(), new DefaultSizeChartPolicy(),
                 mock(SizeChartRepository.class), events, brands, new UnrestrictedScopeGuard(),

@@ -1,6 +1,8 @@
 # Local developer profile: docker compose stack from infra/local, security off, human-readable logs.
 at:
   catalog:
+    picture-rules:
+      profile: ${PICTURE_RULES_PROFILE:testing}  # initial profile for local: testing (owner decision; tighten with product later, docs/engineering/picture-rules.md)
     images:
       mode: ${CATALOG_IMAGE_MODE:off}  # the local seeds use external pictures; try CATALOG_IMAGE_MODE=shadow or enforce with media on :8207
     taxonomy:

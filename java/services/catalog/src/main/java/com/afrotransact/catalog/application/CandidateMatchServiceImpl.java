@@ -33,7 +33,7 @@ import com.afrotransact.catalog.domain.matching.CandidateRanker.Score;
 import com.afrotransact.catalog.domain.matching.MatchThresholds;
 import com.afrotransact.catalog.domain.matching.NameTokens;
 import com.afrotransact.catalog.domain.matching.PackSize;
-import com.afrotransact.catalog.domain.matching.RealPhoto;
+import com.afrotransact.catalog.domain.pictures.PictureRules;
 import com.afrotransact.catalog.domain.matching.SizeVariantRules;
 import com.afrotransact.catalog.port.CandidateRecall;
 import com.afrotransact.catalog.port.CandidateRecall.RecallUnavailable;
@@ -79,12 +79,13 @@ class CandidateMatchServiceImpl implements CandidateMatchService {
     private final ChangeRequestRepository requests;
     private final ChangeRequestEvents requestEvents;
     private final Clock clock;
+    private final PictureRulesProvider pictures;
 
     CandidateMatchServiceImpl(CandidateRecall recall, ProductRepository products, CategoryRepository categories,
                               OfferEligibilityService eligibility, CatalogSettingsService settings,
                               MatchDecisionRepository decisions, SearchRateLimiter limiter, MatchThresholds thresholds,
                               ActorResolver actors, MatchMetrics metrics, ChangeRequestRepository requests,
-                              ChangeRequestEvents requestEvents, Clock clock) {
+                              ChangeRequestEvents requestEvents, Clock clock, PictureRulesProvider pictures) {
         this.recall = recall;
         this.products = products;
         this.categories = categories;
@@ -98,6 +99,7 @@ class CandidateMatchServiceImpl implements CandidateMatchService {
         this.requests = requests;
         this.requestEvents = requestEvents;
         this.clock = clock;
+        this.pictures = pictures;
     }
 
     /** One ranked page, before it is turned into the answer. */
@@ -328,8 +330,9 @@ class CandidateMatchServiceImpl implements CandidateMatchService {
         }
         String partKey = settings.current().mpnAttributeKey();
         Map<UUID, Ranked> byPage = new LinkedHashMap<>();
+        PictureRules rules = pictures.current();
         for (Product p : pages) {
-            if (!shown(p)) {
+            if (!shown(p, rules)) {
                 continue;
             }
             CategoryNode node = p.categoryId() == null ? null : categories.findById(p.categoryId()).orElse(null);
@@ -379,10 +382,17 @@ class CandidateMatchServiceImpl implements CandidateMatchService {
         }
     }
 
-    /** Only live pages with a real photo and at least one variant: nobody can tell a page without a picture is theirs. */
-    private static boolean shown(Product p) {
-        return p.status() == ProductStatus.LIVE && !p.variants().isEmpty() && firstImage(p) != null
-                && RealPhoto.is(firstImage(p).url());
+    /**
+     * Only live pages with at least one variant, and (when the picture rules require it, the strict and startup profiles) a
+     * real photo: nobody can tell a page without a picture is theirs. Under the testing profile a page without a photo is
+     * offered too, so test pages can be matched.
+     */
+    private static boolean shown(Product p, PictureRules rules) {
+        if (p.status() != ProductStatus.LIVE || p.variants().isEmpty()) {
+            return false;
+        }
+        ProductImage first = firstImage(p);
+        return rules.matchableWithPhoto(first == null ? null : first.url());
     }
 
     private static ProductImage firstImage(Product p) {
@@ -398,7 +408,8 @@ class CandidateMatchServiceImpl implements CandidateMatchService {
         List<CandidateVariant> variants = p.variants().stream()
                 .map(v -> new CandidateVariant(v.atin().value(), v.options())).toList();
         return new Candidate(p.atin().value(), p.variants().size() == 1 ? first.atin().value() : null, p.title(),
-                p.attributes().get(BrandKeys.NAME), new CandidateImage(image.url(), image.width(), image.height()),
+                p.attributes().get(BrandKeys.NAME), image == null ? new CandidateImage("", 0, 0)
+                        : new CandidateImage(image.url(), image.width(), image.height()),
                 node == null ? null : node.path(), sizeLabel(p), variants, r.score().kind(),
                 r.score().score() >= thresholds.likelyMin(), e.canOffer(), e.blockers(), e.allowedConditions());
     }

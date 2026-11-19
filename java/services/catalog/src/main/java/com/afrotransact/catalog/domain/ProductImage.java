@@ -3,6 +3,8 @@ package com.afrotransact.catalog.domain;
 import java.util.Locale;
 import java.util.Objects;
 
+import com.afrotransact.catalog.domain.pictures.PictureRules;
+
 /**
  * An uploaded image (UploadThing / object storage key) with its pixel size and optional alternative text.
  *
@@ -15,6 +17,7 @@ import java.util.Objects;
 public record ProductImage(String url, int width, int height, long bytes, String contentType, String alt, String role,
                            String assetId) {
 
+    /** The strict size cap (8 MB); the picture rules' maxMegabytes knob applies in the policy. */
     public static final long MAX_BYTES = 8L * 1024 * 1024;
     /** The role of the label photo. */
     public static final String LABEL = "LABEL";
@@ -44,7 +47,7 @@ public record ProductImage(String url, int width, int height, long bytes, String
     }
 
     public boolean allowedType() {
-        return "image/jpeg".equals(contentType) || "image/png".equals(contentType) || "image/webp".equals(contentType);
+        return PictureRules.FORMATS.contains(contentType);
     }
 
     /** True while the picture is held for review: it has an asset id and no public URL. */

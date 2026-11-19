@@ -17,6 +17,7 @@ import com.afrotransact.catalog.domain.images.ImageCheckResult;
 import com.afrotransact.catalog.domain.images.ImageFinding;
 import com.afrotransact.catalog.port.ImageImporter.ImageServiceUnavailable;
 import com.afrotransact.catalog.port.ImageVerifier;
+import com.afrotransact.catalog.domain.pictures.PictureRules;
 import org.junit.jupiter.api.Test;
 
 /** The main-image rule in catalog (S390): the verdict comes from media, never from the client's width and height. */
@@ -73,7 +74,7 @@ class ImageGateTest {
     }
 
     private static ImageGate gate(FakeMedia media, Mode mode) {
-        return new ImageGateImpl(media, new ImageSettings(mode, 60, false, 50, Duration.ofSeconds(30), Duration.ofDays(30)));
+        return new ImageGateImpl(media, new ImageSettings(mode, 60, false, 50, Duration.ofSeconds(30), Duration.ofDays(30)), PictureRules::strict);
     }
 
     /** What the client claims: a huge, valid-looking picture. */

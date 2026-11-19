@@ -26,10 +26,17 @@ class ImageGateImpl implements ImageGate {
 
     private final ImageVerifier verifier;
     private final ImageSettings settings;
+    private final PictureRulesProvider pictures;
 
-    ImageGateImpl(ImageVerifier verifier, ImageSettings settings) {
+    ImageGateImpl(ImageVerifier verifier, ImageSettings settings, PictureRulesProvider pictures) {
         this.verifier = verifier;
         this.settings = settings;
+        this.pictures = pictures;
+    }
+
+    /** Media's verdicts refuse pictures only when the mode is ENFORCE and the profile lets verdicts block (not testing). */
+    private boolean enforcing() {
+        return settings.enforcing() && pictures.current().verdictsBlock();
     }
 
     @Override
@@ -86,7 +93,7 @@ class ImageGateImpl implements ImageGate {
                 results.put(refOf(items.get(i)), answers.get(i));
             }
         } catch (ImageServiceUnavailable ex) {
-            if (settings.enforcing() || refs) {
+            if (enforcing() || refs) {
                 throw ex;
             }
             LOG.warn("Image rules (shadow): media could not be asked: {}", ex.getMessage());
@@ -137,7 +144,7 @@ class ImageGateImpl implements ImageGate {
                 }
             }
         }
-        if (!settings.enforcing()) {
+        if (!enforcing()) {
             if (!errors.isEmpty()) {
                 LOG.info("Image rules (shadow): {} of {} new images would be refused ({})", errors.size(),
                         items.size(), new LinkedHashSet<>(errors.keySet()));

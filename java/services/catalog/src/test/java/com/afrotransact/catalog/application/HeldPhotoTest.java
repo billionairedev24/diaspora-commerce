@@ -43,6 +43,7 @@ import com.afrotransact.catalog.port.ProductRepository;
 import com.afrotransact.catalog.port.ProductTaxHoldRepository;
 import com.afrotransact.catalog.port.TaxDecisionAuthority;
 import com.afrotransact.catalog.port.TaxGateMetrics;
+import com.afrotransact.catalog.domain.pictures.PictureRules;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -97,7 +98,7 @@ class HeldPhotoTest {
     }
 
     private static ImageGate gate(FakeMedia media, Mode mode) {
-        return new ImageGateImpl(media, new ImageSettings(mode, 60, false, 50, Duration.ofSeconds(30), Duration.ofDays(30)));
+        return new ImageGateImpl(media, new ImageSettings(mode, 60, false, 50, Duration.ofSeconds(30), Duration.ofDays(30)), PictureRules::strict);
     }
 
     private static ProductImage ref(String id) {

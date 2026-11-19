@@ -63,6 +63,9 @@ import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.ActorResolver;
 import com.afrotransact.platform.security.PrincipalType;
 import com.afrotransact.platform.web.error.BusinessRuleException;
+import com.afrotransact.catalog.domain.pictures.PictureOverrides;
+import com.afrotransact.catalog.domain.pictures.PictureProfile;
+import com.afrotransact.catalog.domain.pictures.PictureRules;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -89,6 +92,7 @@ class CandidateMatchServiceImplTest {
     private final SearchRateLimiter limiter = new SearchRateLimiterImpl(clock);
     private final MatchThresholds thresholds = new MatchThresholds(45, 75, 6, 30, 3, 5, 2);
     private CandidateMatchServiceImpl service;
+    private PictureRules rules = PictureRules.strict();
     private int counter = 1000;
 
     @BeforeEach
@@ -107,7 +111,7 @@ class CandidateMatchServiceImplTest {
             return new Eligibility(v.atin().value(), p.atin().value(), true, List.of(), List.of(ItemCondition.NEW), "org_a");
         });
         service = new CandidateMatchServiceImpl(recall, products, categories, eligibility, settings, decisions, limiter,
-                thresholds, actors, metrics, requests, requestEvents, clock);
+                thresholds, actors, metrics, requests, requestEvents, clock, () -> rules);
     }
 
     private static CategoryNode node(UUID id, String path) {
@@ -174,6 +178,36 @@ class CandidateMatchServiceImplTest {
         CandidateResult result = search("Tilda basmati rice 5kg", RICE);
 
         assertThat(result.candidates()).extracting(Candidate::parentAtin).containsExactly(good.atin().value());
+    }
+
+    @Test
+    void pagesWithoutARealPhotoAreOfferedOnlyWhereTheRulesDoNotRequireOne() {
+        Product noPhoto = page("Tilda Basmati Rice 5kg", "Tilda", RICE, ProductStatus.LIVE, null);
+        Product placeholder = page("Tilda Basmati Rice 5kg", "Tilda", RICE, ProductStatus.LIVE,
+                "https://cdn.example.com/placeholder.png");
+        Product svg = page("Tilda Basmati Rice 5kg", "Tilda", RICE, ProductStatus.LIVE, "https://cdn.example.com/a.svg");
+        Product good = live("Tilda Basmati Rice 5kg", "Tilda", RICE);
+        index(noPhoto, placeholder, svg, good);
+
+        for (PictureProfile strictOrStartup : List.of(PictureProfile.STRICT, PictureProfile.STARTUP)) {
+            rules = PictureRules.defaults(strictOrStartup);
+            assertThat(search("Tilda basmati rice 5kg", RICE).candidates()).extracting(Candidate::parentAtin)
+                    .as(strictOrStartup.wire()).containsExactly(good.atin().value());
+        }
+        rules = PictureRules.defaults(PictureProfile.TESTING);
+        assertThat(search("Tilda basmati rice 5kg", RICE).candidates()).extracting(Candidate::parentAtin)
+                .as("testing").contains(noPhoto.atin().value(), placeholder.atin().value(), good.atin().value());
+    }
+
+    @Test
+    void anOverrideThatTurnsThePhotoRequirementOffIsHonouredUnderStartup() {
+        Product noPhoto = page("Tilda Basmati Rice 5kg", "Tilda", RICE, ProductStatus.LIVE, null);
+        index(noPhoto);
+        rules = PictureRules.resolve(PictureProfile.STARTUP, new PictureOverrides(null, null, null, null, null, null, null,
+                null, false, null));
+
+        assertThat(search("Tilda basmati rice 5kg", RICE).candidates()).extracting(Candidate::parentAtin)
+                .containsExactly(noPhoto.atin().value());
     }
 
     @Test

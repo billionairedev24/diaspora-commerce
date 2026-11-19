@@ -137,6 +137,11 @@ at:
     media:
       base-url: ${MEDIA_URL:http://localhost:8207}
       timeout: ${MEDIA_TIMEOUT:30s}
+    # Picture rules (docs/engineering/picture-rules.md): the INITIAL profile only, used until staff save Settings > Picture rules
+    # (then the saved profile and knobs win). strict = the documented standard, startup = relaxed launch, testing = pictures optional.
+    # One line per environment: application-<env>.yml (local, dev: testing; uat, prod: startup). Unset here means strict.
+    picture-rules:
+      profile: ${PICTURE_RULES_PROFILE:strict}
     # S390 / S392 main-image rules. The thresholds live in media-service (config images.*, staff override); this is how
     # catalog applies its verdicts. mode: off (media is not asked), shadow (asked and counted, nothing refused) or
     # enforce (a main image that is rejected, held or unknown is refused on the form, the API, bulk and library attach).

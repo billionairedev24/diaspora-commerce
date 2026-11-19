@@ -15,6 +15,7 @@ import com.afrotransact.catalog.adapter.out.tax.HttpTaxDecisionAuthority;
 import com.afrotransact.catalog.adapter.out.tax.HttpTaxResolver;
 import com.afrotransact.catalog.adapter.out.tax.LocalDatasetTaxResolver;
 import com.afrotransact.catalog.application.ImageSettings;
+import com.afrotransact.catalog.application.PictureRulesService;
 import com.afrotransact.catalog.application.ImportSettings;
 import com.afrotransact.catalog.application.LabelSettings;
 import com.afrotransact.catalog.application.ListingEnforcementSettings;
@@ -26,6 +27,8 @@ import com.afrotransact.catalog.domain.CatalogPolicy;
 import com.afrotransact.catalog.domain.DefaultProductDraftPolicy;
 import com.afrotransact.catalog.domain.DefaultReviewContentPolicy;
 import com.afrotransact.catalog.domain.ProductDraftPolicy;
+import com.afrotransact.catalog.domain.pictures.PictureProfile;
+import com.afrotransact.catalog.domain.pictures.PictureRules;
 import com.afrotransact.catalog.domain.ReviewContentPolicy;
 import com.afrotransact.catalog.domain.barcode.BarcodeEncoder;
 import com.afrotransact.catalog.domain.barcode.DefaultBarcodeEncoder;
@@ -119,9 +122,20 @@ class CatalogConfiguration {
         return true;
     }
 
+    /**
+     * The initial picture-rules profile of this environment (at.catalog.picture-rules.profile: local and dev testing, uat and
+     * prod startup). Used only while staff have not saved the setting; changing the line changes the starting point, never a
+     * saved value.
+     */
     @Bean
-    ProductDraftPolicy productDraftPolicy() {
-        return new DefaultProductDraftPolicy();
+    PictureRules pictureRulesDefaults(@Value("${at.catalog.picture-rules.profile:testing}") String profile) {
+        return PictureRules.defaults(PictureProfile.parse(profile).orElseThrow(() -> new IllegalStateException(
+                "at.catalog.picture-rules.profile must be strict, startup or testing, not '" + profile + "'")));
+    }
+
+    @Bean
+    ProductDraftPolicy productDraftPolicy(PictureRulesService pictureRules) {
+        return new DefaultProductDraftPolicy(pictureRules::current);
     }
 
     @Bean
