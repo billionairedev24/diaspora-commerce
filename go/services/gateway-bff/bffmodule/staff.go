@@ -97,6 +97,7 @@ func staffServices(cfg config.Config, client func(string, config.Upstream) httpc
 	out.Access = app.NewStaffAccessService(d)
 	out.Invitations = app.NewStaffInvitationsService(d)
 	out.AISpend = app.NewStaffAISpendService(d)
+	out.PictureRules = app.NewStaffPictureRulesService(d)
 	// Lola for staff: read-only lookups through the console's own use cases, one model turn at ai-gateway per round.
 	out.Assistant = app.NewStaffAssistantService(d, app.StaffAssistantDeps{Tax: out.Tax, Model: upstreams.NewStaffAssistantModel(client("ai-gateway", up.AIGateway)),
 		Counter: counter, Records: out.Records, Dashboard: out.Dashboard})

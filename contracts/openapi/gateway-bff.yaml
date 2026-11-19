@@ -152,6 +152,14 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/MaintenanceStatus'}
+  /v1/picture-rules:
+    get:
+      tags: [Site]
+      operationId: getPictureRules
+      summary: The picture rules in force (for the mobile apps picker and Seller Center)
+      description: The picture rules in force (profile, knobs, accepted formats and the rule in plain words), read from catalog with a 30 second cache. Seller Center words its photo messages from it, so they state the active rule rather than a fixed one. Public data.
+      responses:
+        '200': {description: The rules, content: {application/json: {schema: {$ref: '#/components/schemas/PictureRules'}}}}
   /v1/site-config:
     get:
       tags: [Site]
@@ -4210,6 +4218,31 @@ components:
       headers:
         Location: {schema: {type: string}}
   schemas:
+    PictureKnobs:
+      type: object
+      required: [minImages, minLongSidePx, minShortSidePx, maxMegabytes, checkBackground, checkAspect, checkTextOverlay, requireRealPhotoForStorefront, requirePhotoForMatching, allowPlaceholders]
+      properties:
+        minImages: {type: integer, minimum: 0, maximum: 10, description: 'Pictures a listing needs before it can be published (0: none needed)'}
+        minLongSidePx: {type: integer, minimum: 1, maximum: 10000, description: 'The longest side of the main picture, in pixels (the zoom rule)'}
+        minShortSidePx: {type: integer, minimum: 1, maximum: 10000, description: 'The shortest side of every picture, in pixels'}
+        maxMegabytes: {type: integer, minimum: 1, maximum: 20, description: 'One file''s size cap (the platform ceiling of 20 MB always applies)'}
+        checkBackground: {type: boolean, description: 'Ask for a plain white background and a product that fills the frame (main picture)'}
+        checkAspect: {type: boolean, description: 'Warn about very wide or very tall pictures'}
+        checkTextOverlay: {type: boolean, description: 'Hold pictures that carry text, logos or watermarks for review'}
+        requireRealPhotoForStorefront: {type: boolean, description: 'Home, rails and search show only products with a real photo'}
+        requirePhotoForMatching: {type: boolean, description: 'A page without a real photo is not offered as a match to sellers'}
+        allowPlaceholders: {type: boolean, description: 'A stand-in image counts as a real photo'}
+    PictureRules:
+      type: object
+      required: [profile, knobs, overridden, formats, version]
+      properties:
+        profile: {type: string, enum: [strict, startup, testing]}
+        knobs: {$ref: '#/components/schemas/PictureKnobs'}
+        overridden: {type: array, items: {type: string}, description: 'Names of the knobs staff changed on top of the profile'}
+        formats: {type: array, items: {type: string, enum: [image/jpeg, image/png, image/webp, image/avif]}, description: 'Accepted image types under every profile; SVG, HTML and executables are never accepted'}
+        version: {type: integer, format: int64, description: 'The stored version; 0 while the environment default is in force'}
+        summary: {type: string, description: 'The rule in plain words, for messages ("at least 1 photo, at least 500 px on the longest side, ...")'}
+        relaxed: {type: boolean, description: 'Any rule is looser than the strict standard'}
     NativeApp:
       type: string
       enum: [customer, driver]

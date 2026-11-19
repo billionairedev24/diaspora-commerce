@@ -36,9 +36,11 @@ const (
 // stores it as photo_ok and search counts with it, so nav, footer, sitemap and the home agree with what a shopper is shown.
 func realPhoto(u *string) bool { return u != nil && searchindex.PhotoOK(*u) }
 
-// eligibleCard is the home eligibility rule: in stock and a real photo.
+// eligibleCard is the home eligibility rule: in stock and a photo the picture rules accept (a real photo under the strict and
+// startup profiles; under testing a product without one shows too, so test products can be seen). Editorial images (hero slides,
+// tiles, department and community pictures) keep the strict realPhoto rule.
 func eligibleCard(p domain.ProductSummary) bool {
-	return p.InStock && realPhoto(p.ImageURL)
+	return p.InStock && photoShown(p.ImageURL)
 }
 
 // taxResolved is the tax half of the eligibility rule: nothing is shown without a stored, definite tax decision, so

@@ -26,3 +26,14 @@ func TestWasPriceIsShownOnlyAboveThePriceOnAFlaggedDocument(t *testing.T) {
 		}
 	}
 }
+
+func TestAnyPhotoDropsOnlyThePhotoPartOfEligibleOnly(t *testing.T) {
+	strict := buildFilter(domain.Query{EligibleOnly: true})
+	if !strings.Contains(strict, "photo_ok = true") || !strings.Contains(strict, "in_stock = true") {
+		t.Fatalf("strict: %s", strict)
+	}
+	relaxed := buildFilter(domain.Query{EligibleOnly: true, AnyPhoto: true})
+	if strings.Contains(relaxed, "photo_ok") || !strings.Contains(relaxed, "in_stock = true") {
+		t.Fatalf("any photo: %s", relaxed)
+	}
+}

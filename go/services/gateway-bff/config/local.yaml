@@ -180,3 +180,7 @@ staff:
 telemetry:
   otlpEndpoint: localhost:4318
   sampleRatio: 1.0
+# Platform picture rules (owned by catalog; Settings > Picture rules in the staff console, docs/engineering/picture-rules.md). `profile`
+# is only the FALLBACK until catalog has answered: local starts on testing.
+pictureRules:
+  profile: testing

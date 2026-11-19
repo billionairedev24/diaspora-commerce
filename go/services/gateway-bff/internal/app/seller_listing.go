@@ -98,7 +98,7 @@ func (s *sellerListingImpl) Submit(ctx context.Context, c *domain.Caller, d doma
 	if s.cache != nil {
 		defer s.cache.drop("listings")
 	}
-	if errs := d.Validate(); len(errs) > 0 {
+	if errs := d.ValidateMin(CurrentPictureRules(ctx).Knobs.MinImages); len(errs) > 0 {
 		return domain.ListingRow{}, domain.ValidationProblem(errs)
 	}
 	sc, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit)
@@ -136,7 +136,7 @@ func (s *sellerListingImpl) Update(ctx context.Context, c *domain.Caller, produc
 	if s.cache != nil {
 		defer s.cache.drop("listings")
 	}
-	if errs := d.ValidateEdit(); len(errs) > 0 {
+	if errs := d.ValidateEditMin(CurrentPictureRules(ctx).Knobs.MinImages); len(errs) > 0 {
 		return domain.ListingRow{}, domain.ValidationProblem(errs)
 	}
 	sc, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit)

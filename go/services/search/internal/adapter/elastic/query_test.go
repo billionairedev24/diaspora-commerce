@@ -73,3 +73,10 @@ func TestWasPriceIsShownOnlyAboveThePriceOnAFlaggedDocument(t *testing.T) {
 		}
 	}
 }
+
+func TestAnyPhotoDropsOnlyThePhotoPartOfEligibleOnly(t *testing.T) {
+	relaxed, _ := json.Marshal(buildFilters(domain.Query{EligibleOnly: true, AnyPhoto: true}))
+	if strings.Contains(string(relaxed), "photo_ok") || !strings.Contains(string(relaxed), "in_stock") {
+		t.Fatalf("any photo: %s", relaxed)
+	}
+}

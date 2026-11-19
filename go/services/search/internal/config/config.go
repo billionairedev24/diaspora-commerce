@@ -30,6 +30,12 @@ type Config struct {
 		Audience string `yaml:"audience" env:"AUTH_AUDIENCE"`
 	} `yaml:"auth"`
 	AIGatewayURL string `yaml:"aiGatewayUrl" env:"AI_GATEWAY_URL"`
+	// PictureRules is where the platform picture rules are read (catalog's public endpoint, 30 s cache); Profile is the fallback
+	// until catalog has answered: local and dev testing, uat and prod startup (docs/engineering/picture-rules.md).
+	PictureRules struct {
+		CatalogURL string `yaml:"catalogUrl" env:"CATALOG_URL"`
+		Profile    string `yaml:"profile" env:"PICTURE_RULES_PROFILE"`
+	} `yaml:"pictureRules"`
 	// Semantic is hybrid retrieval (S036): queries of MinWords+ words are embedded by ai-gateway within Timeout
 	// (150 ms), with search's own client-credentials token (the content client's id and secret, Scopes ai:use).
 	Semantic struct {
