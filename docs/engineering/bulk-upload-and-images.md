@@ -212,6 +212,11 @@ A row ends `HELD` (not live, not failed) when: the page or variant has no resolv
 
 ## 6. Main-image rules, enforced (part C)
 
+> **Configurable since 2026-11-19.** The numbers in this section are the **`strict` profile** of the platform picture rules, the documented
+> standard. One staff-controlled setting (Settings > Picture rules) chooses the profile in force (`strict`, `startup`, `testing`) and can
+> override single numbers; local and dev start on `testing`, uat and prod on `startup`. AVIF is accepted next to JPEG, PNG and WebP. See
+> `docs/engineering/picture-rules.md`.
+
 ### 6.1 Amazon numbers and ours
 
 | Rule | Amazon (third-party sources, **[verify]**) | AfroTransact, main image | Other images |

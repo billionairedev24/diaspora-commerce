@@ -72,17 +72,59 @@ class ImageFile:
                             for k in ImageFile.__dataclass_fields__})
 
 
-MIME_EXT = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
+MIME_EXT = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/avif": ".avif"}
+
+
+def _avif(data: bytes) -> tuple[str, int, int] | None:
+    """AVIF is an ISO base media file whose ftyp brand is avif or avis (HEIC brands are not AVIF); its size is the largest ispe box
+    (read from the header: nothing is decoded)."""
+    if len(data) < 16 or data[4:8] != b"ftyp":
+        return None
+    size = struct.unpack(">I", data[:4])[0]
+    end = size if 16 <= size <= len(data) else min(len(data), 64)
+    brands = [data[8:12]] + [data[o:o + 4] for o in range(16, end - 3, 4)]
+    if any(b in (b"heic", b"heix", b"hevc", b"hevx", b"heim", b"heis") for b in brands) or not any(b in (b"avif", b"avis") for b in brands):
+        return None
+    best: tuple[int, int, int] = (0, 0, 0)
+
+    def walk(buf: bytes, depth: int) -> None:
+        nonlocal best
+        off = 0
+        while off + 8 <= len(buf):
+            n = struct.unpack(">I", buf[off:off + 4])[0]
+            kind = buf[off + 4:off + 8]
+            hdr = 8
+            if n == 0:
+                n = len(buf) - off
+            elif n == 1 and off + 16 <= len(buf):
+                n, hdr = struct.unpack(">Q", buf[off + 8:off + 16])[0], 16
+            if n < hdr or off + n > len(buf):
+                return
+            body = buf[off + hdr:off + n]
+            if kind == b"meta" and depth < 4 and len(body) > 4:
+                walk(body[4:], depth + 1)
+            elif kind in (b"iprp", b"ipco") and depth < 4:
+                walk(body, depth + 1)
+            elif kind == b"ispe" and len(body) >= 12:
+                w, h = struct.unpack(">II", body[4:12])
+                if w * h > best[0]:
+                    best = (w * h, w, h)
+            off += n
+
+    walk(data, 0)
+    return ("image/avif", best[1], best[2]) if best[0] else None
 
 
 def sniff(data: bytes) -> tuple[str, int, int] | None:
-    """(mime, width, height) of a JPEG, PNG or WebP from its bytes; None for anything else."""
+    """(mime, width, height) of a JPEG, PNG, WebP or AVIF from its bytes (never from the file name); None for anything else."""
+    if len(data) >= 12 and data[4:8] == b"ftyp":
+        return _avif(data)
     if data[:8] == b"\x89PNG\r\n\x1a\n" and len(data) >= 24:
         w, h = struct.unpack(">II", data[16:24])
         return "image/png", w, h
-    if data[:4] == b"RIFF" and data[8:12] == b"WEBP" and len(data) >= 30:
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP" and len(data) >= 25:
         chunk = data[12:16]
-        if chunk == b"VP8X":
+        if chunk == b"VP8X" and len(data) >= 30:
             w = 1 + int.from_bytes(data[24:27], "little")
             h = 1 + int.from_bytes(data[27:30], "little")
             return "image/webp", w, h
