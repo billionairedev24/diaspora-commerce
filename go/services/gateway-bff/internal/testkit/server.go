@@ -196,7 +196,6 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		SellerCases:        app.NewSellerCasesService(sellerDeps),
 		SellerReviews:      app.NewSellerReviewsService(sellerDeps),
 		SellerTax:          app.NewSellerTaxService(sellerDeps),
-		SellerFba:          app.NewSellerFbaService(sellerDeps),
 	}
 	// Seller Center exports: the BFF's own file store (signed links served by /v1/seller/export-files/{id}).
 	if files, err := exportfiles.NewLocal(exportfiles.Options{Dir: filepath.Join(os.TempDir(), "gateway-bff-testkit-exports"), SigningKey: "testkit",

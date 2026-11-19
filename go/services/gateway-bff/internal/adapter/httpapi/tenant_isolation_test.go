@@ -111,12 +111,11 @@ func registeredRoutes(t *testing.T) []string {
 		return "", false
 	}
 	// The registration loops, by file: what they range over.
-	dynamic := map[string][]string{"handlers_billing.go": nil, "handlers_seller.go": nil, "handlers_staff_inventory.go": nil}
+	dynamic := map[string][]string{"handlers_billing.go": nil, "handlers_staff_inventory.go": nil}
 	for _, op := range app.StaffPlanOps {
 		dynamic["handlers_billing.go"] = append(dynamic["handlers_billing.go"], op.Route)
 	}
 	for _, m := range []string{"GET", "POST", "PUT"} {
-		dynamic["handlers_seller.go"] = append(dynamic["handlers_seller.go"], m+" /v1/seller/fba/{rest...}")
 		for _, a := range []string{"inventory", "retail"} {
 			dynamic["handlers_staff_inventory.go"] = append(dynamic["handlers_staff_inventory.go"], m+" /v1/staff/"+a+"/{rest...}")
 		}
@@ -466,15 +465,7 @@ func TestSellerSpoofsAreOverwrittenWhereTheBFFRelays(t *testing.T) {
 		call testkit.Call
 		want func(r testkit.Request) bool
 	}{
-		{"fba inbound list", testkit.Call{Method: "GET", Path: "/v1/seller/fba/inbound", Query: url.Values{"ownerOrg": {b}}},
-			func(r testkit.Request) bool {
-				return r.Path == "/v1/inbound/shipments" && strings.Contains(r.Query, "ownerOrg="+testkit.TenantSellerOrgA)
-			}},
-		{"fba lots list", testkit.Call{Method: "GET", Path: "/v1/seller/fba/lots", Query: url.Values{"ownerOrg": {b}}},
-			func(r testkit.Request) bool {
-				return r.Path == "/v1/lots" && strings.Contains(r.Query, "ownerOrg="+testkit.TenantSellerOrgA)
-			}},
-		// "fba create" is gone: sending stock to AfroTransact is retired (410 FBA_INBOUND_RETIRED), so nothing reaches inventory.
+		// There is no seller FBA relay any more (S632): AfroTransact keeps no seller stock, nothing reaches inventory for a seller.
 		{"run pickups", testkit.Call{Method: "GET", Path: "/v1/seller/run-pickups", Query: url.Values{"orgId": {b}}},
 			func(r testkit.Request) bool {
 				return r.Path == "/v1/seller/run-pickups" && strings.Contains(r.Query, "orgId="+testkit.TenantSellerOrgA)
