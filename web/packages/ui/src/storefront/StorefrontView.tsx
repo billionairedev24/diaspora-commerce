@@ -479,7 +479,8 @@ export function StorefrontView({ model, theme, commerce, labels = defaultStorefr
   }
 
   const social = cfg.social.filter((s) => s.url);
-  const hasContact = (cfg.contact.showEmail && model.contactEmail) || cfg.contact.phone || cfg.contact.hours;
+  // Only opening hours are public: a login email and a phone number are never printed on the page.
+  const hasContact = Boolean(cfg.contact.hours);
   return (
     <div className={cx(styles.root, preview && styles.previewRoot)} style={vars} data-testid="storefront-root" data-preset={theme.preset} data-store-slug={model.slug}>
       <a href="#sf-products" className={styles.skip}>
@@ -567,16 +568,6 @@ export function StorefrontView({ model, theme, commerce, labels = defaultStorefr
           {hasContact ? (
             <div className={styles.footerCol}>
               <strong className={styles.footerHead}>{labels.contact}</strong>
-              {cfg.contact.showEmail && model.contactEmail ? (
-                <a className={styles.footerLink} href={`mailto:${model.contactEmail}`}>
-                  {model.contactEmail}
-                </a>
-              ) : null}
-              {cfg.contact.phone ? (
-                <a className={styles.footerLink} href={`tel:${cfg.contact.phone.replace(/[^+0-9]/g, '')}`}>
-                  {cfg.contact.phone}
-                </a>
-              ) : null}
               {cfg.contact.hours ? (
                 <span className={styles.footerLine}>
                   {labels.hours}: {cfg.contact.hours}

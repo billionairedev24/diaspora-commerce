@@ -82,6 +82,21 @@ describe('Settings > Store page', () => {
     expect(screen.getByTestId('store-editor').textContent).not.toMatch(/\boffer/i);
   });
 
+  it('has no email switch and no Website network, says contact goes through messages, and states the policy', async () => {
+    const user = userEvent.setup();
+    await renderScreen(<StorePageView />);
+    const editor = await screen.findByTestId('store-editor');
+    expect(within(editor).queryByText(/Show my email/)).not.toBeInTheDocument();
+    expect(within(editor).queryByRole('switch', { name: /email/i })).not.toBeInTheDocument();
+    expect(screen.getByTestId('contact-via-messages')).toHaveTextContent('login email is never shown');
+    expect(editor.textContent).toContain('Off-platform sales and steering buyers away from AfroTransact are not allowed.');
+    expect(editor.textContent).toContain('not shown on your page');
+    await user.click(screen.getByRole('button', { name: /Add a link/ }));
+    const select = screen.getAllByRole('combobox', { name: 'Network' }).at(-1)!;
+    expect(within(select).queryByRole('option', { name: 'Website' })).not.toBeInTheDocument();
+    expect(within(select).getByRole('option', { name: 'WhatsApp' })).toBeInTheDocument();
+  });
+
   it('shows the preview before the page has an address, with no featured products and no hero image', async () => {
     const db = resetSellerDb(new Date());
     db.noPageAddress = true;
