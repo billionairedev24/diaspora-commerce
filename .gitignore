@@ -62,3 +62,6 @@ infra/ovh-vps/config.env
 infra/ovh-vps/secrets.local.env
 .ovh/
 docs/backlog/jira-preview.md
+
+# Local agent worktrees and settings
+.claude/
