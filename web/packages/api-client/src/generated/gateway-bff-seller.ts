@@ -930,7 +930,10 @@ export interface paths {
          *     `PAGE_CONTENT_LOCKED` ("That detail belongs to the product page. Suggest a change instead.") and `errors` names
          *     each field. The offer is `ACTIVE`, or `TAX_HELD` ("We are checking the tax details for this item.") until the
          *     seller's own tax decision is resolved. 409 `OFFER_EXISTS`; 422 `SELLING_APPROVAL_REQUIRED`, `BRAND_UNAVAILABLE`,
-         *     `LISTING_LIMIT_REACHED`.
+         *     `LISTING_LIMIT_REACHED`. A refusal about the chosen location is 422 on `shipFromLocationId` (never on the price):
+         *     `OFFER_LOCATION_UNKNOWN` (not one of the seller's locations), `PICKUP_NOT_ON` and `PICKUP_HOURS_MISSING` (Pick up
+         *     needs customer pickup switched on with opening hours at that location), `FBA_LOCATION_NOT_ON` (Fulfilled by
+         *     AfroTransact needs AfroTransact to collect there). A location that has what the mode needs always passes.
          */
         post: operations["createOfferOnPage"];
         delete?: never;
@@ -4272,7 +4275,12 @@ export interface components {
                 returns: string;
             };
             contact: {
+                /**
+                 * @deprecated
+                 * @description Deprecated and ignored: always false. The login email is never shown; customers write to the seller through AfroTransact messages
+                 */
                 showEmail: boolean;
+                /** @description Stored for the seller only. Never on the public page, in search or in structured data; a customer sees it on their order for Pick up and FBA coordination */
                 phone: string;
                 hours: string;
             };
@@ -4281,7 +4289,10 @@ export interface components {
                 show: boolean;
             };
             social: {
-                /** @enum {string} */
+                /**
+                 * @description website cannot be chosen any more: a stored one may stay or be removed, and is hidden on the public page until the store has earned it
+                 * @enum {string}
+                 */
                 network: "instagram" | "facebook" | "tiktok" | "x" | "youtube" | "whatsapp" | "website";
                 url: string;
             }[];
@@ -4438,7 +4449,10 @@ export interface components {
             verified: boolean;
             /** @description Year the organisation joined AfroTransact */
             sellingSinceYear: number | null;
-            /** @description Only when the seller chose to show it */
+            /**
+             * @deprecated
+             * @description Always null: a login email is never public
+             */
             contactEmail: string | null;
             /** @description Only when the seller shows it AND pickup is on in Settings > Pickup */
             pickup: {

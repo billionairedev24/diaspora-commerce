@@ -7459,8 +7459,8 @@ components:
           type: object
           required: [showEmail, phone, hours]
           properties:
-            showEmail: {type: boolean}
-            phone: {type: string, maxLength: 24}
+            showEmail: {type: boolean, deprecated: true, description: 'Deprecated and ignored: always false. The login email is never shown; customers write to the seller through AfroTransact messages'}
+            phone: {type: string, maxLength: 24, description: 'Stored for the seller only. Never on the public page, in search or in structured data; a customer sees it on their order for Pick up and FBA coordination'}
             hours: {type: string, maxLength: 200}
         pickup:
           type: object
@@ -7474,7 +7474,7 @@ components:
             type: object
             required: [network, url]
             properties:
-              network: {type: string, enum: [instagram, facebook, tiktok, x, youtube, whatsapp, website]}
+              network: {type: string, enum: [instagram, facebook, tiktok, x, youtube, whatsapp, website], description: 'website cannot be chosen any more: a stored one may stay or be removed, and is hidden on the public page until the store has earned it'}
               url: {type: string, maxLength: 2048}
     StorefrontCategory:
       type: object
@@ -7600,7 +7600,7 @@ components:
         indexable: {type: boolean, description: 'Approved, published and at least one live product; the storefront adds the environment rules'}
         verified: {type: boolean, description: True only for an approved organisation}
         sellingSinceYear: {type: [integer, 'null'], description: 'Year the organisation joined AfroTransact'}
-        contactEmail: {type: [string, 'null'], description: Only when the seller chose to show it}
+        contactEmail: {type: [string, 'null'], deprecated: true, description: 'Always null: a login email is never public'}
         pickup:
           type: [object, 'null']
           description: Only when the seller shows it AND pickup is on in Settings > Pickup
