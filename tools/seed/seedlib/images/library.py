@@ -28,7 +28,13 @@ MAX_BYTES = 8 * 1024 * 1024
 # long side (MAIN_TOO_SMALL); a long side under 1000 px only warns (LOW_RES). Every photo the seeder keeps meets both.
 MEDIA_MIN_SHORT_EDGE = 500
 MEDIA_MIN_LONG_EDGE = 1000
-IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
+
+
+def set_size_rules(min_short: int, min_long: int) -> None:
+    """The size rules of the picture-rules profile in force (picture_rules.py): strict 500 and 1000 px, startup 300 and 500, testing 1."""
+    global MEDIA_MIN_SHORT_EDGE, MEDIA_MIN_LONG_EDGE
+    MEDIA_MIN_SHORT_EDGE, MEDIA_MIN_LONG_EDGE = max(1, min_short), max(1, min_long)
+IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp", ".avif")
 
 Download = Callable[[str], bytes]
 
