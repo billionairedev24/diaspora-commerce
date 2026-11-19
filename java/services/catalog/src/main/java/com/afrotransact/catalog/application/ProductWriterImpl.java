@@ -51,6 +51,8 @@ import com.afrotransact.catalog.port.IdentifierIssuer;
 import com.afrotransact.catalog.port.ProductDraftRepository;
 import com.afrotransact.catalog.port.ProductRepository;
 import com.afrotransact.catalog.port.SizeChartRepository;
+import com.afrotransact.platform.web.diversion.DiversionDetector;
+import com.afrotransact.platform.web.diversion.DiversionFinding;
 import com.afrotransact.platform.web.error.ConflictException;
 import com.afrotransact.platform.web.error.NotFoundException;
 import org.springframework.stereotype.Component;
@@ -75,6 +77,7 @@ class ProductWriterImpl implements ProductWriter {
     private final NewPageGuard newPages;
     private final Clock clock;
     private final ImageGate imageGate;
+    private final DiversionDetector diversion = DiversionDetector.standard();
 
     ProductWriterImpl(ProductRepository products, CategoryRepository categories, CategoryRequestRepository requests,
                       ProductDraftRepository drafts, IdentifierIssuer ids, ProductDraftPolicy policy,
@@ -119,6 +122,7 @@ class ProductWriterImpl implements ProductWriter {
         ImageGate.Outcome pictures = imageGate.check(ruled.images(), variantPictures(submitted),
                 placement.type().code(), Set.of(), owner.orgId());
         submitted = withVariantPictures(submitted, pictures);
+        refuseOffPlatformText(cmd.title(), details.description());
         ProductDraft draft = new ProductDraft(type, cmd.title(), attributes, pictures.images(),
                 cmd.variationTheme(), submitted, details);
         validate(draft, rules, owner.orgId(), null, withPictureErrors(tax.errors(), pictures));
@@ -204,6 +208,7 @@ class ProductWriterImpl implements ProductWriter {
         ImageGate.Outcome pictures = imageGate.check(ruled.images(), variantPictures(submitted), typeCode,
                 pictureUrls(current), current.owner().orgId());
         submitted = withVariantPictures(submitted, pictures);
+        refuseOffPlatformText(cmd.title(), details.description());
         ProductDraft draft = new ProductDraft(type, cmd.title(), attributes, pictures.images(), cmd.variationTheme(),
                 submitted, details);
         validate(draft, rules, current.owner().orgId(), current.details().sizeChartId(),
@@ -390,6 +395,22 @@ class ProductWriterImpl implements ProductWriter {
      *
      * @param linkedChartId the size chart the stored product already links (it may stay linked once retired)
      */
+    /** A title or description must not steer customers away from AfroTransact (urls, emails, phones, handles, phrases). */
+    private void refuseOffPlatformText(String title, String description) {
+        Map<String, String> errors = new LinkedHashMap<>();
+        List<DiversionFinding> inTitle = diversion.scan(title, false);
+        if (!inTitle.isEmpty()) {
+            errors.put("title", diversion.message(inTitle));
+        }
+        List<DiversionFinding> inDescription = diversion.scan(description, false);
+        if (!inDescription.isEmpty()) {
+            errors.put("description", diversion.message(inDescription));
+        }
+        if (!errors.isEmpty()) {
+            throw new CatalogRuleViolation("The listing text points customers away from AfroTransact", errors);
+        }
+    }
+
     private void validate(ProductDraft draft, CategoryRules rules, String ownerOrg, UUID linkedChartId,
                           Map<String, String> taxErrors) {
         Map<String, String> errors = new LinkedHashMap<>();
