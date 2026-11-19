@@ -1,7 +1,9 @@
 package com.afrotransact.seller.domain;
 
+import java.text.Normalizer;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 /**
  * A selling scope: the thing a seller is approved for. Keys are canonical: category and product type codes as the
@@ -9,6 +11,9 @@ import java.util.Objects;
  * {@code brand|category}, a product by its barcode digits.
  */
 public record SellingScope(SellingScopeType type, String key) {
+
+    private static final Pattern MARKS = Pattern.compile("\\p{M}+");
+    private static final Pattern NOT_ALNUM = Pattern.compile("[^\\p{L}\\p{N}]+");
 
     public SellingScope {
         Objects.requireNonNull(type, "type");
@@ -42,9 +47,16 @@ public record SellingScope(SellingScopeType type, String key) {
         return new SellingScope(SellingScopeType.CAPABILITY, code == null ? "" : code.trim().toUpperCase(Locale.ROOT));
     }
 
-    /** Brands compare without case, spaces and punctuation: "Levi's", "LEVIS" and "levis" are one brand. */
+    /**
+     * Brands compare without case, accents, spaces and punctuation, exactly like the catalog brand registry (S630,
+     * {@code BrandNames.normalise}): "Levi's", "LEVIS" and "levis" are one brand, and so are "Hermes" and "Herm\u00e8s".
+     */
     public static String normaliseBrand(String brand) {
-        return brand == null ? "" : brand.toLowerCase(Locale.ROOT).replaceAll("[^\\p{L}\\p{N}]+", "");
+        if (brand == null) {
+            return "";
+        }
+        String folded = MARKS.matcher(Normalizer.normalize(brand, Normalizer.Form.NFD)).replaceAll("");
+        return NOT_ALNUM.matcher(folded.toLowerCase(Locale.ROOT)).replaceAll("");
     }
 
     private static String code(String code) {
