@@ -115,11 +115,13 @@ func (r Rules) AllowsServiceClient(subject string) bool {
 // RulesFor returns the limits for a purpose.
 func RulesFor(p Purpose) (Rules, error) {
 	images := []string{"image/jpeg", "image/png", "image/webp"}
+	// Product pictures and storefront media also take AVIF (the owner's format list: JPEG, PNG, WebP, AVIF under every profile).
+	publicImages := append(slices.Clone(images), "image/avif")
 	switch p {
 	case PurposeProductImage:
-		return Rules{MaxBytes: 8 << 20, ContentTypes: images, Public: true, MinEdge: 500}, nil
+		return Rules{MaxBytes: 8 << 20, ContentTypes: publicImages, Public: true, MinEdge: 500}, nil
 	case PurposeStorefront:
-		return Rules{MaxBytes: 8 << 20, ContentTypes: images, Public: true}, nil
+		return Rules{MaxBytes: 8 << 20, ContentTypes: publicImages, Public: true}, nil
 	case PurposeProofPhoto:
 		return Rules{MaxBytes: 10 << 20, ContentTypes: images}, nil
 	case PurposeReturnPhoto:

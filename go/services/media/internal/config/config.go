@@ -165,7 +165,14 @@ type Config struct {
 	Scan ScanConfig `yaml:"scan"`
 	// Images are the thresholds of the slot-aware image checks (S388); defaults come from domain.DefaultImageRules
 	// (see Default) and staff may override the starred ones at run time (PUT /v1/image-rules).
-	Images    domain.ImageRules `yaml:"images"`
+	Images domain.ImageRules `yaml:"images"`
+	// PictureRules reads the platform picture-rules setting (profile strict, startup or testing plus knobs; owned by catalog,
+	// Settings > Picture rules in the staff console) from catalog's public endpoint with a 30 second cache. Profile is only the
+	// FALLBACK used until catalog has answered once: local and dev testing, uat and prod startup (docs/engineering/picture-rules.md).
+	PictureRules struct {
+		CatalogURL string `yaml:"catalogUrl" env:"CATALOG_URL"`
+		Profile    string `yaml:"profile" env:"PICTURE_RULES_PROFILE"`
+	} `yaml:"pictureRules"`
 	Telemetry struct {
 		OTLPEndpoint string  `yaml:"otlpEndpoint" env:"OTEL_EXPORTER_OTLP_ENDPOINT_HOST"`
 		SampleRatio  float64 `yaml:"sampleRatio" env:"TRACE_SAMPLING"`

@@ -81,7 +81,7 @@ func TestImportRefusesOtherCallersPurposesAndNonImages(t *testing.T) {
 		t.Fatalf("only product images: %v", err)
 	}
 	if _, err := svc.ImportFromURL(ctx, catalogService, domain.PurposeProductImage, "https://cdn.example.com/page.html", "org_ade", ""); err == nil ||
-		!strings.Contains(err.Error(), "not a JPG, PNG or WebP") {
+		!strings.Contains(err.Error(), "not a JPG, PNG, WebP or AVIF") {
 		t.Fatalf("the bytes decide the type: %v", err)
 	}
 	if _, err := svc.ImportFromURL(ctx, catalogService, domain.PurposeProductImage, "https://cdn.example.com/missing.jpg", "org_ade", ""); !errors.Is(err, domain.ErrRejected) ||

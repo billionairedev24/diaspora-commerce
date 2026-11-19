@@ -111,3 +111,8 @@ scan:
   timeout: 30s
   documents: best-effort
   images: best-effort
+# Platform picture rules (profile strict | startup | testing; staff change them in Settings > Picture rules, owned by catalog,
+# docs/engineering/picture-rules.md). `profile` is only the FALLBACK until catalog has answered; uat starts on startup.
+pictureRules:
+  catalogUrl: http://catalog
+  profile: startup

@@ -115,7 +115,7 @@ var messages = map[string]string{
 	CodeFillNear:      "The product could fill more of the photo. {fill}% or more looks best.",
 	CodeBorder:        "Remove the border or frame around the photo.",
 	CodePlaceholder:   "This looks like a placeholder, not a photo of your product.",
-	CodeFormat:        "Use a JPG, PNG or WebP file.",
+	CodeFormat:        "Use a JPG, PNG, WebP or AVIF file.",
 	CodeFileTooBig:    "This file is larger than {mb} MB. Save it at a smaller size.",
 	CodeNotAnImage:    "This file is not a photo we can read.",
 	CodeBlur:          "This photo looks blurry. A sharper photo sells better.",
@@ -305,6 +305,23 @@ type ImageRules struct {
 	MaxBytes int64      `json:"maxBytes" yaml:"maxBytes" env:"MEDIA_IMAGE_MAX_BYTES"`
 	Main     MainRules  `json:"main" yaml:"main"`
 	Other    OtherRules `json:"other" yaml:"other"`
+
+	// The fields below come from the platform picture rules (profiles strict, startup, testing; ApplyPictureRules). All false
+	// is the strict standard, today's behaviour. Security checks (file type by magic bytes, size ceiling, malware scan,
+	// prohibited content) are never switched off by them.
+
+	// SkipAppearance drops the main image's white background, fill, border and blur checks (profile knob checkBackground off).
+	SkipAppearance bool `json:"skipAppearance,omitempty" yaml:"-"`
+	// SkipAspect drops the wide-or-tall warning (knob checkAspect off).
+	SkipAspect bool `json:"skipAspect,omitempty" yaml:"-"`
+	// AllowPlaceholders lets a stand-in picture through the placeholder check (knob allowPlaceholders on).
+	AllowPlaceholders bool `json:"allowPlaceholders,omitempty" yaml:"-"`
+	// SkipTextHold stops text, logo and watermark findings from holding an image (knob checkTextOverlay off).
+	SkipTextHold bool `json:"skipTextHold,omitempty" yaml:"-"`
+	// PassUninspectable publishes a format that cannot be decoded here (AVIF) without a visual check; strict holds it for staff.
+	PassUninspectable bool `json:"passUninspectable,omitempty" yaml:"-"`
+	// SkipQualityHolds stops every AI quality finding (props, mismatch, review) from holding an image (testing profile).
+	SkipQualityHolds bool `json:"skipQualityHolds,omitempty" yaml:"-"`
 }
 
 // DefaultImageRules are the approved defaults (owner decisions of 2026-11-12).
@@ -435,7 +452,7 @@ func otherChecks(r ImageRules, longest, shortest int, aspect float64) []Check {
 	case longest < r.Other.WarnLongestSide:
 		checks = append(checks, NewCheck(CodeLowRes, VerdictWarn, map[string]any{"px": r.Other.WarnLongestSide}))
 	}
-	if aspect > r.Other.AspectWarn {
+	if aspect > r.Other.AspectWarn && !r.SkipAspect {
 		checks = append(checks, NewCheck(CodeAspect, VerdictWarn, nil))
 	}
 	return checks
@@ -453,11 +470,17 @@ func mainChecks(r ImageRules, f ImageFacts, longest, shortest int, aspect float6
 	case longest < m.RecommendedLongestSide:
 		checks = append(checks, NewCheck(CodeLargerBetter, VerdictInfo, map[string]any{"px": m.RecommendedLongestSide}))
 	}
-	if aspect > m.AspectWarn {
+	if aspect > m.AspectWarn && !r.SkipAspect {
 		checks = append(checks, NewCheck(CodeAspect, VerdictWarn, nil))
 	}
 	met := f.Metrics
 	if met == nil || !met.Measured {
+		return checks
+	}
+	if r.SkipAppearance {
+		if met.Placeholder && !r.AllowPlaceholders {
+			checks = append(checks, NewCheck(CodePlaceholder, VerdictReject, nil))
+		}
 		return checks
 	}
 	appearance := VerdictReject
@@ -466,7 +489,7 @@ func mainChecks(r ImageRules, f ImageFacts, longest, shortest int, aspect float6
 	}
 	whiteOK := met.RingWhiteRatio >= m.RingPassRatio && met.CornersWhite
 	switch {
-	case met.Placeholder:
+	case met.Placeholder && !r.AllowPlaceholders:
 		return append(checks, NewCheck(CodePlaceholder, VerdictReject, nil))
 	case met.BorderBand:
 		checks = append(checks, NewCheck(CodeBorder, appearance, nil))
@@ -513,10 +536,15 @@ func AIChecks(r ImageRules, slot ImageSlot, productTypeCode string, labels []str
 			checks = append(checks, NewCheck(code, VerdictHold, nil))
 		}
 	}
+	if r.SkipQualityHolds {
+		return nil
+	}
 	for _, l := range labels {
 		switch strings.ToUpper(l) {
 		case LabelTextOverlay, LabelWatermark, "CONTACT_INFO", "THIRD_PARTY_LOGO":
-			add(CodeHeldText)
+			if !r.SkipTextHold {
+				add(CodeHeldText)
+			}
 		case LabelProps, LabelMannequin:
 			if slot == ImageSlotMain && !r.Main.OnModelAllowed(productTypeCode) {
 				add(CodeHeldProps)

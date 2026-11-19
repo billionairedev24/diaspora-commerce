@@ -224,7 +224,7 @@ func (f *fetcherImpl) Fetch(ctx context.Context, rawURL string, maxBytes int64) 
 		return port.FetchedFile{}, fmt.Errorf("%w: %w", domain.ErrRejected, err)
 	}
 	req.Header.Set("User-Agent", "AfroTransact-Media/1.0 (product image import)")
-	req.Header.Set("Accept", "image/jpeg, image/png, image/webp")
+	req.Header.Set("Accept", "image/jpeg, image/png, image/webp, image/avif")
 	res, err := f.client.Do(req) //nolint:gosec // G704: the dialer refuses every non-public address (SSRF guard)
 	if err != nil {
 		if errors.Is(err, domain.ErrRejected) {
