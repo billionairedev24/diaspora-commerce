@@ -59,7 +59,7 @@ public final class ImportValidator {
     private static final Pattern DECIMAL_COMMA = Pattern.compile("^\\$?\\s*(\\d+),(\\d{1,2})$");
     private static final Pattern INTEGER = Pattern.compile("^\\d+(?:\\.0+)?$");
     private static final Pattern URL_SPLIT = Pattern.compile("[\\s|]+");
-    private static final Set<String> IMAGE_EXTENSIONS = Set.of("jpg", "jpeg", "png", "webp");
+    private static final Set<String> IMAGE_EXTENSIONS = Set.of("jpg", "jpeg", "png", "webp", "avif");
     private static final long MAX_PRICE_MINOR = 100_000_000L;
     private static final Set<String> TRUE = Set.of("yes", "y", "true", "1", "oui", "si", "sí", "bẹẹni");
     private static final Set<String> FALSE = Set.of("no", "n", "false", "0", "non", "rara");

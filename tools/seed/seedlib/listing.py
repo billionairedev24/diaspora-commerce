@@ -268,7 +268,7 @@ def _package_problem(pkg: dict[str, Any] | None) -> str | None:
     return None if 0 < w <= MAX_WEIGHT_LB else f"Weight must be above zero and at most {int(MAX_WEIGHT_LB)} lb"
 
 
-def check_listing(rules: Rules, ptype: dict[str, Any], body: dict[str, Any]) -> dict[str, str]:
+def check_listing(rules: Rules, ptype: dict[str, Any], body: dict[str, Any], min_images: int = 1) -> dict[str, str]:
     """Field path to message for what the catalog's publish gate would refuse in this create request (empty: it passes)."""
     errors: dict[str, str] = {}
     listing = body.get("listing") or {}
@@ -284,8 +284,8 @@ def check_listing(rules: Rules, ptype: dict[str, Any], body: dict[str, Any]) -> 
         errors["labelPhoto"] = "Add a photo of the label"
     if rules.expects("dangerous_goods") and listing.get("dangerousGoods") is None:
         errors["dangerousGoods"] = "Answer yes or no: is it an aerosol, flammable, battery, candle or cleaner?"
-    if not [i for i in images if i.get("role") != "LABEL"]:
-        errors["images"] = "Add at least one image"
+    if len([i for i in images if i.get("role") != "LABEL"]) < min_images:
+        errors["images"] = "Add at least one image" if min_images == 1 else f"Add at least {min_images} images"
 
     type_attrs = {a["key"]: a for a in ptype.get("attributes") or []}
     for f in rules.fields:

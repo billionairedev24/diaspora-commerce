@@ -16,7 +16,7 @@ public record ImageLibrary(List<LibraryImage> images) {
 
     public static final ImageLibrary EMPTY = new ImageLibrary(List.of());
     public static final String REF_PREFIX = "library:";
-    private static final Set<String> EXTENSIONS = Set.of("jpg", "jpeg", "png", "webp");
+    private static final Set<String> EXTENSIONS = Set.of("jpg", "jpeg", "png", "webp", "avif");
 
     public ImageLibrary {
         images = images == null ? List.of() : List.copyOf(images);

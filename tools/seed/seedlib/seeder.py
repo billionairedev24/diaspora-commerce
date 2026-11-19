@@ -18,7 +18,8 @@ from . import dataset as D
 from . import listing as L
 from .auth import TokenProvider
 from .http import ApiError, Http
-from .images.library import ImageLibrary
+from . import picture_rules
+from .images.library import ImageLibrary, set_size_rules
 from .images.review import ImageReview
 from .images.model import ImageFile, sniff
 from .images.sources import PexelsSource, UnsplashSource, WikimediaSource
@@ -28,7 +29,7 @@ from .ops import OpsSeeder
 from .state import State
 from .users import SignedIn, TestUsers
 
-MAIN_MIN_EDGE = 1000  # catalog: the main product image must be at least 1000 x 1000
+MAIN_MIN_EDGE = 1000  # the strict standard's main image size; the picture rules profile in force replaces it (self.main_min_edge)
 FOOD_TYPES = {"grocery", "perishable"}
 FC_NODES = ("HOU-FC", "ATL-FC", "EWR-FC", "LAX-FC")
 PREORDER_TIME_ZONE = "America/Chicago"
@@ -289,6 +290,8 @@ class Seeder:
             sources.append(WikimediaSource())
         self.library = ImageLibrary(state_dir / "images", sources, env.get("SEED_IMAGES_DIR") or None, log=log,
                                     offline=env.get("SEED_OFFLINE") == "1")
+        self.pictures = picture_rules.STRICT
+        self.main_min_edge = MAIN_MIN_EDGE
         self.uploader = MediaUploader(self.svc["media"], self.state, log)
         self.up: dict[str, bool] = {}
         self._rules: dict[str, L.Rules | None] = {}  # listing rules by category code
@@ -317,6 +320,7 @@ class Seeder:
             self.log(f"✗ required services are down: {', '.join(missing)} (make up / tools/dev/local.sh status)")
             return 2
         self._image_sources_banner()
+        self._read_picture_rules()
         try:
             for step in steps:
                 self._log_urls(step)
@@ -373,6 +377,13 @@ class Seeder:
         down = [n for n, ok in self.up.items() if not ok]
         self.log(f"services up: {', '.join(up)}" + (f" · down: {', '.join(down)}" if down else ""))
         self.token()  # logs how the seeder authenticates
+
+    def _read_picture_rules(self) -> None:
+        """Picks photos by the picture rules in force (profile strict, startup or testing), not by a fixed rule."""
+        self.pictures = picture_rules.fetch(self.svc["catalog"].get, self.log)
+        # The main photo must meet the profile's longest side; catalog's own check is on the same numbers.
+        self.main_min_edge = max(self.pictures.min_short, 1)
+        set_size_rules(self.pictures.min_short, self.pictures.min_long)
 
     def _image_sources_banner(self) -> None:
         order = []
@@ -679,16 +690,20 @@ class Seeder:
             line = f"  · {p.title} (exists, {product['atin']})"
             product = self._link_existing_chart(product, p, cats) or product
             product = self._heal_images(product, p) or product
-            kept = self._images(p.key, D.image_queries(p), p.images, orientation="square", main_min_edge=MAIN_MIN_EDGE,
+            kept = self._images(p.key, D.image_queries(p), p.images, orientation="square", main_min_edge=self.main_min_edge,
                                 network=False, require=p.queries)
             self.report.review.add(p.key, p.title, kept, self.library.rejected.get(p.key), "already in the catalog")
         else:
             imgs, assets = self._upload_images(p)
-            if not imgs:
+            if not imgs and not self.pictures.photo_optional:
                 self.report.add("products", "skipped: no image")
-                self._problem(f"{p.title}: no usable image (needs a main image of at least {MAIN_MIN_EDGE}px that media "
-                              "accepts; set SEED_IMAGES_DIR or allow downloads)")
+                self._problem(f"{p.title}: no usable image (needs a main image of at least {self.main_min_edge}px that media "
+                              f"accepts, picture rules profile {self.pictures.profile}; set SEED_IMAGES_DIR or allow downloads)")
                 return
+            if not imgs:
+                # Profile testing: a product with no photo is published and shown on purpose, and the run says so.
+                self.report.add("products", "created without a photo (picture rules profile testing)")
+                self.log(f"  ! {p.title}: no usable photo; created without one because the picture rules profile is {self.pictures.profile}")
             rules = self._rules_for(cat, cats)
             label = None
             if rules and rules.expects("label_photo"):
@@ -721,7 +736,7 @@ class Seeder:
         media refuses (422 on complete) is banned and another candidate is looked up, up to UPLOAD_ATTEMPTS times."""
         imgs: list[ImageFile] = []
         for attempt in range(self.UPLOAD_ATTEMPTS):
-            imgs = self._images(p.key, D.image_queries(p), p.images, orientation="square", main_min_edge=MAIN_MIN_EDGE,
+            imgs = self._images(p.key, D.image_queries(p), p.images, orientation="square", main_min_edge=self.main_min_edge,
                                 require=p.queries)
             if attempt == 0:
                 self.report.review.add(p.key, p.title, imgs, self.library.rejected.get(p.key))
@@ -927,7 +942,7 @@ class Seeder:
             stored = full.get("images") or []
             if not stored or all(self.uploader.head(i.get("url") or "") is not False for i in stored):
                 return None
-            imgs = self._images(p.key, D.image_queries(p), p.images, orientation="square", main_min_edge=MAIN_MIN_EDGE,
+            imgs = self._images(p.key, D.image_queries(p), p.images, orientation="square", main_min_edge=self.main_min_edge,
                                 require=p.queries)
             if not imgs:
                 self._problem(f"{p.title}: its images no longer serve and no replacement image was found")

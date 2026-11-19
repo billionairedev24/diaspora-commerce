@@ -298,6 +298,15 @@ func TestSellerContractConformance(t *testing.T) {
 	mustStatus(t, b.do("POST", "/v1/seller/category-requests", map[string]any{"parentPath": "", "name": "x", "exampleProduct": "", "detailsNeeded": ""}), 422)
 	mustStatus(t, b.do("POST", "/v1/seller/uploads", map[string]any{"purpose": "product-image", "fileName": "ofada.webp", "contentType": "image/webp", "size": 182000}), 201)
 	mustStatus(t, b.do("POST", "/v1/seller/uploads", map[string]any{"purpose": "product-image", "fileName": "ofada.gif", "contentType": "image/gif", "size": 182000}), 422)
+	// AVIF is accepted next to JPEG, PNG and WebP; an SVG, a page or a program never is; the size cap is the active picture rule (8 MB strict).
+	mustStatus(t, b.do("POST", "/v1/seller/uploads", map[string]any{"purpose": "product-image", "fileName": "ofada.avif", "contentType": "image/avif", "size": 182000}), 201)
+	for _, bad := range []string{"image/svg+xml", "text/html", "application/x-msdownload", "image/heic"} {
+		mustStatus(t, b.do("POST", "/v1/seller/uploads", map[string]any{"purpose": "product-image", "fileName": "x.png", "contentType": bad, "size": 182000}), 422)
+	}
+	if r := b.do("POST", "/v1/seller/uploads", map[string]any{"purpose": "product-image", "fileName": "big.avif", "contentType": "image/avif", "size": 9 << 20}); r.status != 422 ||
+		!strings.Contains(string(r.body), "8 MB or smaller") {
+		t.Fatalf("over the cap = %d %s", r.status, r.body)
+	}
 	mustStatus(t, b.do("POST", "/v1/seller/uploads/asset-1/complete", nil), 200)
 	draft := map[string]any{"categoryId": "cat-grocery", "title": "Ofada Rice, Destoned · 5 lb", "attributes": map[string]string{"brand": "Ade's"},
 		"images":         []map[string]any{{"url": "https://img.example/asset-1.webp", "contentType": "image/webp", "width": 1600, "height": 1600}},
