@@ -1879,6 +1879,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/picture-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The picture rules in force (how many photos, how large, which checks)
+         * @description The picture rules in force (profile, knobs, accepted formats and the rule in plain words), read from catalog with a 30 second cache. Seller Center words its photo messages from it, so they state the active rule rather than a fixed one. Public data.
+         */
+        get: operations["getSellerPictureRules"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/catalog/listing-rules": {
         parameters: {
             query?: never;
@@ -3281,6 +3301,46 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        PictureKnobs: {
+            /** @description Pictures a listing needs before it can be published (0: none needed) */
+            minImages: number;
+            /** @description The longest side of the main picture, in pixels (the zoom rule) */
+            minLongSidePx: number;
+            /** @description The shortest side of every picture, in pixels */
+            minShortSidePx: number;
+            /** @description One file's size cap (the platform ceiling of 20 MB always applies) */
+            maxMegabytes: number;
+            /** @description Ask for a plain white background and a product that fills the frame (main picture) */
+            checkBackground: boolean;
+            /** @description Warn about very wide or very tall pictures */
+            checkAspect: boolean;
+            /** @description Hold pictures that carry text, logos or watermarks for review */
+            checkTextOverlay: boolean;
+            /** @description Home, rails and search show only products with a real photo */
+            requireRealPhotoForStorefront: boolean;
+            /** @description A page without a real photo is not offered as a match to sellers */
+            requirePhotoForMatching: boolean;
+            /** @description A stand-in image counts as a real photo */
+            allowPlaceholders: boolean;
+        };
+        PictureRules: {
+            /** @enum {string} */
+            profile: "strict" | "startup" | "testing";
+            knobs: components["schemas"]["PictureKnobs"];
+            /** @description Names of the knobs staff changed on top of the profile */
+            overridden: string[];
+            /** @description Accepted image types under every profile; SVG, HTML and executables are never accepted */
+            formats: ("image/jpeg" | "image/png" | "image/webp" | "image/avif")[];
+            /**
+             * Format: int64
+             * @description The stored version; 0 while the environment default is in force
+             */
+            version: number;
+            /** @description The rule in plain words, for messages ("at least 1 photo, at least 500 px on the longest side, ...") */
+            summary?: string;
+            /** @description Any rule is looser than the strict standard */
+            relaxed?: boolean;
+        };
         SellerRunPickupList: {
             items: components["schemas"]["SellerRunPickup"][];
         };
@@ -10379,6 +10439,26 @@ export interface operations {
             404: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
+        };
+    };
+    getSellerPictureRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The rules */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PictureRules"];
+                };
+            };
         };
     };
     getListingRules: {

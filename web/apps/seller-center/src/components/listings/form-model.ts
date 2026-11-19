@@ -14,11 +14,13 @@ import {
   type ListingFulfilment,
   type ListingRuleField,
   type ListingRules,
+  type PictureRules,
   type ProductDraft,
   type ProductTypeSchema,
   type SellerProductDetail,
   type SizeChart,
   sizesMissingFromChart,
+  STRICT_PICTURE_RULES,
   taxQuestionsOf,
   valueKey,
   type VariantInput
@@ -166,12 +168,12 @@ export function withStart(s: FormState, start?: ProductFormStart): FormState {
 }
 
 export const MAX_IMAGES = 10;
-/** The main image: its longest side in pixels (shoppers zoom), the share of the frame the product fills, and how many extra photos sell best. */
+/** The strict standard's numbers: the main image's longest side in pixels (shoppers zoom), the share of the frame the product fills, and how many extra photos sell best. The numbers in force come from the picture rules (usePictureRules); these are what shows before they load. */
 export const MIN_IMAGE_PX = 1000;
 export const MAIN_FILL_PERCENT = 85;
 export const EXTRA_PHOTOS_TARGET = 7;
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
-export const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+export const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'] as const;
 export const MAX_KEYWORDS = 20;
 export const MAX_DESCRIPTION = 5000;
 export const MAX_VARIANTS = 200;
@@ -484,6 +486,8 @@ export interface ValidateOptions {
   categoryStatus?: CategoryTaxStatus | null | undefined;
   /** What the category asks of a listing (catalog's listing rules); absent while loading. */
   rules?: ListingRules | undefined;
+  /** The picture rules in force (how many photos, how large): the strict standard while they load. */
+  pictures?: PictureRules | undefined;
 }
 
 /** The size values the variants sell, in matrix order (empty when the product has no size axis). */
@@ -515,12 +519,15 @@ export function validateForm(s: FormState, type: ProductTypeSchema | undefined, 
   else if (kws.some((k) => k.length > 40)) add(fieldId.keywords, 'basics', 'sc.pf.field.keywords', 'sc.pf.err.keywordLong');
 
   const main = s.images[0];
-  if (!s.images.length) add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesNone');
-  else if (s.images.some((i) => i.status === 'uploading')) add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesUploading');
+  const pictures = opts.pictures ?? STRICT_PICTURE_RULES;
+  const minPx = pictures.knobs.minLongSidePx;
+  if (s.images.length < pictures.knobs.minImages) {
+    add(fieldId.images, 'images', 'sc.pf.field.images', pictures.knobs.minImages === 1 ? 'sc.pf.err.imagesNone' : 'sc.pf.err.imagesFew', { min: pictures.knobs.minImages });
+  } else if (s.images.some((i) => i.status === 'uploading')) add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesUploading');
   else if (s.images.some((i) => i.status === 'error')) add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesFailed');
   // The main image decides: a rejected one blocks Submit, one under 1000 px says so, one we are still checking and cannot attach yet waits.
   else if (main?.status === 'rejected') add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesMainRejected');
-  else if (main?.status === 'low') add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesMainSmall', { px: MIN_IMAGE_PX });
+  else if (main?.status === 'low') add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesMainSmall', { px: minPx });
   else if (main?.status === 'held' && !main.url && !main.assetId) add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesHeldNoUrl');
 
   // The label photo is its own typed slot: product pictures never stand in for it.

@@ -3,9 +3,10 @@
 import { UploadSimple } from '@phosphor-icons/react/ssr';
 import { useState } from 'react';
 
-import { IMAGE_TYPES, MAX_IMAGE_BYTES } from '@/components/listings/form-model';
+import { IMAGE_TYPES } from '@/components/listings/form-model';
 import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
+import { maxBytesOf, usePictureRules } from '@/lib/picture-rules';
 
 interface Props {
   /** Address of the uploaded logo, or empty. */
@@ -20,13 +21,14 @@ interface Props {
 /** Business logo: pick an image, it is signed-uploaded to public media and its URL goes on the business page. */
 export function LogoField({ value, onChange, disabled, error: refused, id }: Props) {
   const t = useT();
+  const pictures = usePictureRules();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   const pick = async (file: File | undefined) => {
     if (!file) return;
     if (!(IMAGE_TYPES as readonly string[]).includes(file.type)) return setError(t('sc.logo.errType'));
-    if (file.size > MAX_IMAGE_BYTES) return setError(t('sc.logo.errSize'));
+    if (file.size > maxBytesOf(pictures)) return setError(t('sc.logo.errSize', { mb: pictures.knobs.maxMegabytes }));
     setError('');
     setBusy(true);
     try {

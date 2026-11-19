@@ -21,6 +21,7 @@ export type SettingsKey =
   | 'published-pages'
   | 'general'
   | 'ai'
+  | 'picture-rules'
   | 'application-review'
   | 'payments'
   | 'credit'
@@ -66,6 +67,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   S('language', 'platform', null, { href: '/account/preferences', own: false }),
   S('notifications', 'platform', 'notifications'),
   S('ai', 'platform', null, { permission: 'ai:manage' }),
+  S('picture-rules', 'platform', null, { permission: 'catalog:moderate' }),
   S('published-pages', 'platform', 'siteCfg'),
   S('general', 'platform', 'siteCfg'),
   S('application-review', 'platform', 'apps'),

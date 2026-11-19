@@ -66,7 +66,7 @@ describe('photo slots and the main photo rules (S391)', () => {
     expect(screen.queryByText(/Drop images here/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Plain white background/)).not.toBeInTheDocument();
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-    expect(screen.getByTestId('image-input')).toHaveAttribute('accept', 'image/jpeg,image/png,image/webp');
+    expect(screen.getByTestId('image-input')).toHaveAttribute('accept', 'image/jpeg,image/png,image/webp,image/avif');
   });
 
   it('keeps the main photo rules in an info popover that opens by click and by keyboard focus and closes with Escape, each rule with its live state', async () => {
@@ -82,7 +82,7 @@ describe('photo slots and the main photo rules (S391)', () => {
     expect(rules.getByText(/The product fills at least 85% of the photo/)).toBeInTheDocument();
     expect(rules.getByText(/No text, logos, watermarks or borders/)).toBeInTheDocument();
     expect(rules.getAllByText('Not checked yet')).toHaveLength(4);
-    expect(rules.getByText(/JPG, PNG, WEBP · up to 8 MB each/)).toBeInTheDocument();
+    expect(rules.getByText(/JPG, PNG, WEBP, AVIF · up to 8 MB each/)).toBeInTheDocument();
     fireEvent.keyDown(info, { key: 'Escape' });
     expect(screen.queryByTestId('main-image-rules')).not.toBeInTheDocument();
     expect(info).toHaveFocus();

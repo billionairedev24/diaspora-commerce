@@ -1,5 +1,6 @@
 export { addMockPermission } from './access';
 export { setMockAiCap, setMockAiSpend } from './ai-spend';
+export { setMockPictureRules } from './picture-rules';
 export { getHubDb, resetHubDb } from '../inventory-hub';
 export { endMockSession, MOCK_SESSION_COOKIE, resetMockSession, setMockSessionPolicy, startMockSession } from '../session';
 export { getStaffDb, type MockRecord, type MockStaffDb, resetStaffDb } from './db';

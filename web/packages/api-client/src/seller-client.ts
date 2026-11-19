@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { type AddressSearchOptions } from './address-lookup';
 import { type ApiClientOptions, createDownloader, createRequester, type DownloadedFile } from './http';
+import { createPictureRulesReader } from './picture-rules';
 import { type ExportDataset, type ExportFormat, type ExportJob, type ExportJobList, ExportJobListSchema, ExportJobSchema, type TableExportQuery } from './schemas/exports';
 import { type AddressSuggestions, AddressSuggestionsSchema, type PostalAddress, PostalAddressSchema } from './schemas/location';
 import { type ReviewReportInput, type ReviewReportResult, ReviewReportResultSchema, type SellerReview, type SellerReviewPage, SellerReviewPageSchema, SellerReviewSchema } from './schemas/reviews';
@@ -631,6 +632,8 @@ export function createSellerApiClient(options: ApiClientOptions) {
     /** Ask staff to let the organisation sell in another department. */
     requestDepartment: (input: SellerDepartmentRequestInput): Promise<SellerDepartmentRequest> =>
       request('/v1/seller/department-requests', SellerDepartmentRequestSchema, { method: 'POST', body: input }),
+    /** The picture rule in force (profile and knobs): the form words its messages from it. */
+    pictureRules: createPictureRulesReader(request, '/v1/seller/picture-rules'),
     requestUpload: (input: UploadRequest): Promise<UploadTicket> => request('/v1/seller/uploads', UploadTicketSchema, { method: 'POST', body: input }),
     completeUpload: (assetId: string): Promise<Asset> => request(`/v1/seller/uploads/${enc(assetId)}/complete`, AssetSchema, { method: 'POST' }),
     getInventory: (lowStock: boolean, signal?: AbortSignal): Promise<InventoryView> =>

@@ -4,13 +4,14 @@ import { unzip } from 'fflate';
    SKU.PT01.jpg … SKU.PT08.jpg the additional ones, SKU.SWCH.jpg the swatch. A file, a folder or a ZIP of them can be
    dropped; media parses the name again when the upload completes. */
 
-export const LIBRARY_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+export const LIBRARY_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'] as const;
 export type LibraryType = (typeof LIBRARY_TYPES)[number];
+/** The strict cap; the picture rules' maxMegabytes (usePictureRules) is the one in force. */
 export const MAX_LIBRARY_BYTES = 8 * 1024 * 1024;
 export const MAX_FILES_PER_DROP = 2000;
 
-const NAME = /^(.+?)[._\- ](MAIN|PT0[1-8]|SWCH)\.(?:jpe?g|png|webp)$/i;
-const EXT_TYPE: Record<string, LibraryType> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+const NAME = /^(.+?)[._\- ](MAIN|PT0[1-8]|SWCH)\.(?:jpe?g|png|webp|avif)$/i;
+const EXT_TYPE: Record<string, LibraryType> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', avif: 'image/avif' };
 
 export interface ParsedName {
   sku: string;

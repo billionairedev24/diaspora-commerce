@@ -1853,8 +1853,9 @@ export interface StockImportRowsQuery {
 export const UploadRequestSchema = z.object({
   purpose: z.enum(['product-image', 'storefront']),
   fileName: z.string().min(1).max(200),
-  contentType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
-  size: z.number().int().min(1).max(8 * 1024 * 1024),
+  contentType: z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/avif']),
+  /** The cap is the active picture rule (the platform ceiling is 20 MB); the server answers 422 above it. */
+  size: z.number().int().min(1).max(20 * 1024 * 1024),
   /** product-image only: also add it to the image library (matched to SKUs by file name). */
   library: z.boolean().optional(),
   /** product-image only: what the picture is for; MAIN is judged by the strict main-image rules (default OTHER). */

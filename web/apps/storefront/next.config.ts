@@ -24,8 +24,11 @@ const nextConfig: NextConfig = {
   // Product, campaign and tile images come from the media service's public URL: this stack's MinIO bucket locally
   // (http://localhost:9000/media), each environment's media CDN otherwise (MEDIA_PUBLIC_URL, docs/engineering/environments.md).
   // They render as plain <img> (unoptimized); the patterns matter once Next.js image optimisation is switched on.
+  // AVIF and WebP are accepted product picture formats (docs/engineering/picture-rules.md): when optimisation is switched on, Next.js
+  // serves AVIF first and WebP next, and falls back to the original (JPEG, PNG, WebP or AVIF).
   images: {
     unoptimized: true,
+    formats: ['image/avif', 'image/webp'],
     remotePatterns: mediaRemotePatterns([process.env.MEDIA_PUBLIC_URL || LOCAL_MEDIA_PUBLIC_URL, process.env.NEXT_PUBLIC_MEDIA_PUBLIC_URL])
   },
   async headers() {

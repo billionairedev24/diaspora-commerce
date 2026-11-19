@@ -16,10 +16,11 @@ import { StatusPill, type Tone } from '@/components/ui/StatusPill';
 import { type MessageKey, useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 import { dateTime } from '@/lib/format';
+import { maxBytesOf, usePictureRules } from '@/lib/picture-rules';
 import { useSeller } from '@/lib/session';
 
 import { checkVars } from '../form/image-rules';
-import { baseName, droppedFiles, expandFiles, LIBRARY_TYPES, type LibraryType, LibraryZipError, type LibraryZipErrorCode, MAX_FILES_PER_DROP, MAX_LIBRARY_BYTES, parseLibraryName, typeOf } from './library-files';
+import { baseName, droppedFiles, expandFiles, LIBRARY_TYPES, type LibraryType, LibraryZipError, type LibraryZipErrorCode, MAX_FILES_PER_DROP, parseLibraryName, typeOf } from './library-files';
 
 type Progress = { name: string; state: 'queued' | 'uploading' | 'done' | 'failed' | 'skipped'; note: string };
 
@@ -44,6 +45,7 @@ const ZIP_MESSAGES: Record<LibraryZipErrorCode, 'sc.img.zip.unreadable' | 'sc.im
 export function ImageLibraryView() {
   const api = sellerApi();
   const t = useT();
+  const pictures = usePictureRules();
   const qc = useQueryClient();
   const toast = useToast();
   const { orgId } = useSeller();
@@ -126,7 +128,7 @@ export function ImageLibraryView() {
     const list: Progress[] = files.map((f) => {
       const type = typeOf(f.name);
       if (!type || !(LIBRARY_TYPES as readonly string[]).includes(f.type || type)) return { name: baseName(f.name), state: 'skipped', note: t('sc.img.notImage') };
-      if (f.size > MAX_LIBRARY_BYTES) return { name: baseName(f.name), state: 'skipped', note: t('sc.img.tooLarge') };
+      if (f.size > maxBytesOf(pictures)) return { name: baseName(f.name), state: 'skipped', note: t('sc.img.tooLarge', { mb: pictures.knobs.maxMegabytes }) };
       const parsed = parseLibraryName(f.name);
       return { name: baseName(f.name), state: 'queued', note: parsed ? t('sc.img.willMatch', { sku: parsed.sku, slot: slotLabel(t, parsed.slot) }) : t('sc.img.noMatchName') };
     });
@@ -235,8 +237,8 @@ export function ImageLibraryView() {
           >
             <FileArrowUp size={30} aria-hidden />
             <span><strong>{t('sc.img.drop')}</strong> {t('sc.img.browse')}</span>
-            <span className="text-xs text-muted">{t('sc.img.limits')}</span>
-            <input type="file" multiple accept=".jpg,.jpeg,.png,.webp,.zip,image/jpeg,image/png,image/webp,application/zip" className="at-visually-hidden"
+            <span className="text-xs text-muted">{t('sc.img.limits', { mb: pictures.knobs.maxMegabytes })}</span>
+            <input type="file" multiple accept=".jpg,.jpeg,.png,.webp,.avif,.zip,image/jpeg,image/png,image/webp,image/avif,application/zip" className="at-visually-hidden"
               data-testid="library-files" disabled={busy} onChange={(e) => { void add(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
           </label>
           <label className={cx(buttonClassName({ variant: 'neutral', size: 'sm' }), 'self-start cursor-pointer')}>
