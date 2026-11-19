@@ -19,6 +19,7 @@ import (
 	pkgconfig "github.com/billionairedev24/diaspora-commerce/go/pkg/config"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/httpserver"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/logging"
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/picturerules"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/telemetry"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/aimoderation"
@@ -118,6 +119,7 @@ func run() error {
 	// S308: catalog-service imports the images of bulk product uploads from their URLs (public addresses only).
 	opts := []app.Option{app.WithLogger(log), app.WithFetcher(urlfetch.New(urlfetch.Options{})), app.WithLibrary(repo)}
 	opts = append(opts, moderation(cfg, log, repo)...)
+	opts = append(opts, pictureRules(cfg, loader.Env(), httpClient, log))
 	if cfg.QuarantineStore != "" {
 		qs, ok := named[cfg.QuarantineStore]
 		if !ok {
@@ -198,6 +200,17 @@ func scanner(cfg config.Config, log *slog.Logger) (app.Option, error) {
 	}
 	log.Info("malware scanning on", "provider", cfg.Scan.Provider, "documents", cfg.Scan.Documents, "images", cfg.Scan.Images)
 	return app.WithScanner(sc, app.ScanPolicy{Documents: app.ScanMode(cfg.Scan.Documents), Images: app.ScanMode(cfg.Scan.Images)}), nil
+}
+
+// pictureRules reads the platform picture rules from catalog (cached 30 s); without a catalog URL the environment's default
+// profile is used as it is.
+func pictureRules(cfg config.Config, env string, httpClient *http.Client, log *slog.Logger) app.Option {
+	fallback := picturerules.FromEnv(env, cfg.PictureRules.Profile)
+	log.Info("picture rules", "fallbackProfile", string(fallback.Profile), "catalogUrl", cfg.PictureRules.CatalogURL)
+	if cfg.PictureRules.CatalogURL == "" {
+		return app.WithPictureRules(picturerules.Static(fallback))
+	}
+	return app.WithPictureRules(picturerules.NewClient(cfg.PictureRules.CatalogURL, httpClient, picturerules.DefaultTTL, fallback))
 }
 
 func moderation(cfg config.Config, log *slog.Logger, repo port.ImageRulesStore) []app.Option {

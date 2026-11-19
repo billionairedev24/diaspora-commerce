@@ -108,3 +108,8 @@ telemetry:
 # F10: no scanner locally (docker run -p 3310:3310 clamav/clamav then provider: clamd, address: localhost:3310 to try it).
 scan:
   provider: none
+# Platform picture rules (profile strict | startup | testing; staff change them in Settings > Picture rules, owned by catalog,
+# docs/engineering/picture-rules.md). `profile` is only the FALLBACK until catalog has answered; local starts on testing.
+pictureRules:
+  catalogUrl: http://localhost:8101
+  profile: testing

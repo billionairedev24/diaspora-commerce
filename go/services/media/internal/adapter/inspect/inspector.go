@@ -1,5 +1,5 @@
 // Package inspect implements port.Inspector: it sniffs the real file type from the bytes (never trusting the
-// declared type), decodes image dimensions and samples the border brightness for the white-background check.
+// declared type), decodes image dimensions (AVIF: read from the header) and samples the border brightness for the white-background check.
 // Plain text declared as CSV is reported as CSV, and ZIP archives that hold an Office Open XML workbook as XLSX.
 package inspect
 
@@ -18,6 +18,7 @@ import (
 
 	"golang.org/x/image/webp"
 
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/picturerules"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/port"
 )
@@ -35,10 +36,12 @@ func (i *inspectorImpl) Inspect(r io.Reader, size int64, declaredType string) (d
 	br := bufio.NewReaderSize(r, 4096)
 	head, _ := br.Peek(512)
 	ct := http.DetectContentType(head)
-	if bytes.HasPrefix(head, []byte("RIFF")) && len(head) >= 12 && string(head[8:12]) == "WEBP" {
-		ct = "image/webp"
+	// The accepted image types are decided by magic bytes alone (JPEG, PNG, WebP as RIFF....WEBP, AVIF as an ISO base media
+	// file whose ftyp brand is avif or avis), never by the file name or the declared type.
+	if t := picturerules.Sniff(head); t != "" {
+		ct = t
 	}
-	if isHEIC(head) {
+	if ct != picturerules.AVIF && isHEIC(head) {
 		// No dimensions: the standard library cannot decode HEIC, so only the type and size rules apply.
 		return domain.Inspection{ContentType: domain.ContentTypeHEIC, Bytes: size}, nil
 	}
@@ -57,12 +60,21 @@ func (i *inspectorImpl) Inspect(r io.Reader, size int64, declaredType string) (d
 			in.ContentType = domain.ContentTypeXLSX
 		}
 		return in, nil
-	case ct != "image/jpeg" && ct != "image/png" && ct != "image/webp":
+	case ct != "image/jpeg" && ct != "image/png" && ct != "image/webp" && ct != picturerules.AVIF:
 		return in, nil
 	}
 	data, err := io.ReadAll(br)
 	if err != nil {
 		return in, fmt.Errorf("read image: %w", err)
+	}
+	if ct == picturerules.AVIF {
+		// No AVIF decoder is available offline: the size comes from the header (ispe box), the pixels are not sampled.
+		w, h, derr := picturerules.Dimensions(data, ct)
+		if derr != nil {
+			return in, fmt.Errorf("avif header: %w", derr)
+		}
+		in.Width, in.Height, in.BorderBrightness = w, h, 255
+		return in, nil
 	}
 	var cfg image.Config
 	switch ct {

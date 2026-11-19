@@ -11,6 +11,7 @@ import (
 	"unicode"
 
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/auth"
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/picturerules"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/port"
 )
@@ -28,6 +29,20 @@ const (
 // imageRules is the configured thresholds with the staff override on top (cached; an unreadable override keeps the
 // last good rules, or the configured ones).
 func (s *mediaServiceImpl) imageRules(ctx context.Context) domain.ImageRules {
+	return s.withPictureRules(ctx, s.configuredRules(ctx))
+}
+
+// withPictureRules puts the platform picture rules (profile and knobs, read from catalog with a short cache) on top: under the
+// strict profile without overrides nothing changes. Without a source the configured rules stand.
+func (s *mediaServiceImpl) withPictureRules(ctx context.Context, base domain.ImageRules) domain.ImageRules {
+	if s.pictures == nil {
+		return base
+	}
+	return domain.ApplyPictureRules(base, s.pictures.Rules(ctx))
+}
+
+// configuredRules is the configuration with the media staff override on top (cached).
+func (s *mediaServiceImpl) configuredRules(ctx context.Context) domain.ImageRules {
 	if s.rulesStore == nil {
 		return s.baseRules
 	}
@@ -107,6 +122,10 @@ func (s *mediaServiceImpl) prepare(a *domain.Asset, data []byte, rules domain.Im
 	if a.Purpose != domain.PurposeProductImage || s.analyzer == nil {
 		return img, nil, nil
 	}
+	if img.Undecoded {
+		// AVIF: no decoder, so the pixels are not measured; only the size rules (read from the header) apply.
+		return img, &domain.ImageMetrics{}, nil
+	}
 	an, err := s.analyzer.Analyze(img.Data, a.ContentType, a.ImageSlot == domain.ImageSlotMain, rules.Main)
 	if err != nil {
 		return port.ProcessedImage{}, nil, fmt.Errorf("analyse image: %w", err)
@@ -130,6 +149,8 @@ func extFor(contentType string) string {
 		return ".png"
 	case "image/webp":
 		return ".webp"
+	case picturerules.AVIF:
+		return ".avif"
 	default:
 		return ""
 	}
