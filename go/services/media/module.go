@@ -15,6 +15,7 @@ import (
 	pkgconfig "github.com/billionairedev24/diaspora-commerce/go/pkg/config"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/httpserver"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/module"
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/picturerules"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/aimoderation"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/authn"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/azblobstore"
@@ -133,6 +134,7 @@ func build(host Deps, ctx context.Context, closers *module.Closers) (Module, err
 	} else if o != nil {
 		opts = append(opts, o)
 	}
+	opts = append(opts, pictureRules(cfg, loader.Env(), httpClient, log))
 	svc := app.NewMediaService(stores, repo, inspect.New(40_000_000),
 		domain.LinkPolicy{Default: cfg.Links.DefaultTTL, MaxLong: cfg.Links.MaxLongTTL}, opts...)
 
@@ -220,6 +222,17 @@ func moderation(cfg config.Config, log *slog.Logger, repo port.ImageRulesStore) 
 			domain.ModerationPolicy{AIFailOpen: cfg.FailOpen(), DuplicateDistance: m.DuplicateDistance}, m.AI.Timeout),
 		app.WithImageRules(cfg.Images, imageproc.NewAnalyzer(maxPixels), repo),
 	}
+}
+
+// pictureRules reads the platform picture rules from catalog (cached 30 s); without a catalog URL the environment's default
+// profile is used as it is.
+func pictureRules(cfg config.Config, env string, httpClient *http.Client, log *slog.Logger) app.Option {
+	fallback := picturerules.FromEnv(env, cfg.PictureRules.Profile)
+	log.Info("picture rules", "fallbackProfile", string(fallback.Profile), "catalogUrl", cfg.PictureRules.CatalogURL)
+	if cfg.PictureRules.CatalogURL == "" {
+		return app.WithPictureRules(picturerules.Static(fallback))
+	}
+	return app.WithPictureRules(picturerules.NewClient(cfg.PictureRules.CatalogURL, httpClient, picturerules.DefaultTTL, fallback))
 }
 
 // links enables media-hosted long-lived links when a signing key is configured.

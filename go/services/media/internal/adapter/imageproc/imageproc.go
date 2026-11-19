@@ -1,5 +1,5 @@
 // Package imageproc implements port.ImageProcessor: it removes metadata (EXIF with GPS and camera details, XMP,
-// IPTC, comments and text chunks) from JPEG, PNG and WebP images losslessly, re-encoding a JPEG only when its EXIF
+// IPTC, comments and text chunks) from JPEG, PNG, WebP and AVIF images losslessly (AVIF is never decoded, see avif.go), re-encoding a JPEG only when its EXIF
 // orientation must be applied to the pixels, and computes a 64-bit difference hash (dHash) for duplicate detection
 // plus a small JPEG preview for the AI moderation hook.
 package imageproc
@@ -16,6 +16,7 @@ import (
 	"golang.org/x/image/draw"
 	"golang.org/x/image/webp"
 
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/picturerules"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/port"
 )
 
@@ -38,6 +39,9 @@ func New(maxPixels int) port.ImageProcessor { return &processorImpl{maxPixels: m
 var ErrTooLarge = errors.New("image has too many pixels")
 
 func (p *processorImpl) Process(data []byte, contentType string) (port.ProcessedImage, error) {
+	if contentType == picturerules.AVIF {
+		return p.processAVIF(data)
+	}
 	cfg, err := decodeConfig(data, contentType)
 	if err != nil {
 		return port.ProcessedImage{}, fmt.Errorf("read image header: %w", err)
@@ -79,6 +83,22 @@ func (p *processorImpl) Process(data []byte, contentType string) (port.Processed
 		return port.ProcessedImage{}, err
 	}
 	return out, nil
+}
+
+// processAVIF handles the one format that is not decoded: size from the header, metadata zeroed in place, no hash or preview.
+func (p *processorImpl) processAVIF(data []byte) (port.ProcessedImage, error) {
+	w, h, err := picturerules.Dimensions(data, picturerules.AVIF)
+	if err != nil {
+		return port.ProcessedImage{}, fmt.Errorf("read image header: %w", err)
+	}
+	if w*h > p.maxPixels {
+		return port.ProcessedImage{}, fmt.Errorf("%w: %d×%d", ErrTooLarge, w, h)
+	}
+	out, stripped, err := stripAVIF(data)
+	if err != nil {
+		return port.ProcessedImage{}, fmt.Errorf("strip metadata: %w", err)
+	}
+	return port.ProcessedImage{Data: out, Stripped: stripped, Width: w, Height: h, Undecoded: true}, nil
 }
 
 func decodeConfig(data []byte, contentType string) (image.Config, error) {

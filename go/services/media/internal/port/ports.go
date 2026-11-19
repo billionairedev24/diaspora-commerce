@@ -96,6 +96,9 @@ type ProcessedImage struct {
 	Hash uint64
 	// Preview is a small JPEG (longest edge ≤ 768 px) sent to the AI moderation hook.
 	Preview []byte
+	// Undecoded is true for a format with no decoder here (AVIF): Width and Height come from the file header, there is no Hash
+	// and no Preview, so the pixels are neither analysed nor shown to the AI hook.
+	Undecoded bool
 }
 
 // ImageProcessor strips metadata from uploaded images and computes their perceptual hash and preview.

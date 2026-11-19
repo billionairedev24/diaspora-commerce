@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/auth"
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/picturerules"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/port"
 )
@@ -152,6 +153,12 @@ func WithImageRules(base domain.ImageRules, analyzer port.ImageAnalyzer, store p
 	return func(s *mediaServiceImpl) { s.baseRules, s.analyzer, s.rulesStore = base, analyzer, store }
 }
 
+// WithPictureRules puts the platform picture rules (the profile and knobs staff set in Settings > Picture rules, read from
+// catalog with a short cache) on top of the configured image thresholds. Without it only the configuration applies.
+func WithPictureRules(src picturerules.Source) Option {
+	return func(s *mediaServiceImpl) { s.pictures = src }
+}
+
 // WithClock replaces time.Now (tests).
 func WithClock(now func() time.Time) Option { return func(s *mediaServiceImpl) { s.now = now } }
 
@@ -186,6 +193,7 @@ type mediaServiceImpl struct {
 	rulesMu    sync.Mutex
 	rulesAt    time.Time
 	rulesNow   domain.ImageRules
+	pictures   picturerules.Source
 	rescoring  chan struct{}
 
 	scanner    port.Scanner
@@ -527,7 +535,11 @@ func (s *mediaServiceImpl) finish(ctx context.Context, a domain.Asset) (domain.A
 	status, flags := domain.JudgeRules(a.Purpose, rules, in)
 	isImage := a.Purpose == domain.PurposeProductImage
 	var checks []domain.Check
-	if inspectErr != nil {
+	if moderated && strings.HasPrefix(in.ContentType, "image/") && picturerules.HasActiveContent(data) {
+		// A polyglot: a valid image header around markup or script. Refused under every profile, with no way to relax it.
+		status, flags = domain.StatusRejected, []string{"file contains markup or script, not only an image"}
+		checks = []domain.Check{domain.NewCheck(domain.CodeNotAnImage, domain.VerdictReject, nil)}
+	} else if inspectErr != nil {
 		status, flags = domain.StatusRejected, []string{"file could not be read as " + a.ContentType}
 		checks = []domain.Check{domain.NewCheck(domain.CodeNotAnImage, domain.VerdictReject, nil)}
 	} else if c := domain.ImageFileCheck(rules, in); isImage && status == domain.StatusRejected && c != nil {
@@ -622,8 +634,8 @@ func (s *mediaServiceImpl) ImportImageFromURL(ctx context.Context, actor auth.Ac
 	}
 	// The bytes decide the type, not the server's header.
 	contentType := sniff(f.Data)
-	if !slices.Contains(rules.ContentTypes, contentType) {
-		return domain.Asset{}, fmt.Errorf("%w: the link is not a JPG, PNG or WebP image", domain.ErrRejected)
+	if !slices.Contains(rules.ContentTypes, contentType) || picturerules.HasActiveContent(f.Data) {
+		return domain.Asset{}, fmt.Errorf("%w: the link is not a JPG, PNG, WebP or AVIF image", domain.ErrRejected)
 	}
 	st, err := s.holding(p)
 	if err != nil {
@@ -631,7 +643,7 @@ func (s *mediaServiceImpl) ImportImageFromURL(ctx context.Context, actor auth.Ac
 	}
 	now := s.now().UTC()
 	id := uuid.NewString()
-	ext := map[string]string{"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}[contentType]
+	ext := picturerules.Extension(contentType)
 	fileName := f.FileName
 	if fileName == "" || len(fileName) > 200 {
 		fileName = id + ext
@@ -656,19 +668,9 @@ func (s *mediaServiceImpl) ImportImageFromURL(ctx context.Context, actor auth.Ac
 	return s.finish(ctx, a)
 }
 
-// sniff returns the image type of the bytes (image/jpeg, image/png, image/webp) or "" for anything else.
-func sniff(data []byte) string {
-	switch {
-	case len(data) >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF:
-		return "image/jpeg"
-	case len(data) >= 8 && string(data[:8]) == "\x89PNG\r\n\x1a\n":
-		return "image/png"
-	case len(data) >= 12 && string(data[:4]) == "RIFF" && string(data[8:12]) == "WEBP":
-		return "image/webp"
-	default:
-		return ""
-	}
-}
+// sniff returns the accepted image type of the bytes (image/jpeg, image/png, image/webp, image/avif) or "" for anything else:
+// magic bytes only, never the file name or the server's header.
+func sniff(data []byte) string { return picturerules.Sniff(data) }
 
 // save writes the asset; when another request changed it first (a concurrent completion), the stored copy wins.
 func (s *mediaServiceImpl) save(ctx context.Context, a domain.Asset) (domain.Asset, error) {
@@ -716,17 +718,19 @@ func (s *mediaServiceImpl) moderate(ctx context.Context, st port.ObjectStore, a 
 		}
 	}
 	hash := img.Hash
-	a.PHash = &hash
 	input := domain.ModerationInput{OwnerOrg: a.OwnerOrg, MetadataStripped: img.Stripped, AIOff: s.moderator == nil,
-		Slot: slot, ProductTypeCode: a.Hint.ProductTypeCode, Rules: rules}
-	if s.policy.DuplicateDistance >= 0 {
+		Slot: slot, ProductTypeCode: a.Hint.ProductTypeCode, Rules: rules, NotInspectable: img.Undecoded}
+	if !img.Undecoded {
+		a.PHash = &hash
+	}
+	if s.policy.DuplicateDistance >= 0 && !img.Undecoded {
 		similar, err := s.repo.SimilarImages(ctx, publicPurposes(), hash, s.policy.DuplicateDistance, a.ID, 5)
 		if err != nil {
 			s.log.WarnContext(ctx, "duplicate check failed; continuing without it", "asset_id", a.ID, "error", err)
 		}
 		input.Similar = similar
 	}
-	if s.moderator != nil {
+	if s.moderator != nil && !img.Undecoded {
 		actx, cancel := context.WithTimeout(ctx, s.aiTimeout)
 		hint := a.Hint
 		hint.Slot = slot

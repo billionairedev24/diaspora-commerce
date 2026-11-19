@@ -117,6 +117,9 @@ type ModerationInput struct {
 	Slot            ImageSlot
 	ProductTypeCode string
 	Rules           ImageRules
+	// NotInspectable is true for a format that cannot be decoded here (AVIF): the AI hook and the duplicate check never saw
+	// the pixels. The strict standard holds such an image for staff; the relaxed profiles publish it with a note.
+	NotInspectable bool
 }
 
 // Moderate combines the AI verdict and duplicate matches into a moderation result:
@@ -139,6 +142,13 @@ func Moderate(p ModerationPolicy, in ModerationInput) Moderation {
 		m.Checks = append(m.Checks, checks...)
 	}
 	switch {
+	case in.NotInspectable:
+		m.AI = AIOff
+		if in.Rules.PassUninspectable {
+			m.Reasons = append(m.Reasons, "format cannot be inspected here (AVIF): published without a visual check")
+		} else {
+			holdWith("format cannot be inspected here (AVIF); held for staff review", NewCheck(CodeHeldReview, VerdictHold, nil))
+		}
 	case in.AIOff:
 	case in.AIErr != nil || in.AI == nil:
 		m.AI = AIUnavailable
