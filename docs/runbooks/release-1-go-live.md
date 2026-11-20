@@ -88,7 +88,7 @@ cd <worktree of origin/release-1>
 
 ## 4. Pre-flight (GitHub, local tools)
 
-1. Items 1, 7, 8 of section 1. Verify: `gh api repos/billionairedev24/diaspora-commerce --jq .default_branch` prints `release-1`.
+1. Items 1, 7, 8 of section 1. The GitHub variables and secrets for UAT can be set with `tools/release/uat-github-setup.sh list` (explains where to get each) then `set` (hidden prompts, values go to `gh` on stdin, never printed) then `verify`; the cluster secrets (Stripe, Resend, R2, Layerbase, tunnel) are NOT GitHub secrets, see section 6. Verify: `gh api repos/billionairedev24/diaspora-commerce --jq .default_branch` prints `release-1`.
 2. Tools: `tofu >= 1.9 kubectl sops age psql helm kustomize kubeconform argocd gh python3 rclone`. Offline gate (expect every line OK):
    ```bash
    python3 infra/argocd/scripts/check_launch_set.py            # [uat] and [prod]: afrotransact-core runs 14 modules, afrotransact-go runs 7, "OK"
