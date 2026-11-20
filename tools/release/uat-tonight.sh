@@ -26,6 +26,7 @@ SERVICES=(afrotransact-core afrotransact-go)
 
 [[ "$ENV" == "uat" ]] || { echo "This script is UAT only (got ENV=$ENV). PROD is a separate, reviewed run." >&2; exit 2; }
 cd "$(git rev-parse --show-toplevel)" || exit 2
+ROOT="$(pwd)"
 
 say()  { printf '\n== %s\n' "$*"; }
 ok()   { printf 'OK    %s\n' "$*"; }
@@ -95,7 +96,7 @@ stage_check() {
     for d in java/apps/core go/apps/afrotransact-go; do
       ( cd "$d/deploy/helm" && helm dependency build . >/dev/null 2>&1 && \
         helm template x . -n "afrotransact-$ENV" -f values.yaml -f "values-$ENV.yaml" \
-          -f "../../../../infra/argocd/envs/$ENV/platform-values.yaml" --set image.tag="$EXPECTED_SHA" \
+          -f "$ROOT/infra/argocd/envs/$ENV/platform-values.yaml" --set image.tag="$EXPECTED_SHA" \
         | kubeconform -ignore-missing-schemas -summary - >/dev/null ) \
         && ok "helm template + kubeconform: $d ($ENV)" || bad "helm template or kubeconform failed: $d ($ENV)"
     done
