@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CheckoutView } from '@/components/checkout/CheckoutView';
-import { initialChoice, PackageCard, placeable } from '@/components/checkout/PackageCard';
+import { initialChoice, needsPickupConfirm, PackageCard, placeable } from '@/components/checkout/PackageCard';
 import { onRequestQuote } from '@/components/checkout/quote';
 
 import { installMockBff, signInDemo } from './mockBff';
@@ -109,6 +109,73 @@ describe('an address outside every delivery zone', () => {
     expect(screen.getByTestId('fulfil-pickup')).toBeInTheDocument();
     await user.click(screen.getByTestId('fulfil-pickup'));
     expect(screen.getByText('Houston FC — Will Call')).toBeInTheDocument();
+  });
+});
+
+/** A seller's own "Pick up" offer: gateway-bff gives it no delivery option, only the pickup one (the reported checkout bug). */
+function sellerPickupOnly(): CheckoutPackage {
+  return { ...pkg([pickup]), packageId: 'org_s:SELLER', fulfilment: 'SELLER', heading: 'Sold by Mama Put', deliveryUnavailableReason: 'SELLER_PICKUP_ONLY' } as CheckoutPackage;
+}
+
+describe('pick up is never assigned silently (owner report: "it automatically said I should pickup at a location")', () => {
+  it('defaults to delivery and shows an explicit Delivery / Pick up choice when both are possible', () => {
+    const p = pkg([delivery, pickup]);
+    const c = initialChoice(p);
+    expect(c.option).toBe('afrotransact_delivery');
+    expect(needsPickupConfirm(c)).toBe(false);
+    card(p);
+    expect(screen.getByRole('group', { name: /How Lagos Foods/ })).toBeInTheDocument();
+    expect(screen.getByText('How would you like to get these items?')).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /^Delivered by AfroTransact / })).toBeChecked();
+    expect(screen.getByRole('radio', { name: /^Pickup / })).not.toBeChecked();
+  });
+
+  it('starts a pick up only package unconfirmed, says why in plain words, and needs the shopper to confirm the location', async () => {
+    const user = userEvent.setup();
+    const p = sellerPickupOnly();
+    expect(initialChoice(p)).toMatchObject({ option: 'pickup', pickupConfirm: 'unconfirmed' });
+    expect(needsPickupConfirm(initialChoice(p))).toBe(true);
+    card(p);
+    expect(screen.getByTestId('pickup-only')).toHaveTextContent('This seller offers pick up only');
+    expect(screen.getByTestId('package-promise')).toHaveTextContent('Confirm where you’ll pick up');
+    expect(screen.queryByRole('radio', { name: /^Delivered/ })).toBeNull();
+    await user.click(screen.getByTestId('pickup-confirm-button'));
+    expect(screen.getByTestId('pickup-confirm')).toHaveTextContent('Pick up confirmed');
+    expect(screen.getByTestId('package-promise')).toHaveTextContent('Pickup');
+  });
+
+  it('says delivery is not available to the address, with Change address, when that is why only pick up is left', () => {
+    const p = { ...pkg([quote, pickup]), deliveryUnavailableReason: 'ADDRESS' } as CheckoutPackage;
+    card(p);
+    expect(screen.getByTestId('pickup-only')).toHaveTextContent('Delivery isn’t available to this address');
+    expect(within(screen.getByTestId('pickup-only')).getByRole('button', { name: 'Change address' })).toBeInTheDocument();
+    expect(initialChoice(p)).toMatchObject({ option: 'pickup', pickupConfirm: 'unconfirmed' });
+  });
+
+  it('is an honest dead end when there is neither delivery nor pick up: Change address or Remove item', () => {
+    const p = { ...pkg([]), fulfilment: 'SELLER', noFulfilment: true } as CheckoutPackage;
+    card(p);
+    const dead = screen.getByTestId('no-way');
+    expect(dead).toHaveTextContent('This item can’t be delivered or picked up right now');
+    expect(within(dead).getByRole('button', { name: 'Change address' })).toBeInTheDocument();
+    expect(within(dead).getByRole('button', { name: /Remove/ })).toBeInTheDocument();
+    expect(screen.queryByTestId('pickup-confirm')).toBeNull();
+  });
+});
+
+describe('checkout page with a seller who offers pick up only (mock BFF)', () => {
+  it('shows the reason, blocks Place your order until the pick up location is confirmed, then allows it', async () => {
+    const user = userEvent.setup();
+    const api = await signInDemo();
+    await api.addToCart({ offerId: 'AT00000P11-patel-grocers', quantity: 1 }); // Patel Grocers: a seller's own Pick up offer
+    renderWithProviders(<CheckoutView />);
+    const pk = await screen.findByTestId('checkout-package');
+    expect(pk).toHaveAttribute('data-mode', 'pickup-only');
+    expect(within(pk).getByTestId('pickup-only')).toHaveTextContent('This seller offers pick up only');
+    expect(screen.getAllByRole('button', { name: 'Place your order' })[0]).toBeDisabled();
+    expect(screen.getByTestId('delivery-blocked-note')).toHaveTextContent('Confirm where you’ll pick up');
+    await user.click(within(pk).getByTestId('pickup-confirm-button'));
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Place your order' })[0]).toBeEnabled());
   });
 });
 

@@ -2089,5 +2089,19 @@
   "store.gone.search": "Search all products",
   "store.meta.title": "{name}",
   "ord.mode.legacy_seller_shipped": "Shipped by the seller",
-  "co.noFulfilment": "This seller doesn’t offer delivery or pickup for these items near you, so they can’t be bought right now. Remove them or choose another address."
+  "co.noFulfilment": "This seller doesn’t offer delivery or pickup for these items near you, so they can’t be bought right now. Remove them or choose another address.",
+  "co.pickupOnly.seller": "This seller offers pick up only",
+  "co.pickupOnly.address": "Delivery isn’t available to this address",
+  "co.pickupOnly.tipLabel": "Why only pick up?",
+  "co.pickupOnly.sellerTip": "This seller hasn’t set up delivery for these items, so you collect them from the seller. Nothing is chosen for you: confirm the pick up location below.",
+  "co.pickupOnly.addressTip": "Delivery can’t reach the address you chose. Change the address to see whether delivery is available, or confirm pick up below. Nothing is chosen for you.",
+  "co.pickupOnly.confirmTitle": "Confirm where you’ll pick up",
+  "co.pickupOnly.confirm": "Confirm pick up location",
+  "co.pickupOnly.needed": "Confirm the location to place your order.",
+  "co.pickupOnly.confirmed": "Pick up confirmed · {place}",
+  "co.pickupOnly.placeNote": "Confirm where you’ll pick up your items to place the order.",
+  "co.noWay.seller": "This item can’t be delivered or picked up right now",
+  "co.noWay.address": "Delivery isn’t available to this address",
+  "co.noWay.body": "There’s no pick up point near this address either. Change the address or remove this item to continue.",
+  "co.fulfil.choose": "How would you like to get these items?"
 }

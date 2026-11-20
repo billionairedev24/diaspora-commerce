@@ -38,7 +38,8 @@ import styles from './Checkout.module.css';
 import { CheckoutOrderPanel } from './CheckoutOrderPanel';
 import { CheckoutState } from './CheckoutState';
 import { CheckoutStep, type StepState } from './CheckoutStep';
-import { type Choice, feeOf, initialChoice, lineIssue, PackageCard, placeable, promiseOf } from './PackageCard';
+import { fulfilmentOf } from './fulfilment';
+import { type Choice, feeOf, initialChoice, lineIssue, needsPickupConfirm, PackageCard, placeable, promiseOf } from './PackageCard';
 import { PaymentStep } from './PaymentStep';
 import { PromoCode } from './PromoCode';
 
@@ -124,8 +125,17 @@ export function CheckoutView() {
       const next = { ...c };
       for (const p of s.packages) {
         const cur = next[p.packageId];
-        if (!cur || !p.deliveryOptions.some((o) => o.key === cur.option)) next[p.packageId] = initialChoice(p);
-        else if (cur.option === 'pickup' && !p.pickupPoints?.some((x) => x.id === cur.pickupPointId)) next[p.packageId] = { ...cur, pickupPointId: p.pickupPoints?.[0]?.id };
+        const f = fulfilmentOf(p);
+        // A choice that no longer fits what the address allows starts over from the default (delivery when it is possible).
+        const stale =
+          !cur ||
+          !p.deliveryOptions.some((o) => o.key === cur.option) ||
+          // Pick up that was only assumed or only confirmed because nothing else existed: dropped as soon as delivery is possible.
+          (cur.option === 'pickup' && f.delivery.length > 0 && cur.pickupConfirm !== 'chosen') ||
+          // A delivery choice the address can no longer take, while pick up is available: back to the (unconfirmed) pick up default.
+          (cur.option !== 'pickup' && f.delivery.length === 0 && f.pickup);
+        if (stale) next[p.packageId] = initialChoice(p);
+        else if (cur.option === 'pickup' && !p.pickupPoints?.some((x) => x.id === cur.pickupPointId)) next[p.packageId] = { ...cur, pickupPointId: p.pickupPoints?.[0]?.id, pickupConfirm: 'unconfirmed' };
       }
       return next;
     });
@@ -217,8 +227,12 @@ export function CheckoutView() {
   const feeUnknown = chosenOptions.some((o) => o?.feeUnknown);
   // An item out of stock, or wanted in a larger quantity than is left, is said on the item itself and stops the order.
   const stockIssue = (s?.packages ?? []).some((p) => p.lines.some((l) => ['out', 'short'].includes(lineIssue(l, blockedLines)?.kind ?? '')));
-  const deliveryReason = quoteBlocked ? t('co.quote.blocked') : feeUnknown ? t('co.fee.unknownBlocked') : stockIssue ? t('co.line.placeHint') : null;
-  const blocked = undeliverable || preLocked || taxBlocked || quoteBlocked || feeUnknown || stockIssue;
+  // Pick up is the only way for a package and the shopper has not confirmed the location: the order waits for them (never silent).
+  const pickupUnconfirmed = (s?.packages ?? []).some((p) => needsPickupConfirm(choices[p.packageId] ?? initialChoice(p)));
+  // A package with no way to reach the shopper at all (no delivery, no pick up near) can't be bought as it is.
+  const noWay = (s?.packages ?? []).some((p) => !p.preorder && fulfilmentOf(p).mode === 'none');
+  const deliveryReason = quoteBlocked ? t('co.quote.blocked') : feeUnknown ? t('co.fee.unknownBlocked') : stockIssue ? t('co.line.placeHint') : pickupUnconfirmed ? t('co.pickupOnly.placeNote') : null;
+  const blocked = undeliverable || preLocked || taxBlocked || quoteBlocked || feeUnknown || stockIssue || pickupUnconfirmed || noWay;
   const [removing, setRemoving] = useState<string | null>(null);
   const [removingLine, setRemovingLine] = useState<string | null>(null);
   /** Takes the line out of this order (it stays in the cart, as for an undeliverable package). */

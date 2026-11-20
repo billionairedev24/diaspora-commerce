@@ -2096,5 +2096,19 @@
   "store.gone.search": "Buscar todos los productos",
   "store.meta.title": "{name}",
   "ord.mode.legacy_seller_shipped": "Enviado por el vendedor",
-  "co.noFulfilment": "Este vendedor no ofrece entrega ni recogida para estos artículos cerca de ti, por lo que no se pueden comprar ahora. Quítalos o elige otra dirección."
+  "co.noFulfilment": "Este vendedor no ofrece entrega ni recogida para estos artículos cerca de ti, por lo que no se pueden comprar ahora. Quítalos o elige otra dirección.",
+  "co.pickupOnly.seller": "Este vendedor solo ofrece recogida",
+  "co.pickupOnly.address": "La entrega no está disponible en esta dirección",
+  "co.pickupOnly.tipLabel": "¿Por qué solo recogida?",
+  "co.pickupOnly.sellerTip": "Este vendedor no ha activado la entrega para estos artículos, así que los recoges con él. No se elige nada por ti: confirma el lugar de recogida abajo.",
+  "co.pickupOnly.addressTip": "La entrega no llega a la dirección elegida. Cambia la dirección para ver si hay entrega, o confirma la recogida abajo. No se elige nada por ti.",
+  "co.pickupOnly.confirmTitle": "Confirma dónde recogerás",
+  "co.pickupOnly.confirm": "Confirmar lugar de recogida",
+  "co.pickupOnly.needed": "Confirma el lugar para hacer tu pedido.",
+  "co.pickupOnly.confirmed": "Recogida confirmada · {place}",
+  "co.pickupOnly.placeNote": "Confirma dónde recogerás tus artículos para hacer el pedido.",
+  "co.noWay.seller": "Este artículo no se puede entregar ni recoger ahora",
+  "co.noWay.address": "La entrega no está disponible en esta dirección",
+  "co.noWay.body": "Tampoco hay un punto de recogida cerca de esta dirección. Cambia la dirección o quita este artículo para continuar.",
+  "co.fulfil.choose": "¿Cómo quieres recibir estos artículos?"
 }

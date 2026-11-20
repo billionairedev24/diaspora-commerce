@@ -612,7 +612,20 @@ type CheckoutPackage struct {
 	// package, so it cannot be bought. Sellers do not ship themselves; the app says what the shopper can do (remove it, choose
 	// another address). Never set while the pickup facts are unknown (no address yet, lookup failed).
 	NoFulfilment bool `json:"noFulfilment"`
+	// DeliveryUnavailableReason is why the package cannot be delivered (DeliveryWhy*); empty when it can. It is what lets the
+	// page say "this seller offers pick up only" or "delivery isn't available to this address" instead of showing pickup as if
+	// it had been chosen. Machine-readable: the app words it.
+	DeliveryUnavailableReason string `json:"deliveryUnavailableReason,omitempty"`
 }
+
+// Reasons a package has no delivery at checkout (CheckoutPackage.DeliveryUnavailableReason).
+const (
+	// DeliveryWhySellerPickupOnly: the offer is "Pick up" (the seller's own fulfilment, which has no delivery option).
+	DeliveryWhySellerPickupOnly = "SELLER_PICKUP_ONLY"
+	// DeliveryWhyAddress: AfroTransact delivery can't reach the chosen address (outside every zone, beyond the store's range,
+	// or the store can't be served).
+	DeliveryWhyAddress = "ADDRESS"
+)
 
 // Reasons a package has no pickup option at checkout (CheckoutPackage.PickupUnavailableReason).
 const (

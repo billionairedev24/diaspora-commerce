@@ -243,6 +243,8 @@ export const CheckoutPackageSchema = CartPackageSchema.extend({
   pickupUnavailableReason: z.enum(['NEEDS_ADDRESS', 'SELLER_NOT_ENABLED', 'TOO_FAR', 'OTHER_AREA', 'NO_PLATFORM_POINT', 'LOOKUP_FAILED']).optional(),
   /** The seller offers neither Seller pickup (for this address) nor Fulfilled by AfroTransact for this package: it can't be bought (never true while the pickup facts are unknown). */
   noFulfilment: z.boolean().optional(),
+  /** Why the package can't be delivered (absent when it can): a seller's own Pick up offer, or an address delivery can't reach. */
+  deliveryUnavailableReason: z.enum(['SELLER_PICKUP_ONLY', 'ADDRESS']).optional(),
   localDelivery: CheckoutLocalDeliverySchema.optional(),
   /** The part of this package's delivery fee the shopper's membership waives (S323); 0 or absent for none. */
   membershipWaivedMinor: MinorSchema.optional()

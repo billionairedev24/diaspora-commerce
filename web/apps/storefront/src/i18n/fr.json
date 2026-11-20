@@ -2096,5 +2096,19 @@
   "store.gone.search": "Rechercher tous les produits",
   "store.meta.title": "{name}",
   "ord.mode.legacy_seller_shipped": "Expédié par le vendeur",
-  "co.noFulfilment": "Ce vendeur ne propose ni livraison ni retrait pour ces articles près de chez vous ; ils ne peuvent donc pas être achetés pour le moment. Retirez-les ou choisissez une autre adresse."
+  "co.noFulfilment": "Ce vendeur ne propose ni livraison ni retrait pour ces articles près de chez vous ; ils ne peuvent donc pas être achetés pour le moment. Retirez-les ou choisissez une autre adresse.",
+  "co.pickupOnly.seller": "Ce vendeur propose uniquement le retrait",
+  "co.pickupOnly.address": "La livraison n’est pas disponible à cette adresse",
+  "co.pickupOnly.tipLabel": "Pourquoi uniquement le retrait ?",
+  "co.pickupOnly.sellerTip": "Ce vendeur n’a pas activé la livraison pour ces articles : vous les récupérez chez lui. Rien n’est choisi à votre place : confirmez le lieu de retrait ci-dessous.",
+  "co.pickupOnly.addressTip": "La livraison ne peut pas atteindre l’adresse choisie. Changez d’adresse pour voir si la livraison est possible, ou confirmez le retrait ci-dessous. Rien n’est choisi à votre place.",
+  "co.pickupOnly.confirmTitle": "Confirmez où vous récupérerez",
+  "co.pickupOnly.confirm": "Confirmer le lieu de retrait",
+  "co.pickupOnly.needed": "Confirmez le lieu pour passer votre commande.",
+  "co.pickupOnly.confirmed": "Retrait confirmé · {place}",
+  "co.pickupOnly.placeNote": "Confirmez où vous récupérerez vos articles pour passer la commande.",
+  "co.noWay.seller": "Cet article ne peut être ni livré ni retiré pour le moment",
+  "co.noWay.address": "La livraison n’est pas disponible à cette adresse",
+  "co.noWay.body": "Il n’y a pas non plus de point de retrait près de cette adresse. Changez d’adresse ou retirez cet article pour continuer.",
+  "co.fulfil.choose": "Comment souhaitez-vous recevoir ces articles ?"
 }

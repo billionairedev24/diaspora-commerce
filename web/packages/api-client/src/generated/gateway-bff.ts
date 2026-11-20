@@ -5237,6 +5237,8 @@ export interface components {
                 pickupUnavailableReason?: "NEEDS_ADDRESS" | "SELLER_NOT_ENABLED" | "TOO_FAR" | "OTHER_AREA" | "NO_PLATFORM_POINT" | "LOOKUP_FAILED";
                 /** @description The seller offers neither Seller pickup (for this address) nor Fulfilled by AfroTransact for this package, so it cannot be bought (the summary has canPlaceOrder false). Sellers do not ship themselves. Never true while the pickup facts are unknown (no address yet, lookup failed). */
                 noFulfilment?: boolean;
+                /** @description Why the package cannot be delivered; absent when it can. SELLER_PICKUP_ONLY is a seller's own "Pick up" offer (it has no delivery option); ADDRESS means delivery cannot reach the chosen address (outside every delivery zone, beyond the store's range, or the store cannot be served). Machine-readable; clients word it, and pickup is never chosen for the shopper because of it. */
+                deliveryUnavailableReason?: "SELLER_PICKUP_ONLY" | "ADDRESS";
             })[];
             addresses: components["schemas"]["Address"][];
             paymentMethods: components["schemas"]["PaymentMethod"][];
