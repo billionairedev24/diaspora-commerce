@@ -154,7 +154,8 @@
 .finishTotal { margin: 0; font-size: var(--at-text-xl, var(--at-text-lg)); color: var(--at-color-price); font-variant-numeric: tabular-nums; }
 .finishTotal strong { font-weight: var(--at-weight-bold); }
 .notes { display: flex; flex-direction: column; gap: var(--at-space-2); font-size: var(--at-text-xs); color: var(--at-color-text-muted); line-height: var(--at-leading-normal); }
-.noteLine { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--at-space-1); }
+.noteLine { margin: 0; }
+.noteLine > :global(span) { margin-inline-start: var(--at-space-1); vertical-align: middle; }
 .noteLine a, .backToCart { color: var(--at-color-link); text-decoration: underline; text-underline-offset: 2px; }
 .backToCart { display: inline-flex; align-items: center; gap: var(--at-space-1); align-self: flex-start; min-height: 24px; font-size: var(--at-text-sm); }
 .terms { margin: 0; font-size: var(--at-text-xs); color: var(--at-color-text-muted); line-height: var(--at-leading-normal); }
