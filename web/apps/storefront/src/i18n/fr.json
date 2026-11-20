@@ -2110,5 +2110,16 @@
   "co.noWay.seller": "Cet article ne peut être ni livré ni retiré pour le moment",
   "co.noWay.address": "La livraison n’est pas disponible à cette adresse",
   "co.noWay.body": "Il n’y a pas non plus de point de retrait près de cette adresse. Changez d’adresse ou retirez cet article pour continuer.",
-  "co.fulfil.choose": "Comment souhaitez-vous recevoir ces articles ?"
+  "co.fulfil.choose": "Comment souhaitez-vous recevoir ces articles ?",
+  "co.status.done": "Terminé",
+  "co.status.open": "En cours",
+  "co.status.todo": "Pas commencé",
+  "co.changeItemsAria": "Modifier les articles (ouvre votre panier)",
+  "co.tax.later": "Calculée à l’étape suivante",
+  "co.finish.aria": "Passer votre commande",
+  "co.note.tax": "Pourquoi une taxe de vente a-t-elle été appliquée ?",
+  "co.note.taxTipLabel": "À propos de la taxe de vente",
+  "co.note.taxTip": "La taxe de vente est calculée pour votre adresse de livraison et les articles achetés. Un montant n’est affiché qu’une fois calculé ; d’ici là, le total est affiché avant taxe.",
+  "co.note.help": "Besoin d’aide ? Consultez le",
+  "co.backToCart": "Retour au panier"
 }

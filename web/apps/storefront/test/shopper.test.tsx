@@ -131,7 +131,7 @@ describe('checkout (mock BFF + mock Stripe)', () => {
     expect(within(pkg2).getAllByText(/Mon–Sat/).length).toBeGreaterThan(0);
     await user.click(within(pkg2).getByTestId('delivery-option-afrotransact_delivery'));
     await user.click(within(pkg2).getByRole('radio', { name: /^Delivered by AfroTransact / }));
-    await user.click(screen.getByRole('button', { name: 'Place your order' }));
+    await user.click(screen.getAllByRole('button', { name: 'Place your order' })[0] as HTMLElement);
     const push = useRouter().push;
     await waitFor(() => expect(push).toHaveBeenCalledWith(expect.stringMatching(/^\/orders\?placed=AT-2026-/)), { timeout: 5000 });
     const orders = await api.getOrderPage();
@@ -172,7 +172,7 @@ describe('checkout (mock BFF + mock Stripe)', () => {
     const summary = screen.getByTestId('order-summary');
     expect(summary).toHaveTextContent(/DeliveryFREE/);
     expect(summary).toHaveTextContent(/1 pickup: no shipping charge/);
-    await user.click(screen.getByRole('button', { name: 'Place your order' }));
+    await user.click(screen.getAllByRole('button', { name: 'Place your order' })[0] as HTMLElement);
     const push = useRouter().push;
     await waitFor(() => expect(push).toHaveBeenCalled(), { timeout: 5000 });
     const placed = String(vi.mocked(push).mock.calls.at(-1)?.[0] ?? '').split('placed=')[1] ?? '';
@@ -198,7 +198,7 @@ describe('checkout with AfroTransact Delivery from the seller’s store (S255)',
     const problem = await screen.findByTestId('local-delivery-problem');
     expect(problem).toHaveTextContent('Not deliverable to this address');
     expect(problem).toHaveTextContent(/too far for AfroTransact Delivery/);
-    expect(screen.getByRole('button', { name: 'Place your order' })).toBeDisabled();
+    expect(screen.getAllByRole('button', { name: 'Place your order' })[0] as HTMLElement).toBeDisabled();
     expect(screen.getByTestId('local-delivery-blocked')).toBeInTheDocument();
     await user.click(within(problem).getByRole('button', { name: 'Change address' }));
     await user.click(await screen.findByRole('radio', { name: /Adaeze Nwosu 9800 Westheimer/ }));
@@ -206,7 +206,7 @@ describe('checkout with AfroTransact Delivery from the seller’s store (S255)',
     const quote = await screen.findByTestId('local-delivery-quote');
     expect(quote).toHaveTextContent('7.4 mi from Houston, TX · about 18 min drive');
     expect(quote).toHaveTextContent('Delivery charge $5.99'); // the staff flat fee, not a distance price (listing rules D16)
-    expect(screen.getByRole('button', { name: 'Place your order' })).toBeEnabled();
+    expect(screen.getAllByRole('button', { name: 'Place your order' })[0] as HTMLElement).toBeEnabled();
   });
 
   it('removes the out-of-range package from this order (deselects it) and keeps it in the cart', async () => {

@@ -59,7 +59,7 @@ describe('checkout when the cart changed', () => {
     await waitFor(() => expect(stripe.payment()).toBeDefined());
     act(() => stripe.payment()?.handlers.payment?.change?.({ complete: true, empty: false, value: { type: 'card' } }));
 
-    await user.click(screen.getByRole('button', { name: /Place your order/ }));
+    await user.click(screen.getAllByRole('button', { name: /Place your order/ })[0] as HTMLElement);
 
     const alert = await screen.findByText(/Your cart changed, please review it\./);
     expect(alert).toBeInTheDocument();

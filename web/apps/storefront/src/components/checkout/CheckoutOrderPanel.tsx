@@ -2,7 +2,7 @@
 
 import { type CartPreorder, type CheckoutSummary, legalHref, type TotalChange } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { Button, CheckCircle, Circle, CircleNotch } from '@afrotransact/ui';
+import { Button, CaretLeft, CheckCircle, Circle, CircleNotch, InfoTip } from '@afrotransact/ui';
 import Link from 'next/link';
 
 import memberStyles from '@/components/membership/Membership.module.css';
@@ -51,6 +51,8 @@ type Props = {
   /** The error is "your cart changed": offer the way back to the cart. */
   errorCartLink?: boolean;
   onPlace: () => void;
+  /** Place your order is off: address, payment or anything that stops the order is not settled (worked out once, by the page). */
+  placeDisabled: boolean;
   /** The summary is being worked out again (a delivery option, address or coupon changed): the shown total is not final yet. */
   taxPending?: boolean;
   /** Tax-returns could not answer: "We couldn't work out your tax right now. Try again." with Retry. */
@@ -63,6 +65,83 @@ type Props = {
   onConfirmTotal?: () => void;
   onDismissTotal?: () => void;
 };
+
+/** The one legal line next to Place your order: placing the order means the privacy notice and the conditions of use. */
+function PlaceTerms({ testId, preRun }: { testId?: string; preRun?: CartPreorder | null }) {
+  const t = useT();
+  return (
+    <>
+      <p className={styles.terms} data-testid={testId}>
+        {t('co.agreePrefix')} <Link href={legalHref('privacy')}>{t('co.privacy')}</Link> {t('co.and')} <Link href={legalHref('conditions-of-use')}>{t('co.conditions')}</Link>.
+      </p>
+      {preRun && (
+        <p className={styles.fine} data-testid={testId ? `${testId}-preorder` : undefined}>
+          {t('co.preorderPrefix')} <Link href={legalHref('preorder-delivery-terms')}>{t('legal.doc.preorder-delivery-terms')}</Link>.
+        </p>
+      )}
+    </>
+  );
+}
+
+/**
+ * The end of the page, after the items (Amazon pattern): a second Place your order with the order total beside it and the
+ * legal line, then the notes a shopper looks for (tax, help, returns) and the way back to the cart. The total is the one the
+ * summary shows: "before tax" until the tax has been calculated, never a guessed figure.
+ */
+export function CheckoutFinish({
+  total,
+  beforeTax,
+  estimated,
+  placeDisabled,
+  busy,
+  preLocked,
+  preRun,
+  onPlace
+}: {
+  total: number;
+  beforeTax: number;
+  estimated: boolean;
+  placeDisabled: boolean;
+  busy: boolean;
+  preLocked: boolean;
+  preRun?: CartPreorder | null;
+  onPlace: () => void;
+}) {
+  const fmt = useFormatters();
+  const t = useT();
+  const shown = fmt.money(estimated ? total : beforeTax);
+  const label = busy ? t('co.placing') : preLocked ? t('preorder.locked.button') : t('co.place');
+  return (
+    <section className={styles.finish} aria-label={t('co.finish.aria')} data-testid="checkout-finish">
+      <div className={styles.finishPlace}>
+        <Button size="lg" onClick={onPlace} loading={busy} disabled={placeDisabled} aria-describedby="co-finish-total" className={styles.finishButton} data-place-order="1">
+          {label}
+        </Button>
+        <div className={styles.finishText}>
+          <p id="co-finish-total" className={styles.finishTotal} data-testid="checkout-finish-total">
+            {estimated ? t('co.total') : t('co.totalBeforeTax')}: <strong>{shown}</strong>
+          </p>
+          <PlaceTerms testId="checkout-terms-bottom" preRun={preRun} />
+        </div>
+      </div>
+      <div className={styles.notes} data-testid="checkout-notes">
+        <p className={styles.noteLine}>
+          {t('co.note.tax')}
+          <InfoTip label={t('co.note.taxTipLabel')}>{t('co.note.taxTip')}</InfoTip>
+        </p>
+        <p className={styles.noteLine}>
+          {t('co.note.help')} <Link href="/help">{t('footer.helpCenter')}</Link>.
+        </p>
+        <p className={styles.noteLine}>
+          {t('co.returnsPrefix')} <Link href={legalHref('returns')}>{t('legal.doc.returns')}</Link>.
+        </p>
+        <Link href="/cart" className={styles.backToCart} data-testid="checkout-back-to-cart">
+          <CaretLeft aria-hidden /> {t('co.backToCart')}
+        </Link>
+      </div>
+    </section>
+  );
+}
 
 /** Sticky checkout rail, Amazon style: total and Place order first, then the items, promo code and the breakdown. */
 export function CheckoutOrderPanel(props: Props) {
@@ -92,6 +171,7 @@ export function CheckoutOrderPanel(props: Props) {
     error,
     errorCartLink,
     onPlace,
+    placeDisabled,
     taxPending = false,
     onRetryTax,
     retryingTax = false,
@@ -106,7 +186,8 @@ export function CheckoutOrderPanel(props: Props) {
   const estimated = s.taxEstimateStatus === 'ESTIMATED';
   const reason = s.taxUnavailableReason;
   const beforeTax = s.subtotalMinor - s.discountMinor + netShipping;
-  const placeDisabled = !paymentChosen || !addressOk || addressList || blocked || taxPending || !!totalChange;
+  // The tax waits for the address (the step the shopper takes next): say so. A failure or a blocked item is never "later" (Retry / Remove).
+  const awaitsAddress = !estimated && (s.taxEstimateStatus === 'NEEDS_ADDRESS' || reason === 'NEEDS_ZIP' || reason === 'ADDRESS_INCOMPLETE');
 
   const placeLabel = busy ? t('co.placing') : preLocked ? t('preorder.locked.button') : t('co.place');
   const notes = (
@@ -183,19 +264,16 @@ export function CheckoutOrderPanel(props: Props) {
 
   return (
     <>
+      {/* After the items in reading order; on wide screens it sits under them, left of the sticky summary. */}
+      <CheckoutFinish total={total} beforeTax={beforeTax} estimated={estimated} placeDisabled={placeDisabled} busy={busy} preLocked={preLocked} preRun={preRun} onPlace={onPlace} />
       <aside className={styles.rail} aria-label={t('co.orderSummary')}>
         <div className={styles.railBox}>
-          <Button size="lg" block onClick={onPlace} loading={busy} disabled={placeDisabled} data-place-order="1">
-            {placeLabel}
-          </Button>
-          <p className={styles.terms} data-testid="checkout-terms">
-            {t('co.agreePrefix')} <Link href={legalHref('conditions-of-use')}>{t('co.conditions')}</Link> {t('co.and')} <Link href={legalHref('privacy')}>{t('co.privacy')}</Link>.
-          </p>
-          {preRun && (
-            <p className={styles.fine} data-testid="preorder-terms-note">
-              {t('co.preorderPrefix')} <Link href={legalHref('preorder-delivery-terms')}>{t('legal.doc.preorder-delivery-terms')}</Link>.
-            </p>
-          )}
+          <div className={styles.railPlace}>
+            <Button size="lg" block onClick={onPlace} loading={busy} disabled={placeDisabled} data-place-order="1">
+              {placeLabel}
+            </Button>
+            <PlaceTerms testId="checkout-terms" preRun={preRun} />
+          </div>
           {notes}
           {why}
           {busy && (
@@ -208,7 +286,7 @@ export function CheckoutOrderPanel(props: Props) {
             </ol>
           )}
 
-          <h2 className={styles.summaryTitle}>{t('co.orderSummary')}</h2>
+          <h2 className="at-visually-hidden">{t('co.orderSummary')}</h2>
           <dl className={styles.totals} data-testid="order-summary">
             <div className={styles.row}>
               <dt>{t('co.itemsTotal', { n: itemCount })}</dt>
@@ -239,13 +317,10 @@ export function CheckoutOrderPanel(props: Props) {
                 ))}
               </div>
             )}
-            <div className={styles.row} data-testid="checkout-before-tax">
-              <dt>{t('co.totalBeforeTax')}</dt>
-              <dd>{fmt.money(beforeTax)}</dd>
-            </div>
             <div className={styles.row}>
               <dt>{t('co.tax')}</dt>
-              <dd data-testid="checkout-tax-amount">{estimated ? fmt.money(s.taxMinor) : '—'}</dd>
+              {/* Only the computed amount; until then the plain words, never a guess. */}
+              <dd data-testid="checkout-tax-amount">{estimated ? fmt.money(s.taxMinor) : awaitsAddress ? t('co.tax.later') : '—'}</dd>
               {!estimated && (
                 <dd className={styles.taxState} data-testid="checkout-tax-state" data-reason={reason ?? 'UNAVAILABLE'}>
                   {reason === 'BLOCKED_ITEMS' ? (
@@ -261,18 +336,16 @@ export function CheckoutOrderPanel(props: Props) {
                 </dd>
               )}
             </div>
-            {estimated && (
-              <div className={`${styles.row} ${styles.rowTotal}`}>
-                <dt>{t('co.total')}</dt>
-                <dd data-testid="checkout-total">{fmt.money(total)}</dd>
-              </div>
-            )}
             {creditMinor > 0 && (
               <div className={styles.row} data-testid="checkout-credit-row">
                 <dt>{t('co.credit.row')}</dt>
                 <dd className={styles.creditRow}>−{fmt.money(creditMinor)}</dd>
               </div>
             )}
+            <div className={`${styles.row} ${styles.rowTotal}`} data-testid="checkout-before-tax" data-final={estimated ? 'true' : 'false'}>
+              <dt>{estimated ? t('co.total') : t('co.totalBeforeTax')}</dt>
+              <dd data-testid={estimated ? 'checkout-total' : 'checkout-total-before-tax'}>{fmt.money(estimated ? total : beforeTax)}</dd>
+            </div>
           </dl>
           {(s.membership?.cashbackMinor ?? 0) > 0 && (
             <p className={styles.fine} data-testid="checkout-membership-earn">

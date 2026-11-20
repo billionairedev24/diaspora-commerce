@@ -196,7 +196,7 @@ describe('checkout page (mock BFF)', () => {
     const pk = await screen.findByTestId('checkout-package');
     expect(within(pk).getByTestId('delivery-option-afrotransact_delivery')).toHaveTextContent('Delivered by AfroTransact');
     expect(within(pk).getByTestId('option-fee-afrotransact_delivery')).toHaveTextContent('$5.99');
-    expect(screen.getByRole('button', { name: 'Place your order' })).toBeEnabled();
+    expect(screen.getAllByRole('button', { name: 'Place your order' })[0] as HTMLElement).toBeEnabled();
     expect(document.body.textContent ?? '').not.toMatch(CARRIER);
   });
 
@@ -221,7 +221,7 @@ describe('checkout page (mock BFF)', () => {
     renderWithProviders(<CheckoutView />);
     const pk = await screen.findByTestId('checkout-package');
     expect(within(pk).getByTestId('quote-required')).toHaveTextContent('Too far for standard delivery. Ask us for a quote');
-    expect(screen.getByRole('button', { name: 'Place your order' })).toBeDisabled();
+    expect(screen.getAllByRole('button', { name: 'Place your order' })[0] as HTMLElement).toBeDisabled();
     expect(screen.getByTestId('delivery-blocked-note')).toHaveTextContent(/too far for standard delivery/i);
     await user.click(within(pk).getByTestId('request-quote'));
     expect(onRequestQuote).toHaveBeenCalledTimes(1);

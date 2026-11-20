@@ -143,7 +143,7 @@ describe('checkout with Stripe Elements (fake Stripe.js)', () => {
     const user = await openPaymentStep();
     await chooseNewMethod(user);
     await user.click(screen.getByRole('checkbox', { name: /Save for future purchases/ }));
-    await user.click(screen.getByRole('button', { name: 'Place your order' }));
+    await user.click(screen.getAllByRole('button', { name: 'Place your order' })[0] as HTMLElement);
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith(expect.stringMatching(/^\/orders\?placed=AT-2026-/)), { timeout: 5000 });
 
     const order = stripe.log.filter((l) => l === 'placeOrder' || l === 'confirmPayment' || l.startsWith('submit:payment'));
@@ -161,7 +161,7 @@ describe('checkout with Stripe Elements (fake Stripe.js)', () => {
     const user = await openPaymentStep();
     await chooseNewMethod(user);
     stripe.results.confirm = { error: { type: 'card_error', code: 'card_declined', message: 'Your card was declined.' } };
-    await user.click(await screen.findByRole('button', { name: 'Place your order' }));
+    await user.click((await screen.findAllByRole('button', { name: 'Place your order' }))[0] as HTMLElement);
     expect(await screen.findByTestId('payment-element-error')).toHaveTextContent('Your card was declined.');
     expect(screen.getByTestId('payment-element-error')).toBeVisible();
     expect(nav.push).not.toHaveBeenCalled();
@@ -172,7 +172,7 @@ describe('checkout with Stripe Elements (fake Stripe.js)', () => {
     await chooseNewMethod(user);
     await screen.findByTestId('checkout-package');
     stripe.results.submit = { error: { type: 'validation_error', message: 'Your card number is incomplete.' } };
-    await user.click(screen.getByRole('button', { name: 'Place your order' }));
+    await user.click(screen.getAllByRole('button', { name: 'Place your order' })[0] as HTMLElement);
     expect(await screen.findByText('Your card number is incomplete.')).toBeInTheDocument();
     expect(stripe.log).not.toContain('placeOrder');
     expect(stripe.log).not.toContain('confirmPayment');
@@ -180,7 +180,7 @@ describe('checkout with Stripe Elements (fake Stripe.js)', () => {
 
   it('keeps the saved-method path: confirmPayment with the PaymentMethod id, not the Payment Element', async () => {
     const user = await openPaymentStep();
-    await user.click(await screen.findByRole('button', { name: 'Place your order' }));
+    await user.click((await screen.findAllByRole('button', { name: 'Place your order' }))[0] as HTMLElement);
     await waitFor(() => expect(nav.push).toHaveBeenCalled(), { timeout: 5000 });
     expect(stripe.log.filter((l) => l.startsWith('submit:'))).toEqual([]);
     expect(placed[0]?.paymentMethodId).toMatch(/^pm_/);
@@ -211,7 +211,7 @@ describe('dev-only stand-in without a Stripe key', () => {
     await user.type(screen.getByLabelText('Expiration'), '12 / 34');
     await user.type(screen.getByLabelText('Security code'), '123');
     await user.type(screen.getByLabelText('ZIP'), '77002');
-    await user.click(await screen.findByRole('button', { name: 'Place your order' }));
+    await user.click((await screen.findAllByRole('button', { name: 'Place your order' }))[0] as HTMLElement);
     expect(await screen.findByTestId('payment-element-error')).toHaveTextContent('Your card was declined.');
     expect(nav.push).not.toHaveBeenCalled();
   });

@@ -108,7 +108,7 @@ describe('checkout tax', () => {
       const state = summary.getByTestId('checkout-tax-state');
       expect(state).toHaveTextContent('We couldn’t work out your tax right now. Try again.');
       expect(state.textContent).not.toMatch(NEVER);
-      expect(screen.getByRole('button', { name: 'Place your order' })).toBeDisabled();
+      expect(screen.getAllByRole('button', { name: 'Place your order' })[0] as HTMLElement).toBeDisabled();
       expect(screen.getByTestId('tax-retry-hint')).toBeInTheDocument();
       expect(summary.queryByTestId('checkout-tax-place')).not.toBeInTheDocument();
       expect(document.body.textContent).not.toMatch(/when you place your order|at checkout|calculated later/i);
@@ -124,7 +124,7 @@ describe('checkout tax', () => {
     it('no address and no ZIP code yet: an input for a ZIP code, never an amount; typing one shows the estimate for that place', async () => {
       noPlaceAtAll();
       const summary = await overridden(() => ({ taxMinor: 0, taxRateLabel: 'Enter your ZIP code to see tax', taxEstimateStatus: 'NEEDS_ADDRESS', taxUnavailableReason: 'NEEDS_ZIP', taxJurisdictionLabel: '', taxLines: [], canPlaceOrder: false }), { noAddress: true });
-      expect(summary.getByTestId('checkout-tax-amount')).toHaveTextContent('—');
+      expect(summary.getByTestId('checkout-tax-amount')).toHaveTextContent('Calculated at the next step');
       expect(await summary.findByText('Enter your ZIP code to see tax')).toBeInTheDocument();
       const user = userEvent.setup();
       await user.type(summary.getByLabelText('Enter your ZIP code to see tax'), '77002');
@@ -140,7 +140,7 @@ describe('checkout tax', () => {
       expect(summary.getByTestId('tax-zip-retry')).toBeInTheDocument();
       expect(summary.queryByTestId('tax-zip-form')).not.toBeInTheDocument();
       expect(document.body.textContent).not.toMatch(/Enter your ZIP code/);
-      expect(screen.getByRole('button', { name: 'Place your order' })).toBeDisabled();
+      expect(screen.getAllByRole('button', { name: 'Place your order' })[0] as HTMLElement).toBeDisabled();
     });
 
     it('a ZIP code that is not 5 digits is refused before asking', async () => {
@@ -158,7 +158,7 @@ describe('checkout tax', () => {
       const summary = await overridden(() => ({ taxMinor: 0, taxEstimateStatus: 'UNAVAILABLE', taxUnavailableReason: 'ADDRESS_INCOMPLETE', taxJurisdictionLabel: '', taxLines: [], canPlaceOrder: false }));
       expect(summary.getByTestId('checkout-tax-state')).toHaveTextContent('Add your state and ZIP code to this address to see your tax.');
       expect(summary.getByRole('button', { name: 'Edit address' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Place your order' })).toBeDisabled();
+      expect(screen.getAllByRole('button', { name: 'Place your order' })[0] as HTMLElement).toBeDisabled();
     });
 
     it('a known estimate shows its value with no explanatory copy', async () => {
@@ -233,7 +233,7 @@ describe('checkout tax', () => {
       expect(box).toHaveTextContent('Remove it from this order to continue');
       expect(box.textContent).not.toMatch(/AT0000|tax|ATIN/i);
       expect(screen.getByTestId('tax-blocked-note')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Place your order' })).toBeDisabled();
+      expect(screen.getAllByRole('button', { name: 'Place your order' })[0] as HTMLElement).toBeDisabled();
 
       // Remove takes the line out of this order (it stays in the cart), then the summary is read again.
       await user.click(within(box).getByRole('button', { name: `Remove ${title} from this order` }));
@@ -258,7 +258,7 @@ describe('checkout tax', () => {
       const el = await screen.findByTestId('stripe-payment-element');
       await waitFor(() => expect(el).toHaveAttribute('aria-busy', 'false'));
       act(() => stripe.payment()?.handlers.payment?.change?.({ complete: true, empty: false, value: { type: 'card' } }));
-      await user.click(screen.getByRole('button', { name: /Place your order/ }));
+      await user.click(screen.getAllByRole('button', { name: /Place your order/ })[0] as HTMLElement);
       expect(await screen.findByText('Some items in your order can’t be sold yet. Remove them to place your order.')).toBeInTheDocument();
       expect(screen.queryByText(/ATG0000123/)).not.toBeInTheDocument();
     });
@@ -296,13 +296,13 @@ describe('checkout tax', () => {
       const el = await screen.findByTestId('stripe-payment-element');
       await waitFor(() => expect(el).toHaveAttribute('aria-busy', 'false'));
       act(() => stripe.payment()?.handlers.payment?.change?.({ complete: true, empty: false, value: { type: 'card' } }));
-      await waitFor(() => expect(screen.getByRole('button', { name: /Place your order/ })).toBeEnabled());
-      await user.click(screen.getByRole('button', { name: /Place your order/ }));
+      await waitFor(() => expect(screen.getAllByRole('button', { name: /Place your order/ })[0] as HTMLElement).toBeEnabled());
+      await user.click(screen.getAllByRole('button', { name: /Place your order/ })[0] as HTMLElement);
 
       const box = await screen.findByTestId('checkout-total-changed');
       expect(box).toHaveTextContent('The total changed.');
       expect(box.textContent).toContain(`$${((real.totalMinor + 150) / 100).toFixed(2)}`);
-      expect(screen.getByRole('button', { name: 'Place your order' })).toBeDisabled();
+      expect(screen.getAllByRole('button', { name: 'Place your order' })[0] as HTMLElement).toBeDisabled();
       // the first attempt carried the summary's lock
       expect(bodies[0]?.lock).toBe(real.taxQuoteId);
 
