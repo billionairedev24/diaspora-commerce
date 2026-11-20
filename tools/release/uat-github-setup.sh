@@ -20,6 +20,12 @@
 # (docs/runbooks/release-1-go-live.md section 6). Keeping them out of GitHub keeps a leaked workflow token from reaching your payments.
 set -uo pipefail
 
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=tools/release/lib-envfile.sh
+. "$HERE/lib-envfile.sh"
+# The central file (tools/release/uat-env.sh init). When it is readable the values come from it and you are prompted only for blanks.
+CENTRAL="${UAT_ENV_FILE:-$HOME/.afrotransact/uat.all.env}"
+[[ -r "$CENTRAL" ]] || CENTRAL=""
 REPO="${REPO:-billionairedev24/diaspora-commerce}"
 ENVNAME="uat"
 FORCE="${FORCE:-0}"
@@ -130,6 +136,15 @@ ask() { # prompt default -> $REPLY_TEXT
   local v=""; read -r -p "$1" v <&3; REPLY_TEXT="${v:-$2}"
 }
 
+central_name() { # GitHub secret name -> name in the central file
+  case "$1" in
+    GITOPS_APP_PRIVATE_KEY) echo GITOPS_APP_PRIVATE_KEY_FILE ;;
+    CLOUDFLARE_API_TOKEN)   echo CLOUDFLARE_DEPLOY_TOKEN ;;
+    *)                      echo "$1" ;;
+  esac
+}
+central_value() { [[ -n "$CENTRAL" ]] && envfile_get "$CENTRAL" "$(central_name "$1")"; }
+
 already() { # kind name scope
   [[ "$FORCE" == "1" ]] && return 1
   case "$1:$3" in var:env) has_env_var "$2";; var:repo) has_repo_var "$2";; secret:env) has_env_secret "$2";; secret:repo) has_repo_secret "$2";; esac
@@ -150,8 +165,23 @@ do_secret() { # name scope validator(regex or "") file(0/1)
   local n="$1" s="$2" re="${3:-}" isfile="${4:-0}"
   say "secret $n ($s)"
   if already secret "$n" "$s"; then ok "$n already set; FORCE=1 to change"; SKIPPED=$((SKIPPED+1)); return; fi
+  if [[ "$DRY_RUN" == "1" ]]; then echo "DRY_RUN: would set secret $n on $s (from the central file when it has it, else a prompt)"; return; fi
+  local cv; cv="$(central_value "$n" || true)"
+  if [[ -n "$cv" ]]; then
+    if [[ "$isfile" == "1" ]]; then
+      local cf="${cv/#\~/$HOME}"
+      if [[ -r "$cf" ]] && head -1 "$cf" | grep -q -- '-----BEGIN .*PRIVATE KEY-----'; then
+        echo "using the key file named in the central file (contents not shown)"; put_secret "$n" "$s" <"$cf"; cv=""; return
+      fi
+      echo "the central file's $(central_name "$n") is not a readable PEM private key; falling back to a prompt"
+    elif [[ -z "$re" || "$cv" =~ $re ]]; then
+      echo "using the value from the central file (not shown)"; printf '%s' "$cv" | put_secret "$n" "$s"; cv=""; return
+    else
+      echo "the central file's $(central_name "$n") does not match the expected format; falling back to a prompt"
+    fi
+    cv=""
+  fi
   explain "$n"
-  if [[ "$DRY_RUN" == "1" ]]; then echo "DRY_RUN: would prompt for and set secret $n on $s"; return; fi
   if [[ "$isfile" == "1" ]]; then
     ask "Path to the .pem file (Enter to skip): " ""
     [[ -z "$REPLY_TEXT" ]] && { echo "skipped"; SKIPPED=$((SKIPPED+1)); return; }
@@ -203,6 +233,7 @@ stage_set() {
   need_gh
   if [[ "$DRY_RUN" != "1" ]]; then exec 3<"$TTY_IN" || { echo "no terminal to prompt on" >&2; exit 2; }; fi
   echo "Repository: $REPO   environment: $ENVNAME   (UAT only; nothing here is read back or printed)"
+  if [[ -n "$CENTRAL" ]]; then echo "Central file: $CENTRAL (values come from it; you are asked only for what is blank there)"; else echo "No central file found (uat-env.sh init): every value is prompted."; fi
   [[ "$DRY_RUN" == "1" ]] && echo "DRY_RUN=1: nothing will be asked or written."
 
   say "Environment $ENVNAME"
