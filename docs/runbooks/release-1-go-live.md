@@ -95,7 +95,7 @@ cd <worktree of origin/release-1>
    make release-1-check && python3 tools/release/check_capacity.py
    python3 tools/release/config_inventory.py --check
    for e in uat prod; do for d in java/apps/core go/apps/afrotransact-go; do ( cd $d/deploy/helm && helm dependency build . >/dev/null && \
-     helm template x . -n afrotransact-$e -f values.yaml -f values-$e.yaml -f ../../../../infra/argocd/envs/$e/platform-values.yaml --set image.tag=$(git rev-parse HEAD) | kubeconform -ignore-missing-schemas -summary - ); done; done
+     helm template x . -n afrotransact-$e -f values.yaml -f values-$e.yaml -f ../../../../../infra/argocd/envs/$e/platform-values.yaml --set image.tag=$(git rev-parse HEAD) | kubeconform -ignore-missing-schemas -summary - ); done; done
    ```
    Rollback: nothing is changed by this step.
 3. **Build the images** (blocker 1): push to release-1 and wait for `core` and `afrotransact-go` to be green incl. `image`. Check:
