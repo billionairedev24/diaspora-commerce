@@ -2,6 +2,7 @@
 # One private file for every UAT value, and the tools that route each value to where it belongs.
 #
 #   tools/release/uat-env.sh init              create ~/.afrotransact/uat.all.env (mode 600) from infra/ovh-vps/uat.all.env.example
+#   tools/release/uat-env.sh fill [group|--only NAME]   ask for each blank value one by one (hidden for secrets, checked, saved at once; Enter skips)
 #   tools/release/uat-env.sh check [group]     blanks and bad formats by NAME (group: github | tofu | cluster | all). Never prints a value.
 #   tools/release/uat-env.sh github            set the GitHub variables and secrets from the file (runs uat-github-setup.sh with it)
 #   tools/release/uat-env.sh split             write infra/ovh-vps/config.env and secrets.local.env for secrets.sh (correctly quoted, mode 600)
@@ -190,6 +191,15 @@ stage_check() {
     [[ -z "$(envfile_get "$ENV_FILE" R2_ACCOUNT_ID)" && -z "$(envfile_get "$ENV_FILE" CLOUDFLARE_ACCOUNT_ID)" ]] && bad "R2_ACCOUNT_ID and CLOUDFLARE_ACCOUNT_ID are both blank"
   fi
 
+  # first-apply placeholders that were never replaced (fill records a hash of each, never the value)
+  if [[ -r "$ENV_FILE.placeholders" ]]; then
+    local pn ph
+    while read -r pn ph; do
+      [[ -n "$pn" ]] || continue
+      [[ -n "$(envfile_get "$ENV_FILE" "$pn")" && "$(hash_of "$(envfile_get "$ENV_FILE" "$pn")")" == "$ph" ]] && warn "$pn is still the random first-apply placeholder: replace it with the real value once the endpoint exists"
+    done <"$ENV_FILE.placeholders"
+  fi
+
   # typos: names in the file the tools do not know
   local known; known="$(spec | cut -d'|' -f1)"
   while IFS= read -r name; do
@@ -290,12 +300,110 @@ stage_drift() {
   return "$fail"
 }
 
+# ---------------------------------------------------------------------------------------------------------------------------
+# fill: interactive, one value at a time
+# ---------------------------------------------------------------------------------------------------------------------------
+TTY_IN="${SETUP_TTY:-/dev/tty}"
+# names whose value is not secret: echoed back so you can catch a typo. Everything else is typed hidden.
+PLAIN_RE='^(DOMAIN|IMAGE_REGISTRY|IMAGE_TAG|DB_MODE|DB_LAYOUT|EXTERNAL_PG_HOST|EXTERNAL_PG_ADMIN_USER|EXTERNAL_PG_SSLMODE|GHCR_USER|ADMIN_EMAIL|ADMIN_PHONE|OVH_SERVICE_NAME|OVH_ADMIN_CIDR|CLOUDFLARE_ACCOUNT_ID|GITOPS_APP_ID|GRAFANA_ENV|GRAFANA_[A-Z_]*_URL|GRAFANA_[A-Z_]*_USER|GRAFANA_OTLP_ENDPOINT|GRAFANA_INSTANCE_ID|BACKUP_AGE_RECIPIENT|BACKUP_B2_BUCKET|BACKUP_B2_ENDPOINT|BACKUP_RETENTION_[A-Z]*|BACKUP_PUSHGATEWAY_URL|BACKUP_HEALTHCHECK_URL|R2_ACCOUNT_ID|[A-Z_]*_FILE)$'
+
+hash_of() { if command -v sha256sum >/dev/null 2>&1; then printf '%s' "$1" | sha256sum | cut -d' ' -f1; else printf '%s' "$1" | shasum -a 256 | cut -d' ' -f1; fi; }
+
+# the comment block above NAME in the example (its own words on where to get it); banners are skipped
+example_help() {
+  awk -v n="$1" '
+    /^# =+$/ { blk=""; inblk=0; next }
+    /^#/ { if (!inblk) { blk=""; inblk=1 } sub(/^# ?/,""); blk = blk "      " $0 "\n"; next }
+    { inblk=0 }
+    $0 ~ ("^" n "=") { printf "%s", blk; exit }
+  ' "$EXAMPLE"
+}
+
+quote_if_needed() { case "$1" in ""|*[\ \#\$\"\'\\]*) printf '"%s"' "$1" ;; *) printf '%s' "$1" ;; esac; }
+
+# set_value NAME VALUE: replaces the NAME= line in place (value passed through the environment, never an argument), or appends it
+set_value() {
+  local n="$1" v; v="$(quote_if_needed "$2")"
+  if grep -qE "^${n}=" "$ENV_FILE"; then
+    ( umask 077; V="$v" awk -v n="$n" 'BEGIN{p="^" n "="} $0 ~ p {print n "=" ENVIRON["V"]; next} {print}' "$ENV_FILE" >"$ENV_FILE.tmp" ) && mv "$ENV_FILE.tmp" "$ENV_FILE"
+  else
+    printf '%s=%s\n' "$n" "$v" >>"$ENV_FILE"
+  fi
+  chmod 600 "$ENV_FILE"
+}
+
+forget_placeholder() { [[ -f "$ENV_FILE.placeholders" ]] && { grep -v "^$1 " "$ENV_FILE.placeholders" >"$ENV_FILE.placeholders.tmp" || true; mv "$ENV_FILE.placeholders.tmp" "$ENV_FILE.placeholders"; }; }
+
+rand_pw() { if command -v openssl >/dev/null 2>&1; then openssl rand -base64 36 | tr -dc 'A-Za-z0-9' | cut -c1-24; else LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24; fi; }
+rand_hex() { if command -v openssl >/dev/null 2>&1; then openssl rand -hex 24; else LC_ALL=C tr -dc 'a-f0-9' </dev/urandom | head -c 48; fi; }
+
+stage_fill() {
+  local group="all" only=""
+  case "${1:-}" in
+    --only) only="${2:-}"; [[ -n "$only" ]] || { echo "usage: fill --only NAME" >&2; exit 2; } ;;
+    github|tofu|cluster|all|"") group="${1:-all}" ;;
+    *) echo "usage: fill [github|tofu|cluster|all] | fill --only NAME" >&2; exit 2 ;;
+  esac
+  if [[ ! -r "$ENV_FILE" ]]; then
+    echo "No file yet at $ENV_FILE."; stage_init || exit 1
+  fi
+  exec 3<"$TTY_IN" || { echo "no terminal to ask on" >&2; exit 2; }
+  echo "Filling $ENV_FILE. Each value is checked and saved the moment you enter it, so Ctrl-C loses nothing."
+  echo "Enter on an empty prompt skips that value. Values for secrets are typed hidden. Nothing is printed back except non-secret values."
+  local name grp req chk hint v attempt done_ok n_set=0 n_skip=0 n_have=0 hidden
+  while IFS='|' read -r name grp req chk hint; do
+    [[ -n "$name" ]] || continue
+    if [[ -n "$only" ]]; then [[ "$name" == "$only" ]] || continue; else [[ "$group" == "all" || "$group" == "$grp" ]] || continue; fi
+    if [[ -n "$(envfile_get "$ENV_FILE" "$name")" && "${FORCE:-0}" != "1" ]]; then n_have=$((n_have+1)); continue; fi
+    printf '\n[%s] %s%s\n' "$grp" "$name" "$([[ "$req" == "0" ]] && echo '  (optional)')"
+    example_help "$name"
+    echo "      Expected: $hint"
+    case "$name" in
+      R2_*|CLOUDFLARED_TUNNEL_TOKEN) echo "      Usually only available after the Cloudflare tofu run (it creates the buckets and the tunnel). Enter to skip for now." ;;
+      STRIPE_*WEBHOOK_SECRET|RESEND_WEBHOOK_SECRET) echo "      Usually only available after the first deploy. Enter to skip, or type p for a random first-apply placeholder (replace it later)." ;;
+      ADMIN_PASSWORD) echo "      Type g to generate a strong one (it is shown once on this screen: put it in your password manager)." ;;
+      OVH_ADMIN_CIDR) echo "      Look up your public IP yourself (for example your router page or a what-is-my-IP site); this tool never sends it anywhere." ;;
+    esac
+    hidden=1; [[ "$name" =~ $PLAIN_RE ]] && hidden=0
+    attempt=0; done_ok=0
+    while [[ "$attempt" -lt 3 ]]; do
+      attempt=$((attempt+1)); v=""
+      if [[ "$hidden" == "1" && -t 0 && "$TTY_IN" == "/dev/tty" ]]; then IFS= read -r -s -p "Value (hidden, Enter to skip): " v <&3; printf '\n'
+      else IFS= read -r v <&3; fi
+      if [[ -z "$v" ]]; then break; fi
+      case "$name:$v" in
+        ADMIN_PASSWORD:g) v="$(rand_pw)"; echo "      Generated: $v   <- store it in your password manager now" ;;
+        STRIPE_*WEBHOOK_SECRET:p|RESEND_WEBHOOK_SECRET:p) v="whsec_$(rand_hex)"; printf '%s %s\n' "$name" "$(hash_of "$v")" >>"$ENV_FILE.placeholders"; chmod 600 "$ENV_FILE.placeholders"
+           echo "      Saved a random placeholder (recorded so check reminds you to replace it)." ;;
+      esac
+      if [[ "$chk" == "file" ]]; then v="${v/#\~/$HOME}"; fi
+      case "$v" in sk_live_*|rk_live_*|pk_live_*) echo "      That is a LIVE Stripe key: UAT is test mode only. Try again ($attempt/3) or Enter to skip."; continue ;; esac
+      if [[ "$name" == GITOPS_APP_PRIVATE_KEY_FILE ]] && ! head -1 "$v" 2>/dev/null | grep -q -- '-----BEGIN .*PRIVATE KEY-----'; then
+        echo "      That file is not a readable PEM private key. Try again ($attempt/3) or Enter to skip."; continue
+      fi
+      if valid_value "$chk" "$v"; then
+        set_value "$name" "$v"
+        case "$name:$v" in *:whsec_*) :;; *) forget_placeholder "$name" ;; esac
+        if [[ "$hidden" == "0" ]]; then echo "      saved: $v"; else echo "      saved (${#v} characters, not shown)"; fi
+        n_set=$((n_set+1)); done_ok=1; break
+      fi
+      echo "      That does not look right (want: $hint). Try again ($attempt/3) or Enter to skip."
+    done
+    v=""
+    [[ "$done_ok" == "1" ]] || { echo "      skipped"; n_skip=$((n_skip+1)); }
+  done < <(spec)
+  echo; echo "$n_set saved, $n_skip skipped, $n_have were already set (FORCE=1 to re-ask those)."
+  if [[ -n "$only" ]]; then stage_check all || true; else stage_check "$group" || true; fi
+  echo "Come back any time: tools/release/uat-env.sh fill   (it asks only for what is still blank)."
+}
+
 case "${1:-}" in
   init)     stage_init ;;
+  fill)     shift; stage_fill "$@" ;;
   check)    stage_check "${2:-all}" ;;
   github)   stage_github ;;
   split)    stage_split ;;
   tofu-env) stage_tofu_env "${2:-}" ;;
   drift)    stage_drift ;;
-  *) sed -n '2,16p' "$0"; exit 0 ;;
+  *) sed -n '2,18p' "$0"; exit 0 ;;
 esac

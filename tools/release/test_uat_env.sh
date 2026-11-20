@@ -105,6 +105,34 @@ t eq "$(grep -c 'STDIN(GITOPS_APP_PRIVATE_KEY)=-----BEGIN' "$GHLOG")" 1
 t eq "$(grep 'ARGV:' "$GHLOG" | grep -c -e SENTINEL -e 48213)" 0
 t eq "$(grep 'ARGV: secret set' "$GHLOG" | grep -c -e '--body')" 0
 
+echo "-- fill: asks one value at a time, hidden-safe, validated, saved at once"
+export UAT_ENV_FILE="$T/home/.afrotransact/fill.env"; rm -f "$UAT_ENV_FILE" "$UAT_ENV_FILE.placeholders"; "$ENVX" init >/dev/null 2>&1
+printf -- '-----BEGIN RSA PRIVATE KEY-----\nSENTINELPEM\n-----END RSA PRIVATE KEY-----\n' >"$T/app2.pem"
+printf '%s\n' "abc" "48213" "$T/app2.pem" "" "$S_DEP" >"$T/fa"
+out="$(SETUP_TTY="$T/fa" "$ENVX" fill github 2>&1)"
+t has "$out" "does not look right"; t has "$out" "saved: 48213"; t lacks "$out" SENTINEL
+t eq "$(grep -c '^GITOPS_APP_ID=48213$' "$UAT_ENV_FILE")" 1
+t eq "$(grep -c "^CLOUDFLARE_DEPLOY_TOKEN=$S_DEP\$" "$UAT_ENV_FILE")" 1
+t has "$out" "CLOUDFLARE_ACCOUNT_ID is blank"
+printf '%s\n' "" "" "" "" "" >"$T/fa2"; out="$(SETUP_TTY="$T/fa2" "$ENVX" fill github 2>&1)"; t has "$out" "already set"
+echo "   a value with a space, #, \$ and a quote survives"
+printf '%s\n' "$S_PW" >"$T/fa3"; out="$(SETUP_TTY="$T/fa3" "$ENVX" fill --only EXTERNAL_PG_ADMIN_PASSWORD 2>&1)"; t lacks "$out" SENTINEL
+got="$(bash -c '. "$1/tools/release/lib-envfile.sh"; envfile_get "$2" EXTERNAL_PG_ADMIN_PASSWORD' _ "$T/repo" "$UAT_ENV_FILE")"
+t eq "$got" "$S_PW"
+echo "   generated admin password"
+printf '%s\n' "g" >"$T/fa4"; out="$(SETUP_TTY="$T/fa4" "$ENVX" fill --only ADMIN_PASSWORD 2>&1)"; t has "$out" "Generated:"
+pw="$(grep '^ADMIN_PASSWORD=' "$UAT_ENV_FILE" | cut -d= -f2-)"; t test "${#pw}" -ge 16
+echo "   first-apply placeholder is recorded and flagged until replaced"
+printf '%s\n' "p" >"$T/fa5"; SETUP_TTY="$T/fa5" "$ENVX" fill --only STRIPE_WEBHOOK_SECRET >/dev/null 2>&1
+t grep -q '^STRIPE_WEBHOOK_SECRET=whsec_' "$UAT_ENV_FILE"; t test -s "$UAT_ENV_FILE.placeholders"
+out="$("$ENVX" check cluster 2>&1)"; t has "$out" "still the random first-apply placeholder"
+FORCE=1 SETUP_TTY=<(printf '%s\n' "$S_W1") "$ENVX" fill --only STRIPE_WEBHOOK_SECRET >/dev/null 2>&1
+out="$("$ENVX" check cluster 2>&1)"; t lacks "$out" "random first-apply placeholder"
+echo "   a live Stripe key is refused"
+printf '%s\n' "sk_live_SENTINELlive00000001" "" >"$T/fa6"; out="$(SETUP_TTY="$T/fa6" "$ENVX" fill --only STRIPE_SECRET_KEY 2>&1)"; t has "$out" "LIVE Stripe key"; t lacks "$out" SENTINEL
+t eq "$(grep -c '^STRIPE_SECRET_KEY=.\+' "$UAT_ENV_FILE")" 0
+export UAT_ENV_FILE="$T/home/.afrotransact/uat.all.env"
+
 echo "-- drift guard on the real tree"
 t "$SRC/tools/release/uat-env.sh" drift >/dev/null
 
