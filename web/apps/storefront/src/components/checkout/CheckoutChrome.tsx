@@ -1,7 +1,7 @@
 'use client';
 
 import { type Cart, legalHref } from '@afrotransact/api-client';
-import { LockSimple, LogoMark, wordmarkClassName } from '@afrotransact/ui';
+import { LockSimple, LogoMark, ShoppingCart, wordmarkClassName } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { type ReactNode } from 'react';
@@ -18,7 +18,10 @@ import styles from './CheckoutChrome.module.css';
 export const selectedUnits = (cart: Cart | undefined): number =>
   cart ? cart.packages.flatMap((p) => p.lines).filter((l) => l.selected).reduce((n, l) => n + l.quantity, 0) : 0;
 
-/** Minimal checkout header (Amazon pattern): logo on the start side, "Checkout (N items)" centred, the secure label at the end. */
+/**
+ * Slim checkout header (Amazon pattern): the brand on the start side, "Secure checkout" centred, the cart on the end side.
+ * Nothing else: no search, no departments. The cart link says how many items this checkout is for.
+ */
 export function CheckoutHeader() {
   const t = useT();
   const { data: cart } = useCart();
@@ -31,12 +34,18 @@ export function CheckoutHeader() {
           <span className={`${wordmarkClassName} ${styles.wordmark}`}>afrotransact</span>
         </Link>
         <h1 className={styles.heading} data-testid="checkout-heading">
-          {n > 0 ? t('co.heading', { n }) : t('co.headingPlain')}
-        </h1>
-        <span className={styles.secure}>
           <LockSimple weight="fill" aria-hidden />
-          <span className={styles.secureText}>{t('co.secureCheckout')}</span>
-        </span>
+          <span>{t('co.secureCheckout')}</span>
+        </h1>
+        <Link href="/cart" className={styles.cartLink} aria-label={t('header.cartAria', { count: n })} data-testid="checkout-cart-link">
+          <ShoppingCart aria-hidden />
+          <span className={styles.cartText}>{t('header.cart')}</span>
+          {n > 0 && (
+            <span className={styles.cartCount} aria-hidden>
+              {n}
+            </span>
+          )}
+        </Link>
       </div>
     </header>
   );

@@ -2110,5 +2110,16 @@
   "co.noWay.seller": "A kò lè fi ọjà yìí jíṣẹ́ tàbí kí a gbà á ní báyìí",
   "co.noWay.address": "Ìfijíṣẹ́ kò sí fún àdírẹ́sì yìí",
   "co.noWay.body": "Kò sí ibùdó ìgbà ọjà nítòsí àdírẹ́sì yìí pẹ̀lú. Yí àdírẹ́sì padà tàbí yọ ọjà yìí kúrò láti tẹ̀síwájú.",
-  "co.fulfil.choose": "Báwo ni o ṣe fẹ́ gba àwọn ọjà wọ̀nyí?"
+  "co.fulfil.choose": "Báwo ni o ṣe fẹ́ gba àwọn ọjà wọ̀nyí?",
+  "co.status.done": "Ti parí",
+  "co.status.open": "Ó ń lọ lọ́wọ́",
+  "co.status.todo": "A kò tíì bẹ̀rẹ̀",
+  "co.changeItemsAria": "Yí àwọn ọjà padà (ṣí apẹ̀rẹ̀ rẹ)",
+  "co.tax.later": "A ó ṣírò rẹ̀ ní ìgbésẹ̀ tó kàn",
+  "co.finish.aria": "Fi ọjà rẹ ránṣẹ́",
+  "co.note.tax": "Kí ló dé tí a fi owó orí títà kún un?",
+  "co.note.taxTipLabel": "Nípa owó orí títà",
+  "co.note.taxTip": "A máa ń ṣírò owó orí títà fún àdírẹ́sì ìfijíṣẹ́ rẹ àti àwọn ọjà tí o ń rà. A kò fi iye hàn títí a ó fi ṣírò rẹ̀; títí di ìgbà náà, a máa fi àpapọ̀ hàn ṣáájú owó orí.",
+  "co.note.help": "Ṣé o nílò ìrànlọ́wọ́? Ṣàbẹ̀wò sí",
+  "co.backToCart": "Padà sí apẹ̀rẹ̀"
 }

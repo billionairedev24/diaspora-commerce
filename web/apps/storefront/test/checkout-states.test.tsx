@@ -77,7 +77,7 @@ describe('checkout states', () => {
     renderWithProviders(<CheckoutView />);
     const box = await screen.findByTestId('payment-unavailable');
     expect(box).toHaveAttribute('data-reason', 'script');
-    expect(screen.getByRole('button', { name: 'Place your order' })).toBeDisabled();
+    expect(screen.getAllByRole('button', { name: 'Place your order' })[0] as HTMLElement).toBeDisabled();
     expect(screen.getByTestId('payment-blocked-note')).toHaveTextContent('Place order is off until card payment is available.');
   });
 });

@@ -2103,5 +2103,16 @@
   "co.noWay.seller": "This item can’t be delivered or picked up right now",
   "co.noWay.address": "Delivery isn’t available to this address",
   "co.noWay.body": "There’s no pick up point near this address either. Change the address or remove this item to continue.",
-  "co.fulfil.choose": "How would you like to get these items?"
+  "co.fulfil.choose": "How would you like to get these items?",
+  "co.status.done": "Completed",
+  "co.status.open": "In progress",
+  "co.status.todo": "Not started",
+  "co.changeItemsAria": "Change items (opens your cart)",
+  "co.tax.later": "Calculated at the next step",
+  "co.finish.aria": "Place your order",
+  "co.note.tax": "Why has sales tax been applied?",
+  "co.note.taxTipLabel": "About sales tax",
+  "co.note.taxTip": "Sales tax is worked out for your delivery address and the items you are buying. An amount is shown only once it has been calculated; until then the total is shown before tax.",
+  "co.note.help": "Need help? Visit the",
+  "co.backToCart": "Back to cart"
 }

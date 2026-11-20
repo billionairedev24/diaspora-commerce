@@ -2110,5 +2110,16 @@
   "co.noWay.seller": "Este artículo no se puede entregar ni recoger ahora",
   "co.noWay.address": "La entrega no está disponible en esta dirección",
   "co.noWay.body": "Tampoco hay un punto de recogida cerca de esta dirección. Cambia la dirección o quita este artículo para continuar.",
-  "co.fulfil.choose": "¿Cómo quieres recibir estos artículos?"
+  "co.fulfil.choose": "¿Cómo quieres recibir estos artículos?",
+  "co.status.done": "Completado",
+  "co.status.open": "En curso",
+  "co.status.todo": "Sin empezar",
+  "co.changeItemsAria": "Cambiar artículos (abre tu carrito)",
+  "co.tax.later": "Se calcula en el siguiente paso",
+  "co.finish.aria": "Hacer tu pedido",
+  "co.note.tax": "¿Por qué se ha aplicado el impuesto sobre las ventas?",
+  "co.note.taxTipLabel": "Acerca del impuesto sobre las ventas",
+  "co.note.taxTip": "El impuesto sobre las ventas se calcula según tu dirección de entrega y los artículos que compras. Solo se muestra un importe una vez calculado; hasta entonces el total se muestra antes de impuestos.",
+  "co.note.help": "¿Necesitas ayuda? Visita el",
+  "co.backToCart": "Volver al carrito"
 }

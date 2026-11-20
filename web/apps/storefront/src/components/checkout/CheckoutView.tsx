@@ -482,6 +482,7 @@ export function CheckoutView() {
     setOpenStep(n);
     if (n === 1) setAddressOpen(true);
   };
+  const placeDisabled = !paymentChosen || !address || addressList || blocked || summary.isFetching || !!totalChange;
   const needReason = !address ? t('co.needAddress') : addressList ? t('co.confirmAddress') : !paymentChosen && !cardDown ? (payWith === 'new' ? t('co.needCard') : t('co.needPayment')) : null;
   const firstPromise = s.packages.length === 1 ? promiseOf(s.packages[0] as CheckoutPackage, choices[s.packages[0]?.packageId ?? ''] ?? initialChoice(s.packages[0] as CheckoutPackage)) : null;
   const itemsSummary = [t('co.items', { n: itemCount }), t('co.sellers', { n: s.sellerCount }), firstPromise?.text ? (firstPromise.pickup ? t('co.pickupReady', { ready: firstPromise.text }) : t('cart.arrives', { eta: firstPromise.text })) : ''].filter(Boolean).join(' · ');
@@ -546,7 +547,23 @@ export function CheckoutView() {
           </div>
         </CheckoutStep>
 
-        <CheckoutStep n={2} id="co-payment-title" title={t('co.step.payment')} state={stateOf(2)} onChange={open(2)} keepMounted summary={savedPaymentOk ? <p className={styles.plain}>{paymentSummary}</p> : null}>
+        <CheckoutStep n={2} id="co-payment-title" title={t('co.step.payment')} state={stateOf(2)} onChange={open(2)} keepMounted summary={savedPaymentOk ? <p className={styles.plain}>{paymentSummary}</p> : null} extra={
+          <PromoCode
+            coupon={s.coupon}
+            draft={couponDraft}
+            setDraft={setCouponDraft}
+            busy={busy}
+            onApply={() => {
+              setError(null);
+              setAppliedCoupon(couponDraft.trim().toUpperCase());
+            }}
+            onRemove={() => {
+              setError(null);
+              setAppliedCoupon('');
+              setCouponDraft('');
+            }}
+          />
+          }>
           <PaymentStep
             s={s}
             total={total}
@@ -575,24 +592,9 @@ export function CheckoutView() {
               <Button onClick={() => setOpenStep(null)}>{t('co.usePayment')}</Button>
             </div>
           )}
-          <PromoCode
-            coupon={s.coupon}
-            draft={couponDraft}
-            setDraft={setCouponDraft}
-            busy={busy}
-            onApply={() => {
-              setError(null);
-              setAppliedCoupon(couponDraft.trim().toUpperCase());
-            }}
-            onRemove={() => {
-              setError(null);
-              setAppliedCoupon('');
-              setCouponDraft('');
-            }}
-          />
         </CheckoutStep>
 
-        <CheckoutStep n={3} id="co-delivery" title={t('co.review')} state={stateOf(3)} onChange={open(3)} alwaysSummary summary={<p className={styles.plain}>{itemsSummary}</p>}>
+        <CheckoutStep n={3} id="co-delivery" title={t('co.review')} state={stateOf(3)} changeHref="/cart" changeLabel={t('co.changeItemsAria')} alwaysSummary summary={<p className={styles.plain}>{itemsSummary}</p>}>
           <div className={styles.packages}>
             {s.packages.map((p, i) => (
               <PackageCard
@@ -638,6 +640,7 @@ export function CheckoutView() {
         error={error}
         errorCartLink={error !== null && error === t('co.cartChanged')}
         onPlace={placeNow}
+        placeDisabled={placeDisabled}
         taxPending={summary.isFetching}
         onRetryTax={() => void summary.refetch()}
         retryingTax={summary.isFetching}
