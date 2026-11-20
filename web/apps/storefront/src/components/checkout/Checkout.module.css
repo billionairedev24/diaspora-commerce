@@ -79,6 +79,12 @@
 .package:last-child { padding-block-end: 0; border-block-end: 0; }
 .packageHead { display: flex; flex-direction: column; gap: 2px; }
 .packageTitle { margin: 0; font-size: var(--at-text-md); font-weight: var(--at-weight-bold); color: var(--at-color-success); }
+.packageTitleNeutral { margin: 0; font-size: var(--at-text-md); font-weight: var(--at-weight-bold); color: var(--at-color-text); }
+/* Pick up is the only way: said in words, with the reason, before the location is confirmed. */
+.onlyNote { display: flex; flex-wrap: wrap; align-items: center; gap: var(--at-space-2) var(--at-space-3); padding-inline-start: var(--at-space-3); border-inline-start: 3px solid var(--at-color-warning); }
+.onlyTitle { font-size: var(--at-text-sm); font-weight: var(--at-weight-bold); }
+.confirmRow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--at-space-2) var(--at-space-3); }
+.confirmed { display: inline-flex; align-items: center; gap: var(--at-space-1); font-size: var(--at-text-sm); color: var(--at-color-success); font-weight: var(--at-weight-semibold); }
 .packageMeta { color: var(--at-color-text-muted); font-size: var(--at-text-sm); }
 
 .items { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--at-space-4); }

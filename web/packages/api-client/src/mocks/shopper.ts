@@ -175,7 +175,16 @@ function checkoutPackages(session: MockSession, zip: string, now: Date): Checkou
       const noFulfilment = p.fulfilment === 'SELLER' && points.length === 0;
       if (outside && !noFulfilment) return outsideZonePackage(p, points.length ? pickupOption(points, now, isAT) : null, points);
       return { ...p, deliveryOptions: options, pickupPoints: points, ...(noFulfilment ? { noFulfilment: true } : {}), delivery: { ...p.delivery, label: options[0]?.eta ?? p.delivery.label } };
-    });
+    })
+    .map(withDeliveryReason);
+}
+
+/** Why a package can't be delivered, as gateway-bff says it (deliveryUnavailableReason): a Pick up offer, or an address delivery can't reach. */
+function withDeliveryReason(p: CheckoutPackage): CheckoutPackage {
+  if (p.preorder) return p;
+  const delivers = p.deliveryOptions.some((o) => o.key !== 'pickup' && o.key !== 'quote_required');
+  const reason = p.deliveryOptions.some((o) => o.key === 'quote_required') || p.localDelivery?.available === false ? 'ADDRESS' : !delivers && p.fulfilment === 'SELLER' ? 'SELLER_PICKUP_ONLY' : null;
+  return reason ? { ...p, deliveryUnavailableReason: reason } : p;
 }
 
 export const NO_FULFILMENT_MESSAGE = 'Some items can’t be bought right now: the seller offers neither pickup near you nor delivery. Remove them or choose another address.';

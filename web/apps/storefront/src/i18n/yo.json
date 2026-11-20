@@ -2096,5 +2096,19 @@
   "store.gone.search": "Wá gbogbo ọjà",
   "store.meta.title": "{name}",
   "ord.mode.legacy_seller_shipped": "Olùtà ló fi ránṣẹ́",
-  "co.noFulfilment": "Olùtajà yìí kò pèsè ìfijiṣẹ́ tàbí gbígbà fún àwọn ọjà wọ̀nyí nítòsí rẹ, nítorí náà a kò lè ra wọ́n báyìí. Yọ wọ́n kúrò tàbí yan àdírẹ́sì mìíràn."
+  "co.noFulfilment": "Olùtajà yìí kò pèsè ìfijiṣẹ́ tàbí gbígbà fún àwọn ọjà wọ̀nyí nítòsí rẹ, nítorí náà a kò lè ra wọ́n báyìí. Yọ wọ́n kúrò tàbí yan àdírẹ́sì mìíràn.",
+  "co.pickupOnly.seller": "Olùtajà yìí ń funni ní gbígbà ọjà nìkan",
+  "co.pickupOnly.address": "Ìfijíṣẹ́ kò sí fún àdírẹ́sì yìí",
+  "co.pickupOnly.tipLabel": "Kí ló dé tí ó fi jẹ́ gbígbà nìkan?",
+  "co.pickupOnly.sellerTip": "Olùtajà yìí kò tíì ṣètò ìfijíṣẹ́ fún àwọn ọjà wọ̀nyí, nítorí náà o máa gbà wọ́n lọ́wọ́ rẹ̀. A kò yan ohunkóhun fún ọ: jẹ́rìí sí ibi ìgbà ọjà ní ìsàlẹ̀.",
+  "co.pickupOnly.addressTip": "Ìfijíṣẹ́ kò lè dé àdírẹ́sì tí o yàn. Yí àdírẹ́sì padà láti rí i bóyá ìfijíṣẹ́ wà, tàbí jẹ́rìí sí gbígbà ọjà ní ìsàlẹ̀. A kò yan ohunkóhun fún ọ.",
+  "co.pickupOnly.confirmTitle": "Jẹ́rìí sí ibi tí o ó ti gba ọjà",
+  "co.pickupOnly.confirm": "Jẹ́rìí sí ibi ìgbà ọjà",
+  "co.pickupOnly.needed": "Jẹ́rìí sí ibùdó náà kí o tó fi ọjà rẹ ránṣẹ́.",
+  "co.pickupOnly.confirmed": "A ti jẹ́rìí gbígbà ọjà · {place}",
+  "co.pickupOnly.placeNote": "Jẹ́rìí sí ibi tí o ó ti gba àwọn ọjà rẹ kí o tó fi ọjà ránṣẹ́.",
+  "co.noWay.seller": "A kò lè fi ọjà yìí jíṣẹ́ tàbí kí a gbà á ní báyìí",
+  "co.noWay.address": "Ìfijíṣẹ́ kò sí fún àdírẹ́sì yìí",
+  "co.noWay.body": "Kò sí ibùdó ìgbà ọjà nítòsí àdírẹ́sì yìí pẹ̀lú. Yí àdírẹ́sì padà tàbí yọ ọjà yìí kúrò láti tẹ̀síwájú.",
+  "co.fulfil.choose": "Báwo ni o ṣe fẹ́ gba àwọn ọjà wọ̀nyí?"
 }
