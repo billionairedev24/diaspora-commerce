@@ -201,6 +201,7 @@ func (s *checkoutPaymentServiceImpl) summary(ctx context.Context, c *domain.Call
 		s.priceMembership(ctx, c, &sum, packageDelivery)
 		s.priceCoupon(ctx, c, &sum, packageDelivery, couponCode)
 		s.priceTax(ctx, &sum, addr, packageDelivery)
+		markDeliveryUnavailable(&sum)
 		s.blockUndeliverable(&sum, packageDelivery)
 		recalcCheckoutTotal(&sum)
 		s.issueTaxQuote(c, &sum, addr, packageDelivery)
@@ -263,10 +264,39 @@ func (s *checkoutPaymentServiceImpl) summary(ctx context.Context, c *domain.Call
 	s.priceMembership(ctx, c, &sum, packageDelivery)
 	s.priceCoupon(ctx, c, &sum, packageDelivery, couponCode)
 	s.priceTax(ctx, &sum, addr, packageDelivery)
+	markDeliveryUnavailable(&sum)
 	s.blockUndeliverable(&sum, packageDelivery)
 	recalcCheckoutTotal(&sum)
 	s.issueTaxQuote(c, &sum, addr, packageDelivery)
 	return sum, nil
+}
+
+// deliveryUnavailableReason says why a package cannot be delivered, "" when it can. A seller's own package (the "Pick up"
+// offer) has no delivery option at all; an AfroTransact package fails on the address (quote required, or a store that can't
+// serve it). Pre-orders are priced elsewhere and say nothing.
+func deliveryUnavailableReason(p domain.CheckoutPackage) string {
+	if len(p.Preorder) > 0 {
+		return ""
+	}
+	delivers := false
+	for _, o := range p.DeliveryOptions {
+		if o.Key != domain.OptionPickup && o.Key != domain.OptionQuoteRequired {
+			delivers = true
+		}
+	}
+	switch {
+	case hasOption(p, domain.OptionQuoteRequired), p.LocalDelivery != nil && !p.LocalDelivery.Available:
+		return domain.DeliveryWhyAddress
+	case !delivers && p.Fulfilment == domain.ShipsFromSeller:
+		return domain.DeliveryWhySellerPickupOnly
+	}
+	return ""
+}
+
+func markDeliveryUnavailable(sum *domain.CheckoutSummary) {
+	for i := range sum.Packages {
+		sum.Packages[i].DeliveryUnavailableReason = deliveryUnavailableReason(sum.Packages[i])
+	}
 }
 
 // selfShippingCharges is the flat per-order charge of each seller in the cart that ships itself, read from orders. It is empty

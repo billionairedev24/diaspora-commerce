@@ -1,8 +1,8 @@
 'use client';
 
-import { type CheckoutBlockedLine, checkoutKeys, type CheckoutPackage, type DeliveryOptionKey, type DeliveryPreferences, hasDeliveryWindow, type PlaceableOption } from '@afrotransact/api-client';
+import { type CheckoutBlockedLine, checkoutKeys, type CheckoutPackage, type DeliveryOption, type DeliveryOptionKey, type DeliveryPreferences, hasDeliveryWindow, type PlaceableOption } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { Button, ImagePlaceholder, Key, Lightning, QuantityStepper, Warning } from '@afrotransact/ui';
+import { Button, CheckCircle, ImagePlaceholder, InfoTip, Key, Lightning, QuantityStepper, Warning } from '@afrotransact/ui';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { useT } from '@/i18n/t';
@@ -10,11 +10,19 @@ import { useCartMutation } from '@/lib/cart/useCart';
 import { feeRuleNote } from '@/lib/fee-rule';
 
 import styles from './Checkout.module.css';
+import { fulfilmentOf } from './fulfilment';
 import { pickupReasonKey } from './pickup-reason';
 import { onRequestQuote } from './quote';
 
+/**
+ * Whether the shopper has said they want to pick the package up. `unconfirmed`: pick up is the only way (the seller offers it
+ * only, or delivery can't reach the address) and nothing was said yet, so the order waits; `chosen`: picked next to a delivery
+ * option; `only`: confirmed when it was the only way (dropped again if delivery becomes possible, so it never sticks silently).
+ */
+export type PickupConfirm = 'unconfirmed' | 'chosen' | 'only';
+
 /** How one package reaches the shopper: a delivery option, or pickup at one of its pickup points. */
-export type Choice = { option: DeliveryOptionKey; pickupPointId?: string; preferences: DeliveryPreferences };
+export type Choice = { option: DeliveryOptionKey; pickupPointId?: string; preferences: DeliveryPreferences; pickupConfirm?: PickupConfirm };
 
 /**
  * The option an order is placed with. quote_required is never payable on its own: with an agreed delivery quote
@@ -25,11 +33,23 @@ export function placeable(option: DeliveryOptionKey, quoted = false): PlaceableO
   return option === 'quote_required' ? (quoted ? 'afrotransact_delivery' : 'pickup') : option;
 }
 
-/** Default choice per package: its first delivery option (pickup only when that is all it has). */
+/**
+ * Default choice per package. Delivery whenever it can be paid for, never pick up while delivery is possible. Pick up is the
+ * starting point only when it is the one way to get the package, and then it is `unconfirmed`: the order is blocked until the
+ * shopper confirms the pickup location (needsPickupConfirm), so nothing is ever assigned silently.
+ */
 export function initialChoice(p: CheckoutPackage): Choice {
+  const f = fulfilmentOf(p);
+  const base = { pickupPointId: p.pickupPoints?.[0]?.id, preferences: { handover: 'door', contact: 'text' } } satisfies Omit<Choice, 'option'>;
+  const delivery = f.delivery[0];
+  if (delivery) return { ...base, option: delivery.key };
+  if (f.pickup) return { ...base, option: 'pickup', pickupConfirm: 'unconfirmed' };
   const first = p.deliveryOptions.find((o) => o.key !== 'pickup') ?? p.deliveryOptions[0];
-  return { option: first?.key ?? 'afrotransact_delivery', pickupPointId: p.pickupPoints?.[0]?.id, preferences: { handover: 'door', contact: 'text' } };
+  return { ...base, option: first?.key ?? 'afrotransact_delivery' };
 }
+
+/** Pick up is the starting point and the shopper has not confirmed it yet: the order waits (never a silent assignment). */
+export const needsPickupConfirm = (c: Choice | undefined): boolean => c?.option === 'pickup' && c.pickupConfirm === 'unconfirmed';
 
 /** The package's fee for a choice (pickup is free). */
 export function feeOf(p: CheckoutPackage, c: Choice | undefined): number {
@@ -185,12 +205,12 @@ export function PackageCard({
 }) {
   const fmt = useFormatters();
   const t = useT();
+  const f = fulfilmentOf(pkg);
   const points = pkg.pickupPoints ?? [];
-  const deliveryOptions = pkg.deliveryOptions.filter((o) => o.key !== 'pickup');
-  const hasPickupOption = pkg.deliveryOptions.some((o) => o.key === 'pickup');
-  const canPickup = hasPickupOption && points.length > 0;
+  const canPickup = f.pickup;
   const pickupOption = pkg.deliveryOptions.find((o) => o.key === 'pickup');
   const pickup = choice.option === 'pickup';
+  const unconfirmed = needsPickupConfirm(choice);
   const undeliverable = pkg.localDelivery?.available === false;
   const perishable = pkg.lines.some((l) => l.perishable);
   const atd = choice.option === 'afrotransact_delivery';
@@ -201,25 +221,21 @@ export function PackageCard({
   // A date only from a real window: an option with no eta (and a package with no window) shows none.
   const promise = promiseOf(pkg, choice).text;
   const group = `pkg-${pkg.packageId}`;
-  // Radios only when there is a real choice: more than one valid way to get this package.
-  const validDelivery = deliveryOptions.filter((o) => o.key !== 'quote_required' && !undeliverable);
-  const validCount = validDelivery.length + (canPickup ? 1 : 0);
-  // A single valid option is plain text, unless the current choice is not it (a package that starts on "too far for delivery"
-  // must be able to pick its one way forward, pickup).
-  const choiceValid = pickup ? canPickup : validDelivery.some((o) => o.key === choice.option);
-  const choose = validCount > 1 || (validCount === 1 && !choiceValid);
+  const quoteOption = pkg.deliveryOptions.find((o) => o.key === 'quote_required');
+  /** Picks up the package with the shopper's say-so: picking the radio, a location, or confirming the only way. */
+  const pickUp = (patch: Partial<Choice> = {}) => onChoice({ ...choice, option: 'pickup', pickupPointId: choice.pickupPointId ?? points[0]?.id, pickupConfirm: f.mode === 'pickup-only' ? 'only' : 'chosen', ...patch });
 
-  const optionBody = (o: (typeof deliveryOptions)[number]) => {
+  const deliveryBody = (o: DeliveryOption) => {
     const isFree = !o.feeUnknown && (o.free || o.feeMinor === 0);
     return (
       <>
         <div className={styles.flatText}>
-          <strong className={styles.optionTitle}>{undeliverable ? t('ld.notAvailableOption') : o.label}</strong>
+          <strong className={styles.optionTitle}>{o.label}</strong>
           <span className={styles.optionDesc}>
             {o.eta}
             {o.cutoffLabel ? ` · ${o.cutoffLabel}` : ''}
           </span>
-          {o.feeRule && !undeliverable ? (
+          {o.feeRule ? (
             <span className={styles.optionDesc} data-testid={`fee-rule-${o.key}`}>
               {feeRuleNote(t, o.feeRule)}
             </span>
@@ -232,12 +248,69 @@ export function PackageCard({
     );
   };
 
+  const pickupBody = (
+    <>
+      <div className={styles.flatText}>
+        <strong className={styles.optionTitle}>{t('co.fulfil.pickup')}</strong>
+        {point && <span className={styles.optionDesc}>{t('co.pickupAt', { place: point.name, address: point.address })}</span>}
+        {point && <span className={styles.optionDesc}>{t('co.pickupReady', { ready: pickupOption?.eta || point.ready })}</span>}
+      </div>
+      <span className={styles.optionFeeFree} data-testid="option-fee-pickup">
+        {fmt.money(0)}
+      </span>
+    </>
+  );
+
+  /** The pickup locations, one to choose when there are several. Shown while pick up is the choice. */
+  const pickupPoints = pickup && points.length > 0 && (
+    <fieldset className={styles.pointList} data-testid="pickup-points">
+      <legend className={styles.optionsLegend}>{t('co.pickupChoose')}</legend>
+      {points.map((pt) => (
+        <label key={pt.id} className={styles.pointRow} data-testid="pickup-point">
+          {points.length > 1 && (
+            <input
+              type="radio"
+              name={`pt-${pkg.packageId}`}
+              checked={point?.id === pt.id}
+              onChange={() => pickUp({ pickupPointId: pt.id })}
+              aria-label={`${pt.name} ${pt.address}`}
+            />
+          )}
+          <span className={styles.flatText}>
+            <strong className={styles.optionTitle}>{pt.name}</strong>
+            <span className={styles.optionDesc}>{pt.address}</span>
+            <span className={styles.optionDesc}>
+              {pt.distanceMiles != null ? `${t('co.distance', { miles: fmt.number(pt.distanceMiles, { maximumFractionDigits: 1 }) })} · ` : ''}
+              {pt.hours} · {pt.ready}
+            </span>
+          </span>
+        </label>
+      ))}
+    </fieldset>
+  );
+
+  const changeAddressLink = (
+    <button type="button" className="link-button" onClick={onChangeAddress} data-testid="change-address">
+      {t('ld.changeAddress')}
+    </button>
+  );
+
+  const title = unconfirmed
+    ? t('co.pickupOnly.confirmTitle')
+    : promise
+      ? pickup
+        ? t('co.pickupReady', { ready: promise })
+        : t('cart.arrives', { eta: promise })
+      : pickup
+        ? t('co.fulfil.pickup')
+        : t('cart.deliveryTitle');
+
   return (
-    <article className={styles.package} data-testid="checkout-package" aria-labelledby={`${group}-title`}>
+    <article className={styles.package} data-testid="checkout-package" data-mode={f.mode} aria-labelledby={`${group}-title`}>
       <header className={styles.packageHead}>
         {/* The date only from a real window; otherwise the method alone. */}
-        <h3 id={`${group}-title`} className={styles.packageTitle} data-testid="package-promise">
-          {promise ? (pickup ? t('co.pickupReady', { ready: promise }) : t('cart.arrives', { eta: promise })) : pickup ? t('co.fulfil.pickup') : t('cart.deliveryTitle')}
+        <h3 id={`${group}-title`} className={unconfirmed ? styles.packageTitleNeutral : styles.packageTitle} data-testid="package-promise">
+          {title}
         </h3>
         <span className={styles.packageMeta} data-testid="package-meta">
           {total > 1 ? `${pkg.heading} · ${t('cart.package', { n, total })}` : pkg.heading}
@@ -253,78 +326,80 @@ export function PackageCard({
       <div className={styles.packageBody}>
         {!pickup && <LocalDeliveryQuote pkg={pkg} onRemove={onRemove} onChangeAddress={onChangeAddress} removing={removing} />}
 
-        <fieldset className={styles.optionList} disabled={undeliverable && !canPickup} aria-label={t('co.fulfilAria', { seller: pkg.seller.name })}>
-          <legend className={choose ? styles.optionsLegend : 'at-visually-hidden'}>{t('co.deliveryOption')}</legend>
-          {deliveryOptions.map((o) => {
-            if (o.key === 'quote_required') {
-              // Outside every delivery zone: not payable. The shopper asks for a quote, picks up, or changes the address.
-              return (
-                <div key={o.key} className={styles.optionRow} role="group" aria-label={o.label} data-testid="quote-required">
-                  <Warning weight="fill" className={styles.flatIcon} aria-hidden />
-                  <div className={styles.flatText}>
-                    <strong className={styles.optionTitle}>{o.label}</strong>
-                    <p className={styles.optionDesc}>{t('co.quote.help')}</p>
-                    <div className={styles.optionActions}>
-                      <Button size="sm" variant="secondary" onClick={() => onRequestQuote(pkg)} data-testid="request-quote">
-                        {t('co.quote.cta')}
-                      </Button>
-                      <Button size="sm" variant="neutral" onClick={onChangeAddress}>
-                        {t('ld.changeAddress')}
-                      </Button>
-                    </div>
-                  </div>
+        {f.mode === 'pickup-only' && (
+          <div className={styles.onlyNote} role="note" data-testid="pickup-only" data-why={f.why ?? ''}>
+            <strong className={styles.onlyTitle}>{f.why === 'address' ? t('co.pickupOnly.address') : t('co.pickupOnly.seller')}</strong>
+            <InfoTip label={t('co.pickupOnly.tipLabel')}>{f.why === 'address' ? t('co.pickupOnly.addressTip') : t('co.pickupOnly.sellerTip')}</InfoTip>
+            {f.why === 'address' && changeAddressLink}
+          </div>
+        )}
+
+        {f.mode === 'none' && !pkg.localDelivery && (
+          <div className={styles.localProblem} role="alert" data-testid="no-way">
+            <strong>
+              <Warning weight="fill" aria-hidden /> {pkg.noFulfilment ? t('co.noWay.seller') : t('co.noWay.address')}
+            </strong>
+            <p className={styles.localMessage}>{pkg.noFulfilment ? t('co.noFulfilment') : t('co.noWay.body')}</p>
+            <div className={styles.localActions}>
+              <Button size="sm" variant="neutral" onClick={onChangeAddress}>
+                {t('ld.changeAddress')}
+              </Button>
+              <Button size="sm" variant="secondary" loading={removing} onClick={onRemove} aria-label={t('ld.removeAria', { seller: pkg.seller.name })}>
+                {t('ld.remove')}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <fieldset className={styles.optionList} aria-label={t('co.fulfilAria', { seller: pkg.seller.name })}>
+          <legend className={f.mode === 'choose' ? styles.optionsLegend : 'at-visually-hidden'}>{f.mode === 'choose' ? t('co.fulfil.choose') : t('co.deliveryOption')}</legend>
+
+          {quoteOption && (
+            // Outside every delivery zone: not payable. The shopper asks for a quote, picks up, or changes the address.
+            <div className={styles.optionRow} role="group" aria-label={quoteOption.label} data-testid="quote-required">
+              <Warning weight="fill" className={styles.flatIcon} aria-hidden />
+              <div className={styles.flatText}>
+                <strong className={styles.optionTitle}>{quoteOption.label}</strong>
+                <p className={styles.optionDesc}>{t('co.quote.help')}</p>
+                <div className={styles.optionActions}>
+                  <Button size="sm" variant="secondary" onClick={() => onRequestQuote(pkg)} data-testid="request-quote">
+                    {t('co.quote.cta')}
+                  </Button>
+                  <Button size="sm" variant="neutral" onClick={onChangeAddress}>
+                    {t('ld.changeAddress')}
+                  </Button>
                 </div>
-              );
-            }
-            const isSelected = choice.option === o.key;
-            return choose ? (
-              <label key={o.key} className={`${styles.optionRow} ${isSelected ? styles.optionRowActive : ''}`} data-testid={`delivery-option-${o.key}`}>
-                <input
-                  type="radio"
-                  name={`opt-${pkg.packageId}`}
-                  checked={isSelected}
-                  onChange={() => onChoice({ ...choice, option: o.key })}
-                  disabled={undeliverable}
-                  aria-label={`${o.label} ${o.eta}`.trim()}
-                />
-                {optionBody(o)}
+              </div>
+            </div>
+          )}
+
+          {f.delivery.map((o) =>
+            f.mode === 'choose' ? (
+              <label key={o.key} className={`${styles.optionRow} ${choice.option === o.key ? styles.optionRowActive : ''}`} data-testid={`delivery-option-${o.key}`}>
+                <input type="radio" name={`opt-${pkg.packageId}`} checked={choice.option === o.key} onChange={() => onChoice({ ...choice, option: o.key, pickupConfirm: undefined })} aria-label={`${o.label} ${o.eta}`.trim()} />
+                {deliveryBody(o)}
               </label>
             ) : (
               <div key={o.key} className={styles.optionRow} data-testid={`delivery-option-${o.key}`}>
-                {optionBody(o)}
-              </div>
-            );
-          })}
-
-          {canPickup && point && (
-            choose ? (
-              <label className={`${styles.optionRow} ${pickup ? styles.optionRowActive : ''}`} data-testid="fulfil-pickup">
-                <input
-                  type="radio"
-                  name={`opt-${pkg.packageId}`}
-                  checked={pickup}
-                  onChange={() => onChoice({ ...choice, option: 'pickup', pickupPointId: choice.pickupPointId ?? points[0]?.id })}
-                  aria-label={`${t('co.fulfil.pickup')} ${point.name}`}
-                />
-                <div className={styles.flatText}>
-                  <strong className={styles.optionTitle}>{t('co.fulfil.pickup')}</strong>
-                  <span className={styles.optionDesc}>{t('co.pickupAt', { place: point.name, address: point.address })}</span>
-                  <span className={styles.optionDesc}>{t('co.pickupReady', { ready: pickupOption?.eta || point.ready })}</span>
-                </div>
-                <span className={styles.optionFeeFree} data-testid="option-fee-pickup">{fmt.money(0)}</span>
-              </label>
-            ) : (
-              <div className={styles.optionRow} data-testid="fulfil-pickup">
-                <div className={styles.flatText}>
-                  <strong className={styles.optionTitle}>{t('co.fulfil.pickup')}</strong>
-                  <span className={styles.optionDesc}>{t('co.pickupAt', { place: point.name, address: point.address })}</span>
-                  <span className={styles.optionDesc}>{t('co.pickupReady', { ready: pickupOption?.eta || point.ready })}</span>
-                </div>
-                <span className={styles.optionFeeFree} data-testid="option-fee-pickup">{fmt.money(0)}</span>
+                {deliveryBody(o)}
               </div>
             )
           )}
-          {pkg.noFulfilment ? (
+
+          {canPickup &&
+            point &&
+            (f.mode === 'choose' ? (
+              <label className={`${styles.optionRow} ${pickup ? styles.optionRowActive : ''}`} data-testid="fulfil-pickup">
+                <input type="radio" name={`opt-${pkg.packageId}`} checked={pickup} onChange={() => pickUp()} aria-label={`${t('co.fulfil.pickup')} ${point.name}`} />
+                {pickupBody}
+              </label>
+            ) : (
+              <div className={styles.optionRow} data-testid="fulfil-pickup">
+                {pickupBody}
+              </div>
+            ))}
+
+          {pkg.noFulfilment && f.mode !== 'none' ? (
             <p className={styles.optionDesc} role="alert" data-testid="no-fulfilment">
               {t('co.noFulfilment')}
             </p>
@@ -336,31 +411,30 @@ export function PackageCard({
           ) : null}
         </fieldset>
 
-        {pickup && points.length > 0 && (
-          <fieldset className={styles.pointList} data-testid="pickup-points">
-            <legend className={styles.optionsLegend}>{t('co.pickupChoose')}</legend>
-            {points.map((pt) => (
-              <label key={pt.id} className={styles.pointRow} data-testid="pickup-point">
-                {points.length > 1 && (
-                  <input
-                    type="radio"
-                    name={`pt-${pkg.packageId}`}
-                    checked={point?.id === pt.id}
-                    onChange={() => onChoice({ ...choice, option: 'pickup', pickupPointId: pt.id })}
-                    aria-label={`${pt.name} ${pt.address}`}
-                  />
-                )}
-                <span className={styles.flatText}>
-                  <strong className={styles.optionTitle}>{pt.name}</strong>
-                  <span className={styles.optionDesc}>{pt.address}</span>
-                  <span className={styles.optionDesc}>
-                    {pt.distanceMiles != null ? `${t('co.distance', { miles: fmt.number(pt.distanceMiles, { maximumFractionDigits: 1 }) })} · ` : ''}
-                    {pt.hours} · {pt.ready}
-                  </span>
+        {pickupPoints}
+
+        {f.mode === 'pickup-only' && pickup && (
+          <div className={styles.confirmRow} data-testid="pickup-confirm">
+            {unconfirmed ? (
+              <>
+                <Button size="sm" onClick={() => pickUp()} data-testid="pickup-confirm-button">
+                  {t('co.pickupOnly.confirm')}
+                </Button>
+                <span className={styles.optionDesc} role="status">
+                  {t('co.pickupOnly.needed')}
                 </span>
-              </label>
-            ))}
-          </fieldset>
+              </>
+            ) : (
+              <>
+                <span className={styles.confirmed} role="status">
+                  <CheckCircle weight="fill" aria-hidden /> {t('co.pickupOnly.confirmed', { place: point?.name ?? '' })}
+                </span>
+                <button type="button" className="link-button" onClick={() => onChoice({ ...choice, pickupConfirm: 'unconfirmed' })}>
+                  {t('co.change')}
+                </button>
+              </>
+            )}
+          </div>
         )}
         {atd && !undeliverable && (
           <fieldset className={styles.prefsBox}>
