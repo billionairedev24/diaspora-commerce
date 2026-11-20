@@ -106,9 +106,10 @@ describe('an address outside every delivery zone', () => {
   it('keeps pickup as a way forward', async () => {
     const user = userEvent.setup();
     card(pkg([quote, pickup]));
-    expect(screen.getByTestId('fulfil-pickup')).toBeInTheDocument();
-    await user.click(screen.getByTestId('fulfil-pickup'));
-    expect(screen.getByText('Houston FC — Will Call')).toBeInTheDocument();
+    // Pick up is the only way here: named with its location, and the shopper confirms it (never assigned silently).
+    expect(screen.getByTestId('fulfil-pickup')).toHaveTextContent('Houston FC — Will Call');
+    await user.click(screen.getByTestId('pickup-confirm-button'));
+    expect(screen.getByTestId('pickup-confirm')).toHaveTextContent('Pick up confirmed · Houston FC — Will Call');
   });
 });
 

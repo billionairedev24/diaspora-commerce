@@ -262,7 +262,8 @@ export function PackageCard({
   );
 
   /** The pickup locations, one to choose when there are several. Shown while pick up is the choice. */
-  const pickupPoints = pickup && points.length > 0 && (
+  // With one location in the only-way case the pickup row above already names it: no second list of the same place.
+  const pickupPoints = pickup && points.length > 0 && !(f.mode === 'pickup-only' && points.length === 1) && (
     <fieldset className={styles.pointList} data-testid="pickup-points">
       <legend className={styles.optionsLegend}>{t('co.pickupChoose')}</legend>
       {points.map((pt) => (
