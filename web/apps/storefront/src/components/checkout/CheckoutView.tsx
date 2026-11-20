@@ -485,7 +485,7 @@ export function CheckoutView() {
   const placeDisabled = !paymentChosen || !address || addressList || blocked || summary.isFetching || !!totalChange;
   const needReason = !address ? t('co.needAddress') : addressList ? t('co.confirmAddress') : !paymentChosen && !cardDown ? (payWith === 'new' ? t('co.needCard') : t('co.needPayment')) : null;
   const firstPromise = s.packages.length === 1 ? promiseOf(s.packages[0] as CheckoutPackage, choices[s.packages[0]?.packageId ?? ''] ?? initialChoice(s.packages[0] as CheckoutPackage)) : null;
-  const itemsSummary = [t('co.items', { n: itemCount }), t('co.sellers', { n: s.sellerCount }), firstPromise?.text ? (firstPromise.pickup ? t('co.pickupReady', { ready: firstPromise.text }) : t('cart.arrives', { eta: firstPromise.text })) : ''].filter(Boolean).join(' · ');
+  const itemsSummary = [t('co.items', { n: itemCount }), t('co.sellers', { n: s.sellerCount }), firstPromise?.text && !pickupUnconfirmed ? (firstPromise.pickup ? t('co.pickupReady', { ready: firstPromise.text }) : t('cart.arrives', { eta: firstPromise.text })) : ''].filter(Boolean).join(' · ');
   const paymentSummary = creditPaysAll ? t('co.credit.payingAll') : payWith === 'saved' && pm ? `${pm.label}${pm.expires ? ` · ${t('pay.expires', { date: pm.expires })}` : ''}` : t('co.needPayment');
 
   return (
@@ -622,11 +622,9 @@ export function CheckoutView() {
         shippingMinor={selectedShipping}
         total={total}
         itemCount={itemCount}
-        paymentChosen={paymentChosen}
         needReason={needReason}
         creditMinor={split.appliedMinor}
         addressOk={!!address}
-        blocked={blocked}
         preLocked={preLocked}
         preLockedText={preCopy?.copy.lockedText}
         preRun={preBlock?.kind === 'RUN' ? preBlock : null}
@@ -634,14 +632,12 @@ export function CheckoutView() {
         taxBlocked={taxBlocked}
         deliveryReason={deliveryReason}
         paymentReason={paymentReason}
-        addressList={addressList}
         busy={busy}
         placing={placing}
         error={error}
         errorCartLink={error !== null && error === t('co.cartChanged')}
         onPlace={placeNow}
         placeDisabled={placeDisabled}
-        taxPending={summary.isFetching}
         onRetryTax={() => void summary.refetch()}
         retryingTax={summary.isFetching}
         onEditAddress={() => address && setAddrDialog({ open: true, address })}

@@ -109,7 +109,7 @@ test('without a Stripe key the always-visible payment form is the labelled dev-o
   await page.getByLabel('Security code').fill('123');
   await page.getByLabel('ZIP').fill('77002');
   await page.getByRole('checkbox', { name: /Save for future purchases/ }).check();
-  await page.getByRole('button', { name: 'Place your order' }).click();
+  await page.getByRole('button', { name: 'Place your order' }).first().click();
   await expect(page).toHaveURL(/\/orders\?placed=AT-2026-/);
 });
 
@@ -120,7 +120,7 @@ test('the stand-in 3-D Secure card returns through /checkout/complete, which con
   await page.getByLabel('Expiration').fill('12 / 34');
   await page.getByLabel('Security code').fill('123');
   await page.getByLabel('ZIP').fill('77002');
-  await page.getByRole('button', { name: 'Place your order' }).click();
+  await page.getByRole('button', { name: 'Place your order' }).first().click();
   await expect(page).toHaveURL(/\/orders\?placed=AT-2026-/);
 });
 
@@ -135,7 +135,7 @@ test('with a Stripe key: Payment Element only (deferred intent), submit → orde
   const elements = (await calls(page)).filter(([k]) => k === 'elements').map(([, o]) => o as Record<string, unknown>);
   expect(elements.at(-1)).toMatchObject({ mode: 'payment', currency: 'usd', captureMethod: 'automatic_async' });
   await page.getByLabel('Fake Stripe card number').fill('4242 4242 4242 4242');
-  await page.getByRole('button', { name: 'Place your order' }).click();
+  await page.getByRole('button', { name: 'Place your order' }).first().click();
   await expect(page).toHaveURL(/\/orders\?placed=AT-2026-/);
 });
 
@@ -148,7 +148,7 @@ test('with a Stripe key: a redirect (3-D Secure page) comes back to /checkout/co
   expect(elements.at(-1)?.appearance).toMatchObject({ variables: { colorPrimary: expect.stringMatching(/\S/) } });
   await page.getByLabel('Fake Stripe card number').fill('4242 4242 4242 4242');
   const back = page.waitForURL(/\/checkout\/complete\?order=AT-2026-.*redirect_status=succeeded/);
-  await page.getByRole('button', { name: 'Place your order' }).click();
+  await page.getByRole('button', { name: 'Place your order' }).first().click();
   await back;
   await expect(page).toHaveURL(/\/orders\?placed=AT-2026-/);
 });
@@ -160,7 +160,7 @@ test('pickup: choose an AfroTransact pickup point, no shipping charge, the confi
   await pkg.getByTestId('fulfil-pickup').click();
   await expect(pkg.getByTestId('pickup-point').first()).toBeVisible();
   await expect(page.getByTestId('order-summary')).toContainText('no shipping charge');
-  await page.getByRole('button', { name: 'Place your order' }).click();
+  await page.getByRole('button', { name: 'Place your order' }).first().click();
   await expect(page).toHaveURL(/\/orders\?placed=AT-2026-/);
   await expect(page.getByTestId('order-pickup').first()).toBeVisible();
 });

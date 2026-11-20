@@ -25,14 +25,11 @@ type Props = {
   shippingMinor: number;
   total: number;
   itemCount: number;
-  /** Address and payment are both valid: Place your order is on (the other reasons are `blocked` and the notes below it). */
-  paymentChosen: boolean;
   /** Plain words for what is missing before the order can be placed (address or payment); null when nothing is. */
   needReason?: string | null;
   /** AfroTransact credit applied to the total and what the card pays then (S320); 0 without credit. */
   creditMinor?: number;
   addressOk: boolean;
-  blocked: boolean;
   preLocked: boolean;
   preLockedText?: string | null;
   /** The delivery run the order goes on (S261): its minimum progress and cutoff are shown next to the button. */
@@ -44,7 +41,6 @@ type Props = {
   deliveryReason?: string | null;
   /** Plain words for why card payment stops the order (it could not load); null when it does not. */
   paymentReason?: string | null;
-  addressList: boolean;
   busy: boolean;
   placing: number;
   error: string | null;
@@ -53,8 +49,6 @@ type Props = {
   onPlace: () => void;
   /** Place your order is off: address, payment or anything that stops the order is not settled (worked out once, by the page). */
   placeDisabled: boolean;
-  /** The summary is being worked out again (a delivery option, address or coupon changed): the shown total is not final yet. */
-  taxPending?: boolean;
   /** Tax-returns could not answer: "We couldn't work out your tax right now. Try again." with Retry. */
   onRetryTax?: () => void;
   retryingTax?: boolean;
@@ -153,11 +147,9 @@ export function CheckoutOrderPanel(props: Props) {
     shippingMinor,
     total,
     itemCount,
-    paymentChosen,
     needReason = null,
     creditMinor = 0,
     addressOk,
-    blocked,
     preLocked,
     preLockedText,
     preRun,
@@ -165,14 +157,12 @@ export function CheckoutOrderPanel(props: Props) {
     taxBlocked = false,
     deliveryReason = null,
     paymentReason = null,
-    addressList,
     busy,
     placing,
     error,
     errorCartLink,
     onPlace,
     placeDisabled,
-    taxPending = false,
     onRetryTax,
     retryingTax = false,
     onEditAddress,
