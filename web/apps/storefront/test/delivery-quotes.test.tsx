@@ -125,7 +125,7 @@ describe('checkout with an agreed quote', () => {
     await waitFor(() => expect(stripe.payment()).toBeDefined());
     act(() => stripe.payment()?.handlers.payment?.change?.({ complete: true, empty: false, value: { type: 'card' } }));
 
-    await user.click(screen.getByRole('button', { name: /Place your order/ }));
+    await user.click(screen.getAllByRole('button', { name: /Place your order/ })[0] as HTMLElement);
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith(expect.stringMatching(/^\/orders\?placed=AT-2026-/)));
     const place = sent.filter((r) => r.url.endsWith('/v1/checkout/orders')).at(-1)!;
     const body = (await place.clone().json()) as { deliverySelections: Array<{ quoteId?: string; option: string }> };

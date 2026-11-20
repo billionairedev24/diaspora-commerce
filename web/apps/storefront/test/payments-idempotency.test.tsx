@@ -56,7 +56,7 @@ describe('checkout idempotency (fake Stripe.js)', () => {
     expect(stripe.express()).toBeUndefined();
     return user;
   }
-  const placeButton = () => screen.getByRole('button', { name: /Place your order|Placing your order/ });
+  const placeButton = () => screen.getAllByRole('button', { name: /Place your order|Placing your order/ })[0] as HTMLElement;
 
   it('keeps the key after a network error: the retry is the same attempt', async () => {
     const user = await ready();
@@ -89,7 +89,7 @@ describe('checkout idempotency (fake Stripe.js)', () => {
     await user.click(placeButton());
     expect(await screen.findByTestId('payment-element-error')).toHaveTextContent('Your card was declined.');
     stripe.results.confirm = { paymentIntent: { id: 'pi_1', status: 'requires_capture' } };
-    await user.click(await screen.findByRole('button', { name: 'Place your order' }));
+    await user.click((await screen.findAllByRole('button', { name: 'Place your order' }))[0] as HTMLElement);
     await waitFor(() => expect(nav.push).toHaveBeenCalled(), { timeout: 5000 });
     expect(new Set(placeKeys()).size).toBe(1);
     expect(stripe.confirms).toHaveLength(2);

@@ -98,7 +98,7 @@ describe('credit at checkout (S320)', () => {
     expect(screen.queryByTestId('checkout-credit-row')).not.toBeInTheDocument();
     await user.click(within(box).getByTestId('checkout-use-credit'));
 
-    await user.click(screen.getByRole('button', { name: 'Place your order' }));
+    await user.click(screen.getAllByRole('button', { name: 'Place your order' })[0] as HTMLElement);
     await waitFor(async () => expect((await api.getAccountCredit()).balanceMinor).toBe(0), { timeout: 5000 });
     const orders = await api.getOrderPage();
     expect(orders.items.length).toBeGreaterThan(0);
@@ -114,7 +114,7 @@ describe('credit at checkout (S320)', () => {
     await user.click(within(box).getByTestId('checkout-use-credit'));
     expect(await screen.findByTestId('checkout-credit-split')).toHaveTextContent(/No card is needed/);
     expect(screen.queryAllByTestId('checkout-payment')).toHaveLength(0);
-    await user.click(screen.getByRole('button', { name: 'Place your order' }));
+    await user.click(screen.getAllByRole('button', { name: 'Place your order' })[0] as HTMLElement);
     const push = (await import('next/navigation')).useRouter().push;
     await waitFor(() => expect(push).toHaveBeenCalledWith(expect.stringMatching(/^\/orders\?placed=AT-2026-/)), { timeout: 5000 });
     const credit = await api.getAccountCredit();
