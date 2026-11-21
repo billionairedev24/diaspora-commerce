@@ -69,7 +69,7 @@ func (f *fakeDeliveryRuns) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case p == "/v1/addresses/validate":
 		status := "VALID"
 		if b := f.record(r); b["postalCode"] == "00000" {
-			status = "UNDELIVERABLE"
+			status = "NOT_FOUND"
 		}
 		writeJ(w, 200, map[string]any{"status": status, "standardized": map[string]any{"line1": "2401 BROADWAY", "city": "LUBBOCK", "state": "TX",
 			"postalCode": "79401"}})
@@ -470,15 +470,15 @@ func TestStaffPreordersConformance(t *testing.T) {
 	if items := jsonOf(t, do("cs", "GET", "/v1/staff/preorders/win-7/products", nil, 200))["items"].([]any); len(items) != 1 {
 		t.Fatalf("products = %v", items)
 	}
-	v := jsonOf(t, do("cs", "POST", "/v1/staff/preorders/address-verify", map[string]any{"line1": "2401 Broadway", "zip": "79401", "city": "Lubbock",
+	v := jsonOf(t, do("cs", "POST", "/v1/staff/preorders/address-check", map[string]any{"line1": "2401 Broadway", "zip": "79401", "city": "Lubbock",
 		"region": "TX", "country": "US"}, 200))
-	if v["verified"] != true || !strings.HasPrefix(v["placeId"].(string), "geo:") || v["formatted"] != "2401 BROADWAY, LUBBOCK, TX 79401" {
-		t.Fatalf("verify = %v", v)
+	if v["found"] != true || !strings.HasPrefix(v["placeId"].(string), "geo:") || v["formatted"] != "2401 BROADWAY, LUBBOCK, TX 79401" {
+		t.Fatalf("check = %v", v)
 	}
-	if v := jsonOf(t, do("cs", "POST", "/v1/staff/preorders/address-verify", map[string]any{"line1": "1 Nowhere", "zip": "00000"}, 200)); v["verified"] != false || v["placeId"] != nil {
-		t.Fatalf("unverified = %v", v)
+	if v := jsonOf(t, do("cs", "POST", "/v1/staff/preorders/address-check", map[string]any{"line1": "1 Nowhere", "zip": "00000"}, 200)); v["found"] != false || v["placeId"] != nil {
+		t.Fatalf("not found = %v", v)
 	}
-	do("finance", "POST", "/v1/staff/preorders/address-verify", map[string]any{"line1": "x", "zip": "1"}, 403)
+	do("finance", "POST", "/v1/staff/preorders/address-check", map[string]any{"line1": "x", "zip": "1"}, 403)
 
 	// Creative upload: media ticket, then the slot (the BFF finalises the asset).
 	ticket := jsonOf(t, do("ops", "POST", "/v1/staff/preorders/uploads", map[string]any{"fileName": "hero.jpg", "contentType": "image/jpeg",
@@ -541,7 +541,7 @@ func TestStaffPreordersConformance(t *testing.T) {
 		"getStaffPreorderSummary", "exportStaffPreorder", "addStaffPreorderLateOrder", "getStaffPreorderSettings", "updateStaffPreorderSettings",
 		"listStaffPreorderAreas", "addStaffPreorderArea", "toggleStaffPreorderAreas", "deleteStaffPreorderArea", "searchStaffPreorderPlaces",
 		"switchStaffPreorder", "switchStaffPreorders", "getStaffPreorderRegion", "updateStaffPreorderRegion",
-		"searchStaffCustomers", "listStaffPreorderProducts", "verifyStaffPreorderAddress", "requestStaffPreorderUpload"} {
+		"searchStaffCustomers", "listStaffPreorderProducts", "checkStaffPreorderAddress", "requestStaffPreorderUpload"} {
 		if validated[op] == 0 {
 			t.Errorf("operation %s was not exercised", op)
 		}
