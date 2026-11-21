@@ -84,6 +84,14 @@ echo "-- tofu-env refuses a terminal-free leak check: output evals to the right 
 out="$("$ENVX" tofu-env 2>/dev/null)"; t has "$out" "OVH_ENDPOINT"
 got="$(bash -c 'eval "$1"; printf "%s|%s|%s" "$CLOUDFLARE_API_TOKEN" "$OVH_ENDPOINT" "$TF_VAR_admin_cidrs"' _ "$out")"; t eq "$got" "$S_INF|ovh-us|[\"203.0.113.7/32\"]"
 
+echo "-- tofu-env cloudflare needs only the Cloudflare pair"
+export UAT_ENV_FILE="$T/home/.afrotransact/cf.env"; rm -f "$UAT_ENV_FILE"; "$ENVX" init >/dev/null 2>&1
+out="$("$ENVX" tofu-env cloudflare 2>&1)"; rc=$?; t test "$rc" -ne 0; t has "$out" "CLOUDFLARE_INFRA_TOKEN is blank"
+fill CLOUDFLARE_INFRA_TOKEN "$S_INF"; fill CLOUDFLARE_ACCOUNT_ID 0123456789abcdef0123456789abcdef
+out="$("$ENVX" tofu-env cloudflare 2>/dev/null)"; got="$(bash -c 'eval "$1"; printf "%s|%s" "$CLOUDFLARE_API_TOKEN" "$CLOUDFLARE_ACCOUNT_ID"' _ "$out")"; t eq "$got" "$S_INF|0123456789abcdef0123456789abcdef"
+t lacks "$out" TF_VAR_account_id
+export UAT_ENV_FILE="$T/home/.afrotransact/uat.all.env"
+
 echo "-- GitHub setup takes values from the file, over stdin, and prompts only for blanks"
 mkdir -p "$T/bin"; cat >"$T/bin/gh" <<'EOF'
 #!/usr/bin/env bash

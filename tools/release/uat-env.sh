@@ -261,11 +261,21 @@ stage_split() {
 
 stage_tofu_env() {
   [[ -r "$ENV_FILE" ]] || { echo "no file at $ENV_FILE: run 'uat-env.sh init'" >&2; exit 2; }
-  if [[ -t 1 && "${1:-}" != "--show" ]]; then
+  if [[ -t 1 && "${1:-}" != "--show" && "${2:-}" != "--show" ]]; then
     echo "This prints secret values for eval. Use: eval \"\$(tools/release/uat-env.sh tofu-env)\"   (refusing to print to a terminal; --show overrides)" >&2; exit 1
   fi
-  stage_check tofu >&2 || { echo "Fix the tofu group first." >&2; exit 1; }
   local n v
+  if [[ "${1:-}" == "cloudflare" || "${2:-}" == "cloudflare" ]]; then
+    # only the Cloudflare pair: lets you run infra/cloudflare before the OVH values exist
+    local tok acc
+    tok="$(envfile_get "$ENV_FILE" CLOUDFLARE_INFRA_TOKEN)"; acc="$(envfile_get "$ENV_FILE" CLOUDFLARE_ACCOUNT_ID)"
+    valid_value token "$tok" || { echo "CLOUDFLARE_INFRA_TOKEN is blank or malformed (uat-env.sh fill --only CLOUDFLARE_INFRA_TOKEN)" >&2; exit 1; }
+    valid_value hex32 "$acc" || { echo "CLOUDFLARE_ACCOUNT_ID is blank or malformed (uat-env.sh fill --only CLOUDFLARE_ACCOUNT_ID)" >&2; exit 1; }
+    printf 'export CLOUDFLARE_API_TOKEN=%q\n' "$tok"
+    printf 'export CLOUDFLARE_ACCOUNT_ID=%q\n' "$acc"
+    return 0
+  fi
+  stage_check tofu >&2 || { echo "Fix the tofu group first (or use: tofu-env cloudflare for the Cloudflare run only)." >&2; exit 1; }
   for n in OVH_APPLICATION_KEY OVH_APPLICATION_SECRET OVH_CONSUMER_KEY; do printf 'export %s=%q\n' "$n" "$(envfile_get "$ENV_FILE" "$n")"; done
   printf 'export OVH_ENDPOINT=%q\n' ovh-us
   printf 'export CLOUDFLARE_API_TOKEN=%q\n' "$(envfile_get "$ENV_FILE" CLOUDFLARE_INFRA_TOKEN)"
@@ -274,7 +284,6 @@ stage_tofu_env() {
   printf 'export TF_VAR_ovh_endpoint=%q\n' ovh-us
   v="$(envfile_get "$ENV_FILE" OVH_ADMIN_CIDR)"
   printf 'export TF_VAR_admin_cidrs=%q\n' "[\"$v\"]"
-  printf 'export TF_VAR_account_id=%q\n' "$(envfile_get "$ENV_FILE" CLOUDFLARE_ACCOUNT_ID)"
 }
 
 stage_drift() {
@@ -410,7 +419,7 @@ case "${1:-}" in
   check)    stage_check "${2:-all}" ;;
   github)   stage_github ;;
   split)    stage_split ;;
-  tofu-env) stage_tofu_env "${2:-}" ;;
+  tofu-env) stage_tofu_env "${2:-}" "${3:-}" ;;
   drift)    stage_drift ;;
   *) sed -n '2,18p' "$0"; exit 0 ;;
 esac
