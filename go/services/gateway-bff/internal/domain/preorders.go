@@ -225,9 +225,9 @@ type LateAddCustomers struct {
 	Items []LateAddCustomer `json:"items"`
 }
 
-// AddressVerification is POST /v1/staff/preorders/address-verify.
-type AddressVerification struct {
-	Verified  bool    `json:"verified"`
+// AddressCheck is POST /v1/staff/preorders/address-check: whether Google Maps finds the address.
+type AddressCheck struct {
+	Found     bool    `json:"found"`
 	PlaceID   *string `json:"placeId"`
 	Formatted *string `json:"formatted"`
 }

@@ -2909,15 +2909,15 @@ paths:
         '403': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '503': {$ref: '#/components/responses/Problem'}
-  /v1/staff/preorders/address-verify:
+  /v1/staff/preorders/address-check:
     post:
       tags: [Pre-orders]
-      operationId: verifyStaffPreorderAddress
+      operationId: checkStaffPreorderAddress
       security: [{sessionCookie: []}]
-      summary: Verify a new late-add address (geo, Google Places with Nominatim fallback)
+      summary: Check that Google Maps finds a new late-add address (geo)
       description: |
-        geo `POST /v1/addresses/validate`. `verified` for VALID or CORRECTED; `placeId` is geo's place id, else a stable
-        reference of the standardised address (delivery-runs re-verifies it). Needs the late-add ability.
+        geo `POST /v1/addresses/validate`. `found` when Google Maps validates the address; `placeId` is geo's place id,
+        else a stable reference of the standardised address (delivery-runs checks it again). Needs the late-add ability.
       requestBody:
         required: true
         content:
@@ -2933,14 +2933,14 @@ paths:
                 country: {type: string, maxLength: 2}
       responses:
         '200':
-          description: Verification
+          description: Result
           content:
             application/json:
               schema:
                 type: object
-                required: [verified, placeId, formatted]
+                required: [found, placeId, formatted]
                 properties:
-                  verified: {type: boolean}
+                  found: {type: boolean}
                   placeId: {type: [string, 'null']}
                   formatted: {type: [string, 'null']}
         '401': {$ref: '#/components/responses/Problem'}

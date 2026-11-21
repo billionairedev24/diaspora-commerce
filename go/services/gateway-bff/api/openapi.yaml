@@ -5940,10 +5940,10 @@ components:
         state: {type: string, pattern: '^[A-Z]{2}$'}
         zip: {type: string, pattern: '^\d{5}(-\d{4})?$'}
         isDefault: {type: boolean}
-        acceptUnverified: {type: boolean, description: Keep the address as entered when it can't be USPS-verified}
+        placeId: {type: string, description: The address suggestion the person picked (from autocomplete); Google Maps then treats the address as found without a second lookup}
     Address:
       type: object
-      required: [id, name, phone, line1, line2, city, state, zip, isDefault, verified]
+      required: [id, name, phone, line1, line2, city, state, zip, isDefault]
       properties:
         id: {type: string}
         name: {type: string}
@@ -5954,7 +5954,7 @@ components:
         state: {type: string}
         zip: {type: string}
         isDefault: {type: boolean}
-        verified: {type: boolean}
+        notice: {type: string, description: "Only on the response to a save, when Google Maps could not find the address (plain words, with how to correct it). The address is saved anyway: a notice never blocks."}
     AddressPage:
       type: object
       required: [items, nextCursor]

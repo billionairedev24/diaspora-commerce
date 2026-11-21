@@ -63,8 +63,8 @@ type StaffPreordersService interface {
 	Places(ctx context.Context, c *domain.Caller, q url.Values) (any, error)
 	// Products are the window's products (the late-add item list).
 	Products(ctx context.Context, c *domain.Caller, id string) (any, error)
-	// VerifyAddress checks a new late-add address with geo.
-	VerifyAddress(ctx context.Context, c *domain.Caller, a PreorderAddressInput) (domain.AddressVerification, error)
+	// CheckAddress asks geo whether Google Maps finds a new late-add address.
+	CheckAddress(ctx context.Context, c *domain.Caller, a PreorderAddressInput) (domain.AddressCheck, error)
 	// RequestUpload signs a direct media upload for a creative.
 	RequestUpload(ctx context.Context, c *domain.Caller, in PreorderUploadInput) (domain.PreorderUploadTicket, error)
 	// DeliveryFees lists the delivery fee rules (ADR 0005 §3): one per delivery method and currency.
@@ -1012,9 +1012,9 @@ func (s *staffPreordersImpl) Products(ctx context.Context, c *domain.Caller, id 
 	return items(out), nil
 }
 
-// VerifyAddress checks a new late-add address with geo (Google Places, Nominatim fallback). placeId is geo's id
-// when it has one, else a stable reference of the standardised address that delivery-runs re-verifies.
-func (s *staffPreordersImpl) VerifyAddress(ctx context.Context, c *domain.Caller, a PreorderAddressInput) (domain.AddressVerification, error) {
+// CheckAddress asks geo whether Google Maps finds a new late-add address. placeId is geo's id when it has one, else a
+// stable reference of the standardised address that delivery-runs checks again.
+func (s *staffPreordersImpl) CheckAddress(ctx context.Context, c *domain.Caller, a PreorderAddressInput) (domain.AddressCheck, error) {
 	errs := map[string]string{}
 	if l := len(strings.TrimSpace(a.Line1)); l == 0 || l > 200 {
 		errs["line1"] = "Enter the street address"
@@ -1026,23 +1026,21 @@ func (s *staffPreordersImpl) VerifyAddress(ctx context.Context, c *domain.Caller
 		errs["city"] = "Check the city, region and country"
 	}
 	if len(errs) > 0 {
-		return domain.AddressVerification{}, domain.ValidationProblem(errs)
+		return domain.AddressCheck{}, domain.ValidationProblem(errs)
 	}
 	sc, _, err := s.need(ctx, c, poLateAdd)
 	if err != nil {
-		return domain.AddressVerification{}, err
+		return domain.AddressCheck{}, err
 	}
 	country := strings.ToUpper(firstNonEmpty(strings.TrimSpace(a.Country), "US"))
 	var v jobj
 	if err := sc.call(ctx, sc.up.Geo, port.StaffCall{Method: http.MethodPost, Path: "/v1/addresses/validate", Body: jobj{
 		"line1": strings.TrimSpace(a.Line1), "city": strings.TrimSpace(a.City), "state": strings.ToUpper(strings.TrimSpace(a.Region)),
 		"postalCode": strings.TrimSpace(a.ZIP), "country": country}}, &v); err != nil {
-		return domain.AddressVerification{}, err
+		return domain.AddressCheck{}, err
 	}
-	switch strings.ToUpper(jstr(v, "status")) {
-	case "VALID", "CORRECTED":
-	default:
-		return domain.AddressVerification{Verified: false}, nil
+	if strings.ToUpper(jstr(v, "status")) != "VALID" {
+		return domain.AddressCheck{Found: false}, nil
 	}
 	std, _ := v["standardized"].(map[string]any)
 	if std == nil {
@@ -1054,10 +1052,10 @@ func (s *staffPreordersImpl) VerifyAddress(ctx context.Context, c *domain.Caller
 		sum := sha256.Sum256([]byte(strings.ToLower(formatted + "|" + country)))
 		placeID = "geo:" + hex.EncodeToString(sum[:12])
 	}
-	return domain.AddressVerification{Verified: true, PlaceID: &placeID, Formatted: &formatted}, nil
+	return domain.AddressCheck{Found: true, PlaceID: &placeID, Formatted: &formatted}, nil
 }
 
-// PreorderAddressInput is POST /v1/staff/preorders/address-verify.
+// PreorderAddressInput is POST /v1/staff/preorders/address-check.
 type PreorderAddressInput struct {
 	Line1   string `json:"line1"`
 	ZIP     string `json:"zip"`

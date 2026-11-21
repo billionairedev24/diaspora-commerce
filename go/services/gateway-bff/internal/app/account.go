@@ -51,7 +51,7 @@ func requireCustomer(c *domain.Caller) error {
 
 func toAddress(a port.IdentityAddress) domain.Address {
 	return domain.Address{ID: a.ID, Name: a.FullName, Phone: a.Phone, Line1: a.Line1, Line2: a.Line2, City: a.City,
-		State: a.State, ZIP: a.PostalCode, IsDefault: a.IsDefault, Verified: a.Verified}
+		State: a.State, ZIP: a.PostalCode, IsDefault: a.IsDefault}
 }
 
 func (s *accountServiceImpl) Addresses(ctx context.Context, c *domain.Caller) (domain.Page[domain.Address], error) {
@@ -91,34 +91,20 @@ func validateAddress(in domain.AddressInput) map[string]string {
 	return errs
 }
 
-// verify checks deliverability with geo. Corrections are suggested, never applied silently; without
-// acceptUnverified, anything but VALID is a 422 the form shows next to the street fields.
-func (s *accountServiceImpl) verify(ctx context.Context, in domain.AddressInput) (bool, error) {
-	v, err := s.geo.Validate(ctx, port.GeoAddress{Line1: in.Line1, Line2: in.Line2, City: in.City, State: in.State, PostalCode: in.ZIP, Country: "US"})
-	if err != nil {
-		if p, ok := port.AsUpstreamProblem(err); ok && p.Status == http.StatusUnprocessableEntity && !in.AcceptUnverified {
-			return false, domain.ValidationProblem(map[string]string{"line1": firstNonEmpty(p.Detail, "Check the address")}).WithCause(err)
-		}
-		return false, nil // geo unavailable: keep the address, unverified
+// check asks geo whether Google Maps knows the address. It never blocks saving: found is true when Google validated the
+// address (a picked suggestion or a street-level match; also when Google could not be asked, which geo reports as
+// accepted), and notice is the plain-words message to show when Google could not find it.
+func (s *accountServiceImpl) check(ctx context.Context, in domain.AddressInput) (found bool, notice string) {
+	v, err := s.geo.Validate(ctx, port.GeoAddress{Line1: in.Line1, Line2: in.Line2, City: in.City, State: in.State, PostalCode: in.ZIP,
+		Country: "US", PlaceID: in.PlaceID})
+	if err != nil || v.Status != "NOT_FOUND" {
+		return true, "" // validated, or geo unavailable: nothing to say
 	}
-	if v.Status == "VALID" {
-		return true, nil
-	}
-	if in.AcceptUnverified {
-		return false, nil
-	}
-	msg := "We couldn’t verify this address. Check it or keep it as entered."
+	notice = "We couldn't find this address. Check the street and ZIP, or pick a suggestion."
 	if len(v.Messages) > 0 {
-		msg = v.Messages[0]
+		notice = v.Messages[0]
 	}
-	field := "line1"
-	if v.Status == "MISSING_UNIT" {
-		field = "line2"
-	}
-	if v.Status == "CORRECTED" && v.Standard != nil {
-		msg = "Did you mean " + strings.TrimSpace(v.Standard.Line1+" "+v.Standard.Line2) + ", " + v.Standard.City + ", " + v.Standard.State + " " + v.Standard.PostalCode + "?"
-	}
-	return false, domain.ValidationProblem(map[string]string{field: msg})
+	return false, notice
 }
 
 var identityFields = map[string]string{"fullName": "name", "postalCode": "zip", "line1": "line1", "line2": "line2",
@@ -156,12 +142,10 @@ func (s *accountServiceImpl) save(ctx context.Context, c *domain.Caller, id stri
 	if errs := validateAddress(in); len(errs) > 0 {
 		return domain.Address{}, domain.ValidationProblem(errs)
 	}
-	verified, err := s.verify(ctx, in)
-	if err != nil {
-		return domain.Address{}, err
-	}
+	found, notice := s.check(ctx, in)
+	var err error
 	body := port.IdentityAddress{FullName: strings.TrimSpace(in.Name), Phone: in.Phone, Line1: in.Line1, Line2: in.Line2, City: in.City,
-		State: in.State, PostalCode: in.ZIP, Country: "US", Verified: verified, MakeDefault: in.IsDefault}
+		State: in.State, PostalCode: in.ZIP, Country: "US", Verified: found, MakeDefault: in.IsDefault}
 	var saved port.IdentityAddress
 	if id == "" {
 		saved, err = s.identity.CreateAddress(ctx, c.BearerToken, body)
@@ -174,7 +158,9 @@ func (s *accountServiceImpl) save(ctx context.Context, c *domain.Caller, id stri
 	if err != nil {
 		return domain.Address{}, addressErr(err)
 	}
-	return toAddress(saved), nil
+	out := toAddress(saved)
+	out.Notice = notice
+	return out, nil
 }
 
 func (s *accountServiceImpl) CreateAddress(ctx context.Context, c *domain.Caller, in domain.AddressInput) (domain.Address, error) {

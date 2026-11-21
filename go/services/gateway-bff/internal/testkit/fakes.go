@@ -492,7 +492,7 @@ func (u *Upstreams) routes(mux *http.ServeMux) {
 		var a map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&a)
 		if l, _ := a["line1"].(string); strings.Contains(l, "Nowhere") {
-			writeJSON(w, 200, map[string]any{"status": "UNDELIVERABLE", "suggestions": []any{}, "messages": []string{"USPS cannot deliver to this address."}})
+			writeJSON(w, 200, map[string]any{"status": "NOT_FOUND", "suggestions": []any{}, "messages": []string{"We couldn't find this address. Check the street and ZIP, or pick a suggestion."}})
 			return
 		}
 		writeJSON(w, 200, map[string]any{"status": "VALID", "standardized": a, "suggestions": []any{}, "messages": []string{}})
