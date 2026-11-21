@@ -28,7 +28,6 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/adapter/postgis"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/adapter/roadrouter"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/adapter/routecache"
-	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/adapter/smarty"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/adapter/zipindex"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/app"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/config"
@@ -58,6 +57,9 @@ func run() error {
 	}
 	if err := pkgconfig.RequireAuthOutsideLocal(loader.Env(), cfg.Auth.Enabled); err != nil {
 		return err
+	}
+	if err := cfg.Validate(loader.Env()); err != nil {
+		return fmt.Errorf("config: %w", err)
 	}
 	log := logging.New(serviceName, loader.Env())
 	slog.SetDefault(log)
@@ -117,15 +119,17 @@ func run() error {
 			return fmt.Errorf("unknown reverse geocoding provider %q", name)
 		}
 	}
+	// Google is the only validator. Without a key (local and offline development only; config.Validate refuses that in
+	// uat and prod) every address is accepted.
 	var validator port.Validator
-	if cfg.Smarty.AuthID != "" {
-		validator = smarty.New(cfg.Smarty.AuthID, cfg.Smarty.AuthToken, "", httpClient)
+	if googleKey != "" {
+		validator = places.NewValidator(googleKey, "", httpClient)
 	}
 	zipIndex, err := zipindex.New()
 	if err != nil {
 		return fmt.Errorf("zip index: %w", err)
 	}
-	addresses := app.WithZipIndex(app.NewAddressService(providers, validator, smarty.NewRules(), log), zipIndex)
+	addresses := app.WithZipIndex(app.NewAddressService(providers, validator, log), zipIndex)
 	store := postgis.New(pool)
 	zones := app.NewZoneService(store)
 

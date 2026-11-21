@@ -38,18 +38,52 @@ type geocodeResponse struct {
 	Status       string `json:"status"`
 	ErrorMessage string `json:"error_message"`
 	Results      []struct {
-		AddressComponents []struct {
-			LongName  string   `json:"long_name"`
-			ShortName string   `json:"short_name"`
-			Types     []string `json:"types"`
-		} `json:"address_components"`
-		Geometry struct {
+		PlaceID           string             `json:"place_id"`
+		AddressComponents []geocodeComponent `json:"address_components"`
+		Geometry          struct {
 			Location struct {
 				Lat float64 `json:"lat"`
 				Lng float64 `json:"lng"`
 			} `json:"location"`
+			LocationType string `json:"location_type"`
 		} `json:"geometry"`
 	} `json:"results"`
+}
+
+type geocodeComponent struct {
+	LongName  string   `json:"long_name"`
+	ShortName string   `json:"short_name"`
+	Types     []string `json:"types"`
+}
+
+// addressFromComponents builds a structured address from Geocoding address components.
+func addressFromComponents(components []geocodeComponent) domain.Address {
+	var a domain.Address
+	var number, route string
+	for _, c := range components {
+		for _, t := range c.Types {
+			switch t {
+			case "street_number":
+				number = c.LongName
+			case "route":
+				route = c.ShortName
+			case "locality", "postal_town":
+				a.City = c.LongName
+			case "sublocality", "neighborhood":
+				if a.City == "" {
+					a.City = c.LongName
+				}
+			case "administrative_area_level_1":
+				a.State = c.ShortName
+			case "postal_code":
+				a.PostalCode = c.LongName
+			case "country":
+				a.Country = c.ShortName
+			}
+		}
+	}
+	a.Line1 = joinNonEmpty(number, route)
+	return a
 }
 
 func (g *geocoderImpl) Reverse(ctx context.Context, lat, lon float64) (domain.Address, error) {
@@ -83,34 +117,10 @@ func (g *geocoderImpl) Reverse(ctx context.Context, lat, lon float64) (domain.Ad
 		return domain.Address{}, fmt.Errorf("google geocoding: %s %s", out.Status, out.ErrorMessage)
 	}
 	for _, r := range out.Results {
-		var a domain.Address
-		var number, route string
-		for _, c := range r.AddressComponents {
-			for _, t := range c.Types {
-				switch t {
-				case "street_number":
-					number = c.LongName
-				case "route":
-					route = c.ShortName
-				case "locality", "postal_town":
-					a.City = c.LongName
-				case "sublocality", "neighborhood":
-					if a.City == "" {
-						a.City = c.LongName
-					}
-				case "administrative_area_level_1":
-					a.State = c.ShortName
-				case "postal_code":
-					a.PostalCode = c.LongName
-				case "country":
-					a.Country = c.ShortName
-				}
-			}
-		}
+		a := addressFromComponents(r.AddressComponents)
 		if a.PostalCode == "" {
 			continue
 		}
-		a.Line1 = joinNonEmpty(number, route)
 		a.Lat, a.Lon = r.Geometry.Location.Lat, r.Geometry.Location.Lng
 		return a, nil
 	}

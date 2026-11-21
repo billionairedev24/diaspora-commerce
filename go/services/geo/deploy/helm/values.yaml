@@ -31,8 +31,6 @@ monitoring:
 # Secret keys expected at afrotransact/<env>/geo in the cloud secret store:
 #   - DB_URL
 #   - GOOGLE_PLACES_API_KEY
-#   - SMARTY_AUTH_ID
-#   - SMARTY_AUTH_TOKEN
 #   - GOOGLE_MAPS_API_KEY  (optional, S255 routing: Routes API computeRouteMatrix; falls back to the Places key)
 #   - OSRM_URL             (optional, S255 routing: self-hosted OSRM base URL)
 secrets:
