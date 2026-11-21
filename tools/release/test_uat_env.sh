@@ -133,6 +133,17 @@ printf '%s\n' "sk_live_SENTINELlive00000001" "" >"$T/fa6"; out="$(SETUP_TTY="$T/
 t eq "$(grep -c '^STRIPE_SECRET_KEY=.\+' "$UAT_ENV_FILE")" 0
 export UAT_ENV_FILE="$T/home/.afrotransact/uat.all.env"
 
+echo "-- a token typed into the user-name field is refused, never echoed, and check flags one already saved"
+export UAT_ENV_FILE="$T/home/.afrotransact/swap.env"; rm -f "$UAT_ENV_FILE"; "$ENVX" init >/dev/null 2>&1
+printf '%s\n' "ghp_SENTINELswap0000000000000000000000000000" "octocat" >"$T/sw"
+out="$(SETUP_TTY="$T/sw" "$ENVX" fill --only GHCR_USER 2>&1)"; t has "$out" "looks like a token or key"; t lacks "$out" SENTINEL; t has "$out" "saved: octocat"
+printf '%s\n' "octocat" "" >"$T/sw2"
+out="$(FORCE=1 SETUP_TTY="$T/sw2" "$ENVX" fill --only GHCR_TOKEN 2>&1)"; t has "$out" "does not look right"
+printf '%s\n' "ghp_SENTINELrealtoken000000000000000000000" >"$T/sw3"
+out="$(SETUP_TTY="$T/sw3" "$ENVX" fill --only GHCR_TOKEN 2>&1)"; t has "$out" "saved ("; t lacks "$out" SENTINEL
+fill GHCR_USER ghp_SENTINELalreadysaved0000000000000000000; out="$("$ENVX" check cluster 2>&1)"; t has "$out" "GHCR_USER has the wrong shape"; t lacks "$out" SENTINEL
+export UAT_ENV_FILE="$T/home/.afrotransact/uat.all.env"
+
 echo "-- drift guard on the real tree"
 t "$SRC/tools/release/uat-env.sh" drift >/dev/null
 

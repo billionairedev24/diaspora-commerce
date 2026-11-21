@@ -32,7 +32,7 @@ bad()  { printf 'FAIL  %s\n' "$*"; PROBLEMS=$((PROBLEMS+1)); }
 warn() { printf 'WARN  %s\n' "$*"; }
 
 # SPEC: NAME|group|required(1/0)|check|what a good value looks like (no values here)
-# checks: nonblank | hex32 | digits | token | sktest | pktest | whsec | age | rediss | cidr32 | sha40 | sslmode | file | email | pw16 | url | uatenv | days | mode | domain | host
+# checks: ghuser | ghtoken | nonblank | hex32 | digits | token | sktest | pktest | whsec | age | rediss | cidr32 | sha40 | sslmode | file | email | pw16 | url | uatenv | days | mode | domain | host
 spec() {
   cat <<'EOF'
 GITOPS_APP_ID|github|1|digits|number from the GitHub App's About page
@@ -56,8 +56,8 @@ EXTERNAL_PG_ADMIN_PASSWORD|cluster|1|nonblank|Layerbase admin password
 EXTERNAL_PG_SSLMODE|cluster|1|sslmode|require | verify-ca | verify-full
 EXTERNAL_PG_CA_FILE|cluster|0|file|path of the provider CA (PEM); required for verify-ca / verify-full
 EXTERNAL_REDIS_URL|cluster|1|rediss|rediss://user:password@host:port
-GHCR_USER|cluster|1|nonblank|GitHub user for the pull token
-GHCR_TOKEN|cluster|1|token|read:packages token
+GHCR_USER|cluster|1|ghuser|your GitHub USER NAME (not the token), for example octocat
+GHCR_TOKEN|cluster|1|ghtoken|GitHub classic token with only read:packages (starts ghp_)
 ADMIN_EMAIL|cluster|1|email|a real address you read
 ADMIN_PASSWORD|cluster|1|pw16|16+ characters
 ADMIN_PHONE|cluster|0|nonblank|optional
@@ -100,6 +100,9 @@ BACKUP_HEALTHCHECK_URL|cluster|0|url|optional
 EOF
 }
 
+# looks_secret VALUE: true for the common token/key prefixes (used to stop a secret being typed into a non-secret field)
+looks_secret() { [[ "$1" =~ ^(gh[pousr]_|github_pat_|sk_|rk_|pk_|whsec_|glc_|AGE-SECRET-KEY-) ]]; }
+
 # valid_value CHECK VALUE: 0 when the value has the right shape. Values are never printed by the callers.
 valid_value() {
   local c="$1" v="$2"
@@ -125,6 +128,8 @@ valid_value() {
     mode)     [[ "$v" =~ ^(sweep|lifecycle|off)$ ]] ;;
     domain)   [[ "$v" =~ ^[a-z0-9.-]+\.[a-z]{2,}$ ]] ;;
     host)     [[ "$v" =~ ^[A-Za-z0-9.-]+$ ]] ;;
+    ghuser)   [[ "$v" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,37}[A-Za-z0-9])?$ ]] && ! looks_secret "$v" ;;
+    ghtoken)  [[ "$v" =~ ^(gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,})$ ]] ;;
     *)        return 0 ;;
   esac
 }
@@ -377,6 +382,9 @@ stage_fill() {
            echo "      Saved a random placeholder (recorded so check reminds you to replace it)." ;;
       esac
       if [[ "$chk" == "file" ]]; then v="${v/#\~/$HOME}"; fi
+      if [[ "$hidden" == "0" ]] && looks_secret "$v"; then
+        echo "      That looks like a token or key, not a $name. Nothing was saved or shown. Try again ($attempt/3) or Enter to skip."; v=""; continue
+      fi
       case "$v" in sk_live_*|rk_live_*|pk_live_*) echo "      That is a LIVE Stripe key: UAT is test mode only. Try again ($attempt/3) or Enter to skip."; continue ;; esac
       if [[ "$name" == GITOPS_APP_PRIVATE_KEY_FILE ]] && ! head -1 "$v" 2>/dev/null | grep -q -- '-----BEGIN .*PRIVATE KEY-----'; then
         echo "      That file is not a readable PEM private key. Try again ($attempt/3) or Enter to skip."; continue
