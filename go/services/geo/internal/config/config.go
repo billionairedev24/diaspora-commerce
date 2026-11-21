@@ -36,10 +36,6 @@ type Config struct {
 		DetourFactor         float64       `yaml:"detourFactor" env:"GEO_DETOUR_FACTOR"`
 		FallbackSpeedMph     float64       `yaml:"fallbackSpeedMph" env:"GEO_FALLBACK_SPEED_MPH"`
 	} `yaml:"routing"`
-	Smarty struct {
-		AuthID    string `env:"SMARTY_AUTH_ID"`
-		AuthToken string `env:"SMARTY_AUTH_TOKEN"`
-	} `yaml:"smarty"`
 	Auth struct {
 		Enabled  bool   `yaml:"enabled" env:"AUTH_ENABLED"`
 		Issuer   string `yaml:"issuer" env:"AUTH_ISSUER_URL"`

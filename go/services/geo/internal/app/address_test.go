@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/adapter/fixture"
-	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/adapter/smarty"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/app"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/port"
@@ -29,14 +28,35 @@ func (failing) Resolve(context.Context, string, string) (domain.Address, error) 
 
 type brokenValidator struct{}
 
-func (brokenValidator) Name() string { return "smarty" }
+func (brokenValidator) Name() string { return "google-geocoding" }
 func (brokenValidator) Validate(context.Context, domain.Address) (domain.Validation, error) {
 	return domain.Validation{}, errors.New("timeout")
 }
 
-func svc(providers ...port.Autocompleter) app.AddressService {
-	return app.NewAddressService(providers, brokenValidator{}, smarty.NewRules(), quiet)
+// notFoundValidator is a Google that answers but knows no such address.
+type notFoundValidator struct{}
+
+func (notFoundValidator) Name() string { return "google-geocoding" }
+func (notFoundValidator) Validate(context.Context, domain.Address) (domain.Validation, error) {
+	return domain.Validation{Status: domain.StatusNotFound, Suggestions: []domain.Address{}, Messages: []string{domain.MessageNotFound}}, nil
 }
+
+// pickedGoogle resolves any "g:" suggestion to a structured street address.
+type pickedGoogle struct{ a domain.Address }
+
+func (pickedGoogle) Name() string { return "google-places" }
+func (pickedGoogle) Suggest(context.Context, domain.AutocompleteQuery) ([]domain.Suggestion, error) {
+	return nil, nil
+}
+func (p pickedGoogle) Resolve(context.Context, string, string) (domain.Address, error) {
+	return p.a, nil
+}
+
+func svc(providers ...port.Autocompleter) app.AddressService {
+	return app.NewAddressService(providers, brokenValidator{}, quiet)
+}
+
+var houston = domain.Address{Line1: "123 Main St", City: "Houston", State: "tx", PostalCode: "77002"}
 
 func TestFallsBackToNextProvider(t *testing.T) {
 	res, err := svc(failing{}, fixture.New()).Autocomplete(context.Background(),
@@ -66,19 +86,54 @@ func TestResolveKeepsTypedHouseNumber(t *testing.T) {
 	}
 }
 
-func TestValidateFallsBackToRulesWhenProviderFails(t *testing.T) {
-	v, err := svc(fixture.New()).Validate(context.Background(),
-		domain.Address{Line1: "123 Main St", City: "Houston", State: "tx", PostalCode: "77002"})
+// Google unreachable: accepted as VALID, no warning text, never invalid.
+func TestValidateAcceptsWhenGoogleIsUnreachable(t *testing.T) {
+	v, err := svc(fixture.New()).Validate(context.Background(), domain.ValidateRequest{Address: houston})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.Status != domain.StatusUnverified || v.Standard.State != "TX" {
+	if v.Status != domain.StatusValid || v.Standard.State != "TX" || len(v.Messages) != 0 || len(v.Suggestions) != 0 {
 		t.Fatalf("got %+v", v)
 	}
 }
 
+// No Google key (local / offline): every address is accepted.
+func TestValidateAcceptsWithoutAValidator(t *testing.T) {
+	s := app.NewAddressService([]port.Autocompleter{fixture.New()}, nil, quiet)
+	v, err := s.Validate(context.Background(), domain.ValidateRequest{Address: houston})
+	if err != nil || v.Status != domain.StatusValid || len(v.Messages) != 0 {
+		t.Fatalf("got %+v, %v", v, err)
+	}
+}
+
+func TestValidateNotFoundCarriesPlainWords(t *testing.T) {
+	s := app.NewAddressService([]port.Autocompleter{fixture.New()}, notFoundValidator{}, quiet)
+	v, err := s.Validate(context.Background(), domain.ValidateRequest{Address: houston})
+	if err != nil || v.Status != domain.StatusNotFound || len(v.Messages) != 1 || v.Messages[0] != domain.MessageNotFound {
+		t.Fatalf("got %+v, %v", v, err)
+	}
+}
+
+// A suggestion the person picked and Google resolved to a street address with coordinates is final: the geocoder is
+// not asked (this validator would say NOT_FOUND).
+func TestValidatePickedSuggestionIsFinal(t *testing.T) {
+	picked := domain.Address{Line1: "123 Main St", City: "Houston", State: "TX", PostalCode: "77002", Country: "US", Lat: 29.76, Lon: -95.36}
+	s := app.NewAddressService([]port.Autocompleter{pickedGoogle{a: picked}}, notFoundValidator{}, quiet)
+	v, err := s.Validate(context.Background(), domain.ValidateRequest{Address: houston, PlaceID: "g:abc"})
+	if err != nil || v.Status != domain.StatusValid || v.Standard == nil || v.Standard.Lat != 29.76 || len(v.Messages) != 0 {
+		t.Fatalf("got %+v, %v", v, err)
+	}
+	// Without coordinates the pick is not final: the geocoder decides.
+	picked.Lat, picked.Lon = 0, 0
+	s = app.NewAddressService([]port.Autocompleter{pickedGoogle{a: picked}}, notFoundValidator{}, quiet)
+	v, err = s.Validate(context.Background(), domain.ValidateRequest{Address: houston, PlaceID: "g:abc"})
+	if err != nil || v.Status != domain.StatusNotFound {
+		t.Fatalf("got %+v, %v", v, err)
+	}
+}
+
 func TestValidateRejectsBadFormat(t *testing.T) {
-	_, err := svc(fixture.New()).Validate(context.Background(), domain.Address{Line1: "1", State: "ZZ", PostalCode: "7700"})
+	_, err := svc(fixture.New()).Validate(context.Background(), domain.ValidateRequest{Address: domain.Address{Line1: "1", State: "ZZ", PostalCode: "7700"}})
 	if !errors.Is(err, domain.ErrInvalidAddress) {
 		t.Fatalf("expected ErrInvalidAddress, got %v", err)
 	}
