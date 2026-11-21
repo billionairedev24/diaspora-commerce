@@ -380,20 +380,15 @@ func TestAccountAddresses(t *testing.T) {
 	in := map[string]any{"name": "Adaeze Nwosu", "phone": "+17135550142", "line1": "9800 Westheimer Rd", "city": "Houston", "state": "TX", "zip": "77042"}
 	r = b.do("POST", "/v1/account/addresses", in)
 	mustStatus(t, r, 201)
-	if a := r.json(t); a["verified"] != true || a["isDefault"] != true || a["name"] != "Adaeze Nwosu" {
+	if a := r.json(t); a["isDefault"] != true || a["name"] != "Adaeze Nwosu" || a["notice"] != nil || a["verified"] != nil {
 		t.Fatalf("created = %v", a)
 	}
+	// Google cannot find it: the address is saved anyway, with a plain-words notice (saving is never blocked).
 	in["line1"] = "1 Nowhere Lane"
 	r = b.do("POST", "/v1/account/addresses", in)
-	mustStatus(t, r, 422)
-	if r.json(t)["errors"].(map[string]any)["line1"] == nil {
-		t.Fatal("undeliverable address must report line1")
-	}
-	in["acceptUnverified"] = true
-	r = b.do("POST", "/v1/account/addresses", in)
 	mustStatus(t, r, 201)
-	if a := r.json(t); a["verified"] != false {
-		t.Fatalf("accepted unverified = %v", a)
+	if a := r.json(t); a["notice"] == nil || !strings.Contains(a["notice"].(string), "couldn't find this address") || a["verified"] != nil {
+		t.Fatalf("not found = %v", a)
 	}
 	in["state"] = "Texas"
 	mustStatus(t, b.do("POST", "/v1/account/addresses", in), 422)

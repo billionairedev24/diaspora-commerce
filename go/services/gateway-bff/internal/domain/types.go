@@ -492,20 +492,23 @@ type Address struct {
 	State     string `json:"state"`
 	ZIP       string `json:"zip"`
 	IsDefault bool   `json:"isDefault"`
-	Verified  bool   `json:"verified"`
+	// Notice is set on the response to a save when Google Maps could not find the address (plain words, with a way to
+	// correct it). The address is saved anyway; the notice never blocks.
+	Notice string `json:"notice,omitempty"`
 }
 
 // AddressInput creates or edits an address.
 type AddressInput struct {
-	Name             string `json:"name"`
-	Phone            string `json:"phone"`
-	Line1            string `json:"line1"`
-	Line2            string `json:"line2"`
-	City             string `json:"city"`
-	State            string `json:"state"`
-	ZIP              string `json:"zip"`
-	IsDefault        bool   `json:"isDefault"`
-	AcceptUnverified bool   `json:"acceptUnverified"`
+	Name      string `json:"name"`
+	Phone     string `json:"phone"`
+	Line1     string `json:"line1"`
+	Line2     string `json:"line2"`
+	City      string `json:"city"`
+	State     string `json:"state"`
+	ZIP       string `json:"zip"`
+	IsDefault bool   `json:"isDefault"`
+	// PlaceID is the address suggestion the person picked (from /v1/places autocomplete), when they picked one.
+	PlaceID string `json:"placeId"`
 }
 
 // PaymentMethod is a saved Stripe payment method (display data only).
