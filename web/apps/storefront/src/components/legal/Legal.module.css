@@ -106,8 +106,8 @@
 .bannerGpc { margin: 0; font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
 .bannerBtn { flex: 1; min-width: 160px; height: var(--at-size-control); }
 
-/* While the banner shows, the page ends with room for it (CookieBanner publishes its height). */
-:global(body):has(.banner) { padding-bottom: calc(var(--at-cookie-banner-h, 0px) + var(--at-space-6)); }
+/* While the banner shows, the FOOTER's dark bar grows by its height (Footer.module.css .bottom reads --at-cookie-banner-h, which CookieBanner publishes),
+   so the last line stays readable and nothing white shows under the footer. Padding the body instead left a white strip below the dark footer. */
 
 /* Phones: a compact sheet on the bottom edge — Accept / Reject side by side, Manage under them. */
 @media (max-width: 640px) {
