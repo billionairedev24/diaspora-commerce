@@ -4,8 +4,9 @@ info:
   version: v1
   description: |
     Address autocomplete for every address field (Google Places API (New) when a key is configured, OpenStreetMap
-    Nominatim otherwise, with automatic fallback), structured resolution, USPS-grade validation through Smarty
-    (missing unit, undeliverable, corrections suggested — never silently applied), ZIP lookup for the
+    Nominatim otherwise, with automatic fallback), structured resolution, address validation by Google Maps (an
+    address Google resolves to a street address is VALID and final; otherwise NOT_FOUND with a way to correct it),
+    ZIP lookup for the
     deliver-to picker, PostGIS delivery zones / FC catchments / provider service areas, and road distances for
     AfroTransact Delivery pricing and dispatch (routing providers Google Routes API / OSRM in priority order, PostGIS
     geodesic × detour factor as the last resort).
@@ -95,11 +96,24 @@ paths:
     post:
       tags: [Addresses]
       operationId: validateAddress
-      summary: Validate deliverability and get suggested corrections
+      summary: Check that Google Maps knows the address
+      description: |
+        Google is the only validator. Rules, in order:
+        1. `placeId` (the suggestion the shopper or seller picked) that Google resolves to a structured street address
+           with coordinates is `VALID` and final; nothing more is asked.
+        2. A typed address is geocoded server side and is `VALID` when Google returns a street-level match (rooftop or
+           range-interpolated; a ZIP centroid, city or approximate result is not) in the same ZIP.
+        3. Otherwise `NOT_FOUND`, with a plain-words message and, when Google found the street in another ZIP, the
+           address it found in `suggestions`.
+        4. When Google cannot be reached, or no Google key is configured (local and offline development only; uat and
+           prod refuse to start without one), the address is accepted as `VALID` with no message. It is never marked
+           invalid because of an outage.
+        Callers decide what to do with `NOT_FOUND`; the product shows the message and lets people correct the address
+        or continue, it never blocks saving on it.
       security: []
       requestBody:
         required: true
-        content: {application/json: {schema: {$ref: '#/components/schemas/Address'}}}
+        content: {application/json: {schema: {$ref: '#/components/schemas/ValidateAddressRequest'}}}
       responses:
         '200': {description: Result, content: {application/json: {schema: {$ref: '#/components/schemas/Validation'}}}}
         '422': {$ref: '#/components/responses/Problem'}
@@ -327,14 +341,21 @@ components:
         country: {type: string, default: US}
         lat: {type: number}
         lon: {type: number}
+    ValidateAddressRequest:
+      allOf:
+        - $ref: '#/components/schemas/Address'
+        - type: object
+          properties:
+            placeId: {type: string, description: The suggestion id the person picked (from autocomplete); lets geo skip the geocoder}
     Validation:
       type: object
+      required: [status, suggestions, messages]
       properties:
-        status: {type: string, enum: [VALID, CORRECTED, MISSING_UNIT, UNDELIVERABLE, UNVERIFIED]}
+        status: {type: string, enum: [VALID, NOT_FOUND]}
         standardized: {$ref: '#/components/schemas/Address'}
-        suggestions: {type: array, items: {$ref: '#/components/schemas/Address'}}
-        residential: {type: boolean}
-        messages: {type: array, items: {type: string}}
+        placeId: {type: string, description: Google's place id of the matched address, when it has one}
+        suggestions: {type: array, items: {$ref: '#/components/schemas/Address'}, description: The street-level address Google found when the typed ZIP did not match (empty otherwise)}
+        messages: {type: array, items: {type: string}, description: Plain words to show next to the street fields; empty when VALID}
     ZoneType: {type: string, enum: [DELIVERY, FC_CATCHMENT, SERVICE_AREA]}
     Zone:
       type: object
