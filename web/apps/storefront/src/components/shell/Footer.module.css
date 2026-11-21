@@ -40,7 +40,7 @@
 .flex { flex: 1; }
 .chips { display: flex; flex-wrap: wrap; gap: var(--at-space-2); margin: 0; padding: 0; list-style: none; }
 .chip { height: 28px; padding: 0 var(--at-space-2); border-radius: var(--at-radius-xs); background: var(--at-ink-0); color: var(--at-ink-1000); display: inline-flex; align-items: center; font-size: var(--at-text-2xs); font-weight: var(--at-weight-black); }
-.bottom { background: var(--at-ink-1000); }
+.bottom { background: var(--at-ink-1000); padding-bottom: var(--at-cookie-banner-h, 0px); }
 .bottomInner { max-width: var(--at-page-max); margin: 0 auto; padding: var(--at-space-5) var(--at-page-gutter); display: flex; flex-wrap: wrap; gap: var(--at-space-3) var(--at-space-6); align-items: center; font-size: var(--at-text-xs); color: var(--at-color-header-muted); }
 .lang { display: flex; align-items: center; gap: var(--at-space-1); }
 .langSelect { height: 32px; border: 1px solid var(--at-ink-600); border-radius: var(--at-radius-sm); background: var(--at-ink-900); color: var(--at-color-header-text); font-size: var(--at-text-xs); padding: 0 var(--at-space-2); }
