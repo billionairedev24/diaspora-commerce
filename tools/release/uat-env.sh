@@ -395,7 +395,7 @@ stage_fill() {
         if [[ "$hidden" == "0" ]]; then echo "      saved: $v"; else echo "      saved (${#v} characters, not shown)"; fi
         n_set=$((n_set+1)); done_ok=1; break
       fi
-      echo "      That does not look right (want: $hint). Try again ($attempt/3) or Enter to skip."
+      echo "      That does not look right (want: $hint). You entered ${#v} characters. Try again ($attempt/3) or Enter to skip."
     done
     v=""
     [[ "$done_ok" == "1" ]] || { echo "      skipped"; n_skip=$((n_skip+1)); }
