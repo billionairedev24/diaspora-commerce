@@ -2568,7 +2568,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/staff/preorders/address-verify": {
+    "/v1/staff/preorders/address-check": {
         parameters: {
             query?: never;
             header?: never;
@@ -2578,11 +2578,11 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Verify a new late-add address (geo, Google Places with Nominatim fallback)
-         * @description geo `POST /v1/addresses/validate`. `verified` for VALID or CORRECTED; `placeId` is geo's place id, else a stable
-         *     reference of the standardised address (delivery-runs re-verifies it). Needs the late-add ability.
+         * Check that Google Maps finds a new late-add address (geo)
+         * @description geo `POST /v1/addresses/validate`. `found` when Google Maps validates the address; `placeId` is geo's place id,
+         *     else a stable reference of the standardised address (delivery-runs checks it again). Needs the late-add ability.
          */
-        post: operations["verifyStaffPreorderAddress"];
+        post: operations["checkStaffPreorderAddress"];
         delete?: never;
         options?: never;
         head?: never;
@@ -16497,7 +16497,7 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
-    verifyStaffPreorderAddress: {
+    checkStaffPreorderAddress: {
         parameters: {
             query?: never;
             header?: never;
@@ -16516,14 +16516,14 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Verification */
+            /** @description Result */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": {
-                        verified: boolean;
+                        found: boolean;
                         placeId: string | null;
                         formatted: string | null;
                     };

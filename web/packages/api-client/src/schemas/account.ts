@@ -15,7 +15,8 @@ export const AddressSchema = z.object({
   state: z.string(),
   zip: z.string(),
   isDefault: z.boolean(),
-  verified: z.boolean()
+  /** Only on the response to a save: Google Maps could not find the address (plain words). The address is saved anyway. */
+  notice: z.string().optional()
 });
 export type Address = z.infer<typeof AddressSchema>;
 
