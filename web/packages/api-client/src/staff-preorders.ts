@@ -577,8 +577,8 @@ export const PreorderProductSchema = z.object({ atin: z.string(), name: z.string
 export type PreorderProduct = z.infer<typeof PreorderProductSchema>;
 export const PreorderProductListSchema = z.object({ items: z.array(PreorderProductSchema) });
 
-export const AddressVerificationSchema = z.object({ verified: z.boolean(), placeId: z.string().nullable(), formatted: z.string().nullable() });
-export type AddressVerification = z.infer<typeof AddressVerificationSchema>;
+export const AddressCheckSchema = z.object({ found: z.boolean(), placeId: z.string().nullable(), formatted: z.string().nullable() });
+export type AddressCheck = z.infer<typeof AddressCheckSchema>;
 
 export interface LateAddRequest {
   customerId: string;
@@ -796,7 +796,7 @@ export interface LateAddDraft {
   note: string;
 }
 
-export type LateAddProblem = 'customer' | 'address' | 'verify' | 'phone' | 'items' | 'status';
+export type LateAddProblem = 'customer' | 'address' | 'check' | 'phone' | 'items' | 'status';
 
 /** What still blocks a late add (empty = it can be saved). Late adds are allowed while OPEN (assisted) or CLOSED. */
 export function lateAddProblems(d: LateAddDraft, status: PreorderStatus): LateAddProblem[] {
@@ -804,7 +804,7 @@ export function lateAddProblems(d: LateAddDraft, status: PreorderStatus): LateAd
   if (status !== 'OPEN' && status !== 'CLOSED') out.push('status');
   if (!d.customerId) out.push('customer');
   if (d.newAddress) {
-    if (!d.newAddress.placeId) out.push('verify');
+    if (!d.newAddress.placeId) out.push('check');
   } else if (!d.addressId) out.push('address');
   if (!d.phoneConfirmed) out.push('phone');
   if (!d.items.length) out.push('items');
@@ -983,8 +983,8 @@ export function createStaffPreordersApi(request: Requester, options: ApiClientOp
     },
     customers: (q: string, windowId: string, signal?: AbortSignal): Promise<LateAddCustomerList> =>
       request('/v1/staff/customers/search', LateAddCustomerListSchema, { query: { q: q || undefined, windowId }, signal }),
-    verifyAddress: (body: { line1: string; zip: string; city: string; region: string; country: string }): Promise<AddressVerification> =>
-      request(`${P}/address-verify`, AddressVerificationSchema, { method: 'POST', body }),
+    checkAddress: (body: { line1: string; zip: string; city: string; region: string; country: string }): Promise<AddressCheck> =>
+      request(`${P}/address-check`, AddressCheckSchema, { method: 'POST', body }),
     getSettings: (signal?: AbortSignal): Promise<PreorderSettings> => request(`${P}/settings`, PreorderSettingsSchema, { signal }),
     updateSettings: (body: PreorderSettingsInput, version: number): Promise<PreorderSettings> =>
       request(`${P}/settings`, PreorderSettingsSchema, { method: 'PUT', body, headers: ifMatch(version) }),

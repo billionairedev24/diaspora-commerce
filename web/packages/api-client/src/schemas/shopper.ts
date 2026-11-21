@@ -25,7 +25,8 @@ export const AddressInputSchema = z.object({
   state: z.string().regex(/^[A-Z]{2}$/, 'Choose a state'),
   zip: z.string().regex(/^\d{5}(-\d{4})?$/, 'Enter a valid ZIP code'),
   isDefault: z.boolean().optional(),
-  acceptUnverified: z.boolean().optional()
+  /** The address suggestion the person picked; Google Maps then treats the address as found. */
+  placeId: z.string().optional()
 });
 export type AddressInput = z.infer<typeof AddressInputSchema>;
 

@@ -29,7 +29,6 @@ export default function Addresses() {
             {a.isDefault ? <AppText variant="caption" style={{ color: c.success, fontWeight: t.fontWeight.bold }}>Default</AppText> : null}
           </View>
           <AppText color={c.textMuted}>{a.line1}{a.line2 ? `, ${a.line2}` : ''}{'\n'}{a.city}, {a.state} {a.zip}</AppText>
-          {a.verified ? <AppText variant="caption" color={c.success}>Verified address</AppText> : null}
         </Card>
       ))}
       <View style={{ height: sp['2'] }} />

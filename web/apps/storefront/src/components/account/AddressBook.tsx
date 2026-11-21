@@ -71,7 +71,6 @@ export function AddressBook() {
                   <>
                     {a.name}
                     {a.isDefault ? <StatusText tone="positive">{t('addr.defaultTag')}</StatusText> : null}
-                    {!a.verified ? <StatusText tone="warning">{t('addr.notVerified')}</StatusText> : null}
                   </>
                 }
                 detail={lines(a).map((line, i) => (
