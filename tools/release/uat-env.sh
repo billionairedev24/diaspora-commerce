@@ -71,8 +71,6 @@ RESEND_WEBHOOK_SECRET|cluster|1|whsec|whsec_ value of the Resend webhook
 OPENROUTER_API_KEY|cluster|1|nonblank|OpenRouter key (set its spend limit in the dashboard)
 GOOGLE_PLACES_API_KEY|cluster|0|nonblank|optional
 GOOGLE_MAPS_API_KEY|cluster|0|nonblank|optional
-SMARTY_AUTH_ID|cluster|0|nonblank|optional
-SMARTY_AUTH_TOKEN|cluster|0|nonblank|optional
 R2_ACCOUNT_ID|cluster|0|hex32|blank = CLOUDFLARE_ACCOUNT_ID
 R2_ACCESS_KEY_ID|cluster|1|nonblank|public bucket token id
 R2_SECRET_ACCESS_KEY|cluster|1|nonblank|public bucket token secret
