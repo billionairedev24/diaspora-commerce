@@ -21,14 +21,15 @@ type AddressService interface {
 	Autocomplete(ctx context.Context, q domain.AutocompleteQuery) (domain.Autocompletion, error)
 	// Resolve turns a picked suggestion into street, unit, city, state, ZIP, country and coordinates.
 	Resolve(ctx context.Context, id, sessionToken string) (domain.Address, error)
-	Validate(ctx context.Context, a domain.Address) (domain.Validation, error)
+	// Validate checks that Google Maps knows the address: VALID or NOT_FOUND. Google being unreachable, or no Google key
+	// (local / offline development; uat and prod refuse to start without one), accepts the address as VALID.
+	Validate(ctx context.Context, req domain.ValidateRequest) (domain.Validation, error)
 	LookupZip(ctx context.Context, zip string) (domain.Address, error)
 }
 
 type addressServiceImpl struct {
 	providers []port.Autocompleter // ordered: primary first, then fallbacks
-	validator port.Validator
-	fallback  port.Validator
+	validator port.Validator       // nil without a Google key: every address is accepted (local / offline only)
 	log       *slog.Logger
 }
 
@@ -39,8 +40,8 @@ var ErrNotFound = errors.New("not found")
 
 // NewAddressService returns the address use cases. If the primary provider fails, the next one answers,
 // so typing never shows an empty dropdown because a vendor had an outage.
-func NewAddressService(providers []port.Autocompleter, validator, fallback port.Validator, log *slog.Logger) AddressService {
-	return &addressServiceImpl{providers: providers, validator: validator, fallback: fallback, log: log}
+func NewAddressService(providers []port.Autocompleter, validator port.Validator, log *slog.Logger) AddressService {
+	return &addressServiceImpl{providers: providers, validator: validator, log: log}
 }
 
 func (s *addressServiceImpl) Autocomplete(ctx context.Context, q domain.AutocompleteQuery) (domain.Autocompletion, error) {
@@ -100,25 +101,30 @@ func (s *addressServiceImpl) Resolve(ctx context.Context, id, session string) (d
 	return domain.Address{}, fmt.Errorf("resolve %s: %w", id, ErrNotFound)
 }
 
-func (s *addressServiceImpl) Validate(ctx context.Context, a domain.Address) (domain.Validation, error) {
-	a, err := a.Normalize()
+func (s *addressServiceImpl) Validate(ctx context.Context, req domain.ValidateRequest) (domain.Validation, error) {
+	a, err := req.Address.Normalize()
 	if err != nil {
 		return domain.Validation{}, fmt.Errorf("validate: %w", err)
 	}
-	if a.Country != "US" || s.validator == nil {
-		v, err := s.fallback.Validate(ctx, a)
-		if err != nil {
-			return domain.Validation{}, fmt.Errorf("validate: %w", err)
+	// A suggestion the person picked and Google resolves to a structured street address is final.
+	if strings.HasPrefix(req.PlaceID, "g:") {
+		if r, err := s.Resolve(ctx, req.PlaceID, ""); err == nil && r.Line1 != "" && r.PostalCode != "" && (r.Lat != 0 || r.Lon != 0) {
+			if r.Line2 == "" {
+				r.Line2 = a.Line2
+			}
+			return domain.Validation{Status: domain.StatusValid, Standard: &r, PlaceID: strings.TrimPrefix(req.PlaceID, "g:"),
+				Suggestions: []domain.Address{}, Messages: []string{}}, nil
 		}
-		return v, nil
+	}
+	accepted := domain.Validation{Status: domain.StatusValid, Standard: &a, Suggestions: []domain.Address{}, Messages: []string{}}
+	if s.validator == nil {
+		return accepted, nil
 	}
 	v, err := s.validator.Validate(ctx, a)
 	if err != nil {
-		s.log.WarnContext(ctx, "validator failed; format-only result", "validator", s.validator.Name(), "error", err)
-		v, err = s.fallback.Validate(ctx, a)
-		if err != nil {
-			return domain.Validation{}, fmt.Errorf("validate: %w", err)
-		}
+		// Google itself is unreachable: never mark the address invalid, never warn.
+		s.log.WarnContext(ctx, "address validator unavailable; address accepted", "validator", s.validator.Name(), "error", err)
+		return accepted, nil
 	}
 	return v, nil
 }

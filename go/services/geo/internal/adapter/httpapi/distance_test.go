@@ -13,7 +13,6 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/auth"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/adapter/fixture"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/adapter/httpapi"
-	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/adapter/smarty"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/app"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/port"
@@ -33,7 +32,7 @@ func (flat) Geodesic(_ context.Context, _ domain.Point, to []domain.Point) ([]fl
 func server(t *testing.T) *httptest.Server {
 	t.Helper()
 	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
-	addresses := app.NewAddressService([]port.Autocompleter{fixture.New()}, nil, smarty.NewRules(), quiet)
+	addresses := app.NewAddressService([]port.Autocompleter{fixture.New()}, nil, quiet)
 	distances := app.NewDistanceService(addresses, flat{}, app.RoutingOptions{}, quiet)
 	mux := http.NewServeMux()
 	httpapi.New(addresses, app.NewReverseService(nil, quiet), nil, distances).Register(mux,

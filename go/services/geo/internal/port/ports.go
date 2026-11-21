@@ -16,7 +16,8 @@ type Autocompleter interface {
 	Resolve(ctx context.Context, id, sessionToken string) (domain.Address, error)
 }
 
-// Validator checks deliverability (Smarty / USPS CASS) or falls back to format rules.
+// Validator checks that an address exists (Google Geocoding). It answers VALID or NOT_FOUND; any error means the
+// provider could not be reached, which the caller treats as "accepted", never as "invalid".
 type Validator interface {
 	Name() string
 	Validate(ctx context.Context, a domain.Address) (domain.Validation, error)

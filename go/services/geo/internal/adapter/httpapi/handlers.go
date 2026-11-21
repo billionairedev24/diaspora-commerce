@@ -133,12 +133,12 @@ func (h *handlersImpl) resolve(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlersImpl) validate(w http.ResponseWriter, r *http.Request) {
-	var a domain.Address
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&a); err != nil {
+	var req domain.ValidateRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&req); err != nil {
 		problem.Write(w, r, problem.New(http.StatusBadRequest, "geo.invalid-json", "Body must be an address object"))
 		return
 	}
-	v, err := h.addresses.Validate(r.Context(), a)
+	v, err := h.addresses.Validate(r.Context(), req)
 	if err != nil {
 		writeErr(w, r, err)
 		return

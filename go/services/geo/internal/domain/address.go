@@ -33,24 +33,32 @@ type Address struct {
 	Lon        float64 `json:"lon,omitempty"`
 }
 
-// ValidationStatus of an address check.
+// ValidationStatus of an address check. Google Maps is the only validator.
 type ValidationStatus string
 
 // Validation outcomes.
 const (
-	StatusValid         ValidationStatus = "VALID"
-	StatusCorrected     ValidationStatus = "CORRECTED"     // a standardised form differs; suggest, never auto-apply
-	StatusMissingUnit   ValidationStatus = "MISSING_UNIT"  // multi-unit building without apt/suite
-	StatusUndeliverable ValidationStatus = "UNDELIVERABLE" // not a deliverable USPS address
-	StatusUnverified    ValidationStatus = "UNVERIFIED"    // provider unavailable; format checks passed
+	// StatusValid means Google knows the address (or Google could not be asked; see the service's offline rule).
+	StatusValid ValidationStatus = "VALID"
+	// StatusNotFound means Google has no street-level match for the typed address in the typed ZIP.
+	StatusNotFound ValidationStatus = "NOT_FOUND"
 )
+
+// MessageNotFound is the plain-words text shown next to the street fields when an address is not found.
+const MessageNotFound = "We couldn't find this address. Check the street and ZIP, or pick a suggestion."
+
+// ValidateRequest is an address to check; PlaceID is the suggestion id the person picked, when they picked one.
+type ValidateRequest struct {
+	Address
+	PlaceID string `json:"placeId,omitempty"`
+}
 
 // Validation is the result of checking an address.
 type Validation struct {
 	Status      ValidationStatus `json:"status"`
 	Standard    *Address         `json:"standardized,omitempty"`
+	PlaceID     string           `json:"placeId,omitempty"`
 	Suggestions []Address        `json:"suggestions"`
-	Residential *bool            `json:"residential,omitempty"`
 	Messages    []string         `json:"messages"`
 }
 

@@ -71,3 +71,31 @@ func TestAddressProvidersPreferGoogleWhenAKeyIsSet(t *testing.T) {
 		})
 	}
 }
+
+// uat and prod refuse to start without a Google key (the only address validator); local and dev may run without.
+func TestValidateRequiresAGoogleKeyInUatAndProd(t *testing.T) {
+	for env, wantErr := range map[string]bool{"local": false, "dev": false, "uat": true, "prod": true} {
+		t.Setenv("APP_ENV", env)
+		t.Setenv("GOOGLE_PLACES_API_KEY", "")
+		t.Setenv("GOOGLE_MAPS_API_KEY", "")
+		var cfg config.Config
+		if err := pkgconfig.NewLoader(geo.Files).Load(&cfg); err != nil {
+			t.Fatal(err)
+		}
+		if err := cfg.Validate(env); (err != nil) != wantErr {
+			t.Fatalf("%s without a key: err %v, want error %v", env, err, wantErr)
+		}
+		for _, key := range []string{"GOOGLE_PLACES_API_KEY", "GOOGLE_MAPS_API_KEY"} {
+			t.Setenv("GOOGLE_PLACES_API_KEY", "")
+			t.Setenv("GOOGLE_MAPS_API_KEY", "")
+			t.Setenv(key, "AIza-test")
+			var withKey config.Config
+			if err := pkgconfig.NewLoader(geo.Files).Load(&withKey); err != nil {
+				t.Fatal(err)
+			}
+			if err := withKey.Validate(env); err != nil {
+				t.Fatalf("%s with %s: %v", env, key, err)
+			}
+		}
+	}
+}
