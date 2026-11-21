@@ -306,11 +306,14 @@ type GeoAddress struct {
 	Country    string  `json:"country,omitempty"`
 	Lat        float64 `json:"lat,omitempty"`
 	Lon        float64 `json:"lon,omitempty"`
+	// PlaceID is the suggestion id the person picked (geo's `placeId` on a validate request); empty when they typed.
+	PlaceID string `json:"placeId,omitempty"`
 }
 
-// GeoValidation is an address check result.
+// GeoValidation is an address check result. Google Maps is the only validator.
 type GeoValidation struct {
-	Status      string       `json:"status"` // VALID, CORRECTED, MISSING_UNIT, UNDELIVERABLE, UNVERIFIED
+	Status      string       `json:"status"` // VALID or NOT_FOUND
+	PlaceID     string       `json:"placeId,omitempty"`
 	Standard    *GeoAddress  `json:"standardized"`
 	Suggestions []GeoAddress `json:"suggestions"`
 	Messages    []string     `json:"messages"`

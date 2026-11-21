@@ -90,7 +90,7 @@ func (h *handlersImpl) registerStaffPreorders(route func(pattern string, fn http
 	route("PUT /v1/staff/preorders/areas/regions/{country}/{region}", h.staffUpdatePreorderRegion)
 	route("PATCH /v1/staff/preorders", h.staffSwitchPreorders)
 	route("GET /v1/staff/preorders/places/search", h.staffPreorderPlaces)
-	route("POST /v1/staff/preorders/address-verify", h.staffVerifyPreorderAddress)
+	route("POST /v1/staff/preorders/address-check", h.staffCheckPreorderAddress)
 	route("POST /v1/staff/preorders/uploads", h.staffPreorderUpload)
 	route("GET /v1/staff/preorders/{id}/products", h.staffPreorderProducts)
 	route("GET /v1/staff/preorders/{id}", h.staffPreorder)
@@ -382,13 +382,13 @@ func (h *handlersImpl) staffPreorderProducts(w http.ResponseWriter, r *http.Requ
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
-func (h *handlersImpl) staffVerifyPreorderAddress(w http.ResponseWriter, r *http.Request) {
+func (h *handlersImpl) staffCheckPreorderAddress(w http.ResponseWriter, r *http.Request) {
 	var b app.PreorderAddressInput
 	if err := decode(r, &b, false); err != nil {
 		h.reply(w, r, 0, nil, err)
 		return
 	}
-	v, err := h.s.Staff.Preorders.VerifyAddress(r.Context(), callerFrom(r.Context()), b)
+	v, err := h.s.Staff.Preorders.CheckAddress(r.Context(), callerFrom(r.Context()), b)
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

@@ -535,7 +535,7 @@ GET /v1/staff/places | STAFF_ONLY | identity /v1/me principalType STAFF for the 
 GET /v1/staff/preorders | STAFF_ONLY | identity /v1/me principalType STAFF for the bearer, then module level; non-staff 403 NOT_STAFF before any other upstream call | kit:staff-gate
 PATCH /v1/staff/preorders | STAFF_ONLY | identity /v1/me principalType STAFF for the bearer, then module level; non-staff 403 NOT_STAFF before any other upstream call | kit:staff-gate
 POST /v1/staff/preorders | STAFF_ONLY | identity /v1/me principalType STAFF for the bearer, then module level; non-staff 403 NOT_STAFF before any other upstream call | kit:staff-gate
-POST /v1/staff/preorders/address-verify | STAFF_ONLY | identity /v1/me principalType STAFF for the bearer, then module level; non-staff 403 NOT_STAFF before any other upstream call | kit:staff-gate
+POST /v1/staff/preorders/address-check | STAFF_ONLY | identity /v1/me principalType STAFF for the bearer, then module level; non-staff 403 NOT_STAFF before any other upstream call | kit:staff-gate
 GET /v1/staff/preorders/areas | STAFF_ONLY | identity /v1/me principalType STAFF for the bearer, then module level; non-staff 403 NOT_STAFF before any other upstream call | kit:staff-gate
 PATCH /v1/staff/preorders/areas | STAFF_ONLY | identity /v1/me principalType STAFF for the bearer, then module level; non-staff 403 NOT_STAFF before any other upstream call | kit:staff-gate
 POST /v1/staff/preorders/areas | STAFF_ONLY | identity /v1/me principalType STAFF for the bearer, then module level; non-staff 403 NOT_STAFF before any other upstream call | kit:staff-gate
