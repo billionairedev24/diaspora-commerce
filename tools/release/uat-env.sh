@@ -32,7 +32,7 @@ bad()  { printf 'FAIL  %s\n' "$*"; PROBLEMS=$((PROBLEMS+1)); }
 warn() { printf 'WARN  %s\n' "$*"; }
 
 # SPEC: NAME|group|required(1/0)|check|what a good value looks like (no values here)
-# checks: ghuser | ghtoken | nonblank | hex32 | digits | token | sktest | pktest | whsec | age | rediss | cidr32 | sha40 | sslmode | file | email | pw16 | url | uatenv | days | mode | domain | host
+# checks: promurl | lokiurl | ghuser | ghtoken | nonblank | hex32 | digits | token | sktest | pktest | whsec | age | rediss | cidr32 | sha40 | sslmode | file | email | pw16 | url | uatenv | days | mode | domain | host
 spec() {
   cat <<'EOF'
 GITOPS_APP_ID|github|1|digits|number from the GitHub App's About page
@@ -78,9 +78,9 @@ R2_PRIVATE_ACCESS_KEY_ID|cluster|1|nonblank|private (KYC) bucket token id
 R2_PRIVATE_SECRET_ACCESS_KEY|cluster|1|nonblank|private (KYC) bucket token secret
 CLOUDFLARED_TUNNEL_TOKEN|cluster|1|nonblank|from `cloudflared tunnel token <id>`
 GRAFANA_ENV|cluster|1|uatenv|uat
-GRAFANA_PROM_URL|cluster|1|url|https:// URL
+GRAFANA_PROM_URL|cluster|1|promurl|public https://prometheus-prod-NN-<region>.grafana.net/api/prom/push (not an internal host, must end in /api/prom/push)
 GRAFANA_PROM_USER|cluster|1|digits|numeric instance id
-GRAFANA_LOKI_URL|cluster|1|url|https:// URL
+GRAFANA_LOKI_URL|cluster|1|lokiurl|public https://logs-prod-NNN.grafana.net/loki/api/v1/push (not an internal host, must end in /loki/api/v1/push)
 GRAFANA_LOKI_USER|cluster|1|digits|numeric instance id
 GRAFANA_ALLOY_TOKEN|cluster|1|nonblank|access-policy token
 GRAFANA_OTLP_ENDPOINT|cluster|0|url|optional
@@ -121,6 +121,8 @@ valid_value() {
     email)    [[ "$v" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]] ;;
     pw16)     [[ ${#v} -ge 16 ]] ;;
     url)      [[ "$v" =~ ^https://[^[:space:]]+$ ]] ;;
+    promurl)  [[ "$v" =~ ^https://[A-Za-z0-9.-]+\.grafana\.net/api/prom/push$ ]] && [[ "$v" != *internal* && "$v" != *local-nlb* ]] ;;
+    lokiurl)  [[ "$v" =~ ^https://[A-Za-z0-9.-]+\.grafana\.net/loki/api/v1/push$ ]] && [[ "$v" != *internal* && "$v" != *local-nlb* ]] ;;
     uatenv)   [[ "$v" == uat ]] ;;
     days)     [[ "$v" =~ ^[0-9]+$ ]] && [[ "$v" -ge 3 && "$v" -le 365 ]] ;;
     mode)     [[ "$v" =~ ^(sweep|lifecycle|off)$ ]] ;;

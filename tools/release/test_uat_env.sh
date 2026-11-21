@@ -39,7 +39,7 @@ fill_all() {
   fill RESEND_API_KEY re_SENTINELresend; fill RESEND_WEBHOOK_SECRET whsec_SENTINELresendhook0000003; fill OPENROUTER_API_KEY sk-or-SENTINEL
   fill R2_ACCESS_KEY_ID r2idSENTINEL; fill R2_SECRET_ACCESS_KEY r2secSENTINEL; fill R2_PRIVATE_ACCESS_KEY_ID r2pidSENTINEL; fill R2_PRIVATE_SECRET_ACCESS_KEY r2psecSENTINEL
   fill CLOUDFLARED_TUNNEL_TOKEN tunnelSENTINEL
-  fill GRAFANA_PROM_URL https://prom.example.test/push; fill GRAFANA_PROM_USER 123456; fill GRAFANA_LOKI_URL https://loki.example.test/push; fill GRAFANA_LOKI_USER 654321; fill GRAFANA_ALLOY_TOKEN glc_SENTINEL
+  fill GRAFANA_PROM_URL https://prometheus-prod-13-prod-us-east-0.grafana.net/api/prom/push; fill GRAFANA_PROM_USER 123456; fill GRAFANA_LOKI_URL https://logs-prod-042.grafana.net/loki/api/v1/push; fill GRAFANA_LOKI_USER 654321; fill GRAFANA_ALLOY_TOKEN glc_SENTINEL
   fill BACKUP_AGE_RECIPIENT "age1$(printf 'q%.0s' $(seq 1 58))"; fill BACKUP_B2_KEY_ID b2idSENTINEL; fill BACKUP_B2_APPLICATION_KEY b2keySENTINEL; fill BACKUP_B2_ENDPOINT s3.us-west-004.backblazeb2.com
 }
 
@@ -156,6 +156,16 @@ echo "-- a Resend (Svix, base64) signing secret with + / = is accepted"
 export UAT_ENV_FILE="$T/home/.afrotransact/svix.env"; rm -f "$UAT_ENV_FILE"; "$ENVX" init >/dev/null 2>&1
 printf '%s\n' 'whsec_MfKQ9r8GKYqr+TwjUPD8ILPZIo2La/aSw==' >"$T/sv"
 out="$(SETUP_TTY="$T/sv" "$ENVX" fill --only RESEND_WEBHOOK_SECRET 2>&1)"; t has "$out" "saved ("; t lacks "$out" "MfKQ9r8"
+export UAT_ENV_FILE="$T/home/.afrotransact/uat.all.env"
+
+echo "-- Grafana endpoints: internal hosts and missing paths are refused"
+export UAT_ENV_FILE="$T/home/.afrotransact/graf.env"; rm -f "$UAT_ENV_FILE"; "$ENVX" init >/dev/null 2>&1
+printf '%s\n' "https://logs-prod-042-local-nlb.internal.grafana.net" "https://logs-prod-042-local-nlb.internal.grafana.net/loki/api/v1/push" "https://logs-prod-042.grafana.net" "https://logs-prod-042.grafana.net/loki/api/v1/push" >"$T/gl"
+out="$(SETUP_TTY="$T/gl" "$ENVX" fill --only GRAFANA_LOKI_URL 2>&1)"; t has "$out" "Try again (3/3)"
+printf '%s\n' "https://logs-prod-042.grafana.net" "https://logs-prod-042.grafana.net/loki/api/v1/push" >"$T/gl2"
+out="$(SETUP_TTY="$T/gl2" "$ENVX" fill --only GRAFANA_LOKI_URL 2>&1)"; t has "$out" "saved: https://logs-prod-042.grafana.net/loki/api/v1/push"
+printf '%s\n' "https://prometheus-prod-13-prod-us-east-0.grafana.net/api/prom" "https://prometheus-prod-13-prod-us-east-0.grafana.net/api/prom/push" >"$T/gp"
+out="$(SETUP_TTY="$T/gp" "$ENVX" fill --only GRAFANA_PROM_URL 2>&1)"; t has "$out" "does not look right"; t has "$out" "saved: https://prometheus-prod-13"
 export UAT_ENV_FILE="$T/home/.afrotransact/uat.all.env"
 
 echo "-- drift guard on the real tree"
