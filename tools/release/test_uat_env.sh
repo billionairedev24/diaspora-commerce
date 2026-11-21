@@ -144,6 +144,12 @@ out="$(SETUP_TTY="$T/sw3" "$ENVX" fill --only GHCR_TOKEN 2>&1)"; t has "$out" "s
 fill GHCR_USER ghp_SENTINELalreadysaved0000000000000000000; out="$("$ENVX" check cluster 2>&1)"; t has "$out" "GHCR_USER has the wrong shape"; t lacks "$out" SENTINEL
 export UAT_ENV_FILE="$T/home/.afrotransact/uat.all.env"
 
+echo "-- a Resend (Svix, base64) signing secret with + / = is accepted"
+export UAT_ENV_FILE="$T/home/.afrotransact/svix.env"; rm -f "$UAT_ENV_FILE"; "$ENVX" init >/dev/null 2>&1
+printf '%s\n' 'whsec_MfKQ9r8GKYqr+TwjUPD8ILPZIo2La/aSw==' >"$T/sv"
+out="$(SETUP_TTY="$T/sv" "$ENVX" fill --only RESEND_WEBHOOK_SECRET 2>&1)"; t has "$out" "saved ("; t lacks "$out" "MfKQ9r8"
+export UAT_ENV_FILE="$T/home/.afrotransact/uat.all.env"
+
 echo "-- drift guard on the real tree"
 t "$SRC/tools/release/uat-env.sh" drift >/dev/null
 

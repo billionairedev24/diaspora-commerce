@@ -113,7 +113,7 @@ valid_value() {
     token)    [[ "$v" =~ ^[A-Za-z0-9_.-]{30,}$ ]] ;;
     sktest)   [[ "$v" =~ ^(sk|rk)_test_[A-Za-z0-9]{10,}$ ]] ;;
     pktest)   [[ "$v" =~ ^pk_test_[A-Za-z0-9]{10,}$ ]] ;;
-    whsec)    [[ "$v" =~ ^whsec_[A-Za-z0-9]{16,}$ ]] ;;
+    whsec)    [[ "$v" =~ ^whsec_[A-Za-z0-9+/=_-]{16,}$ ]] ;;   # Stripe: letters and digits; Resend (Svix): base64, so + / = too
     age)      [[ "$v" =~ ^age1[a-z0-9]{50,}$ ]] ;;
     rediss)   [[ "$v" =~ ^rediss://[^[:space:]]+@[^[:space:]]+:[0-9]+ ]] ;;
     cidr32)   [[ "$v" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/32$ ]] ;;
