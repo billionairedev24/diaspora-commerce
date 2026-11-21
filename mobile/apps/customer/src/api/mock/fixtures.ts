@@ -97,8 +97,8 @@ export const DRESS_SIZE_CHART = {
 export const USER = { id: 'usr_adaeze', firstName: 'Adaeze', lastName: 'Okafor', email: 'adaeze@example.com', phone: '(713) 555-0142' };
 
 export const ADDRESSES = [
-  { id: 'a1', name: 'Adaeze Okafor', phone: '+17135550142', line1: '1420 Aldine Bender Rd', line2: 'Apt 12', city: 'Houston', state: 'TX', zip: '77032', isDefault: true, verified: true },
-  { id: 'a2', name: 'Adaeze Okafor', phone: '+17135550142', line1: '2700 Post Oak Blvd', line2: 'Suite 400', city: 'Houston', state: 'TX', zip: '77056', isDefault: false, verified: true }
+  { id: 'a1', name: 'Adaeze Okafor', phone: '+17135550142', line1: '1420 Aldine Bender Rd', line2: 'Apt 12', city: 'Houston', state: 'TX', zip: '77032', isDefault: true },
+  { id: 'a2', name: 'Adaeze Okafor', phone: '+17135550142', line1: '2700 Post Oak Blvd', line2: 'Suite 400', city: 'Houston', state: 'TX', zip: '77056', isDefault: false }
 ];
 
 export const PAYMENT_METHODS = [

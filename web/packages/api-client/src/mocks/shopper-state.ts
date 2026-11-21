@@ -272,8 +272,8 @@ function seed(userId: string): AccountState {
   return {
     ...empty,
     addresses: [
-      { id: 'ad1', name: 'Adaeze Nwosu', phone: '+17135550142', line1: '9800 Westheimer Rd', line2: '', city: 'Houston', state: 'TX', zip: '77042', isDefault: true, verified: true },
-      { id: 'ad2', name: 'Adaeze Nwosu (work)', phone: '+17185550199', line1: '1250 Grand Concourse', line2: 'Apt 4B', city: 'Bronx', state: 'NY', zip: '10456', isDefault: false, verified: true }
+      { id: 'ad1', name: 'Adaeze Nwosu', phone: '+17135550142', line1: '9800 Westheimer Rd', line2: '', city: 'Houston', state: 'TX', zip: '77042', isDefault: true },
+      { id: 'ad2', name: 'Adaeze Nwosu (work)', phone: '+17185550199', line1: '1250 Grand Concourse', line2: 'Apt 4B', city: 'Bronx', state: 'NY', zip: '10456', isDefault: false }
     ],
     paymentMethods: [
       { id: 'pm_visa4242', type: 'card', brand: 'visa', last4: '4242', label: 'Visa ending in 4242', expires: '08/29', isDefault: true },

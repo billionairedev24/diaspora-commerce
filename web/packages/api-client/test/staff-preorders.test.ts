@@ -85,7 +85,7 @@ describe('pre-order rules', () => {
   it('validates a late add', () => {
     const d = { customerId: 'c0', addressId: 'a1', newAddress: null, phoneConfirmed: true, items: ['x'], payment: 'SAVED_CARD' as const, reason: 'CUSTOMER_CALLED' as const, note: '' };
     expect(lateAddProblems(d, 'CLOSED')).toEqual([]);
-    expect(lateAddProblems({ ...d, addressId: '', newAddress: { line1: '1 Main', zip: '79401', placeId: null } }, 'OPEN')).toEqual(['verify']);
+    expect(lateAddProblems({ ...d, addressId: '', newAddress: { line1: '1 Main', zip: '79401', placeId: null } }, 'OPEN')).toEqual(['check']);
     expect(lateAddProblems({ ...d, customerId: '', phoneConfirmed: false, items: [] }, 'DELIVERED')).toEqual(['status', 'customer', 'phone', 'items']);
   });
 

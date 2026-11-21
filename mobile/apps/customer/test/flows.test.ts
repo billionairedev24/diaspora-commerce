@@ -97,13 +97,13 @@ describe('addresses', () => {
     expect(after.filter((x) => x.isDefault)).toHaveLength(1);
   });
 
-  it('asks before keeping an address it cannot verify', async () => {
+  it('saves an address Google Maps cannot find and says so, never blocking', async () => {
     const a = api();
-    const e = await a.bff.createAddress({ ...input, line1: '0 Nowhere Rd' }).catch((x: unknown) => x);
-    expect(e).toMatchObject({ status: 422 });
-    expect((e as { fieldErrors: Record<string, string> }).fieldErrors.line1).toBeTruthy();
-    const kept = await a.bff.createAddress({ ...input, line1: '0 Nowhere Rd', acceptUnverified: true });
-    expect(kept.verified).toBe(false);
+    const kept = await a.bff.createAddress({ ...input, line1: '0 Nowhere Rd' });
+    expect(kept.notice).toMatch(/couldn.t find this address/);
+    expect((await a.bff.getAddresses()).some((x) => x.id === kept.id)).toBe(true);
+    const picked = await a.bff.createAddress({ ...input, line1: '0 Nowhere Rd', placeId: 'g:abc' });
+    expect(picked.notice).toBeUndefined();
   });
 });
 

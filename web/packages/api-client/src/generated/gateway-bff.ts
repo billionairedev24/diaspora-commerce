@@ -5097,8 +5097,8 @@ export interface components {
             state: string;
             zip: string;
             isDefault?: boolean;
-            /** @description Keep the address as entered when it can't be USPS-verified */
-            acceptUnverified?: boolean;
+            /** @description The address suggestion the person picked (from autocomplete); Google Maps then treats the address as found without a second lookup */
+            placeId?: string;
         };
         Address: {
             id: string;
@@ -5110,7 +5110,8 @@ export interface components {
             state: string;
             zip: string;
             isDefault: boolean;
-            verified: boolean;
+            /** @description Only on the response to a save, when Google Maps could not find the address (plain words, with how to correct it). The address is saved anyway: a notice never blocks. */
+            notice?: string;
         };
         AddressPage: {
             items: components["schemas"]["Address"][];

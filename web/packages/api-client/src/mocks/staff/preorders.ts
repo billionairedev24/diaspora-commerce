@@ -1172,12 +1172,12 @@ export function preorderHandlers(W: string, deps: PreorderHandlerDeps) {
       })
     ),
     http.post(
-      `${W}/preorders/address-verify`,
+      `${W}/preorders/address-check`,
       route(async (ctx) => {
         const b = await json(ctx.request, z.object({ line1: z.string(), zip: z.string(), city: z.string(), region: z.string(), country: z.string() }));
         view(ctx);
         const ok = b.line1.trim().length > 0 && b.zip.trim().length >= 3;
-        return { verified: ok, placeId: ok ? `mock-place-${encodeURIComponent(`${b.line1}-${b.zip}`.toLowerCase().replace(/\s+/g, '-'))}` : null, formatted: ok ? `${b.line1.trim()}, ${b.city}, ${b.region} ${b.zip.trim()}` : null };
+        return { found: ok, placeId: ok ? `mock-place-${encodeURIComponent(`${b.line1}-${b.zip}`.toLowerCase().replace(/\s+/g, '-'))}` : null, formatted: ok ? `${b.line1.trim()}, ${b.city}, ${b.region} ${b.zip.trim()}` : null };
       })
     ),
     http.post(

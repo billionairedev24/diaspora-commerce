@@ -399,16 +399,14 @@ const ROUTES: Array<[string, string, Handler]> = [
   ['GET', '/v1/account/addresses', () => json({ items: mockDb().addresses, nextCursor: null })],
   ['POST', '/v1/account/addresses', ({ body }) => {
     const db = mockDb();
-    const b = (body ?? {}) as Partial<(typeof db.addresses)[number]> & { acceptUnverified?: boolean };
-    // A street number of 0 stands in for an address the geo service can't verify (try it, then "Keep mine").
-    if (!b.acceptUnverified && /^0\b/.test(b.line1 ?? '')) {
-      return new Response(JSON.stringify({ type: bffProblemType('VALIDATION'), title: 'Check the address', status: 422, code: 'VALIDATION', errors: { line1: 'We couldn’t find that street number.' } }), { status: 422, headers: { 'Content-Type': 'application/problem+json' } });
-    }
+    const b = (body ?? {}) as Partial<(typeof db.addresses)[number]> & { placeId?: string };
+    // A street number of 0 stands in for an address Google Maps can't find: it is saved anyway, with a notice.
+    const notFound = b.placeId === undefined && /^0\b/.test(b.line1 ?? '');
     const first = db.addresses.length === 0;
     if (b.isDefault || first) db.addresses.forEach((a) => { a.isDefault = false; });
-    const a = { id: nextId('a'), name: b.name ?? '', phone: b.phone ?? '', line1: b.line1 ?? '', line2: b.line2 ?? '', city: b.city ?? '', state: b.state ?? '', zip: b.zip ?? '', isDefault: !!b.isDefault || first, verified: !b.acceptUnverified };
+    const a = { id: nextId('a'), name: b.name ?? '', phone: b.phone ?? '', line1: b.line1 ?? '', line2: b.line2 ?? '', city: b.city ?? '', state: b.state ?? '', zip: b.zip ?? '', isDefault: !!b.isDefault || first };
     db.addresses.push(a);
-    return json(a, 201);
+    return json(notFound ? { ...a, notice: 'We couldn’t find this address. Check the street and ZIP, or pick a suggestion.' } : a, 201);
   }],
   ['PATCH', '/v1/account/addresses/:id', ({ params, body }) => {
     const db = mockDb();
