@@ -181,11 +181,11 @@ describe('Pre-orders back office (S274)', () => {
     await user.click(within(dialog).getByRole('checkbox', { name: /Phone read back and confirmed/ }));
     expect(within(dialog).getByRole('button', { name: 'Add $20.98 order' })).toBeEnabled(); // $12.99 + $7.99 door
     await user.selectOptions(within(dialog).getByRole('combobox', { name: /^Deliver to/ }), 'new');
-    expect(submit()).toBeDisabled(); // a new address must be verified first
+    expect(submit()).toBeDisabled(); // a new address must be found on Google Maps first
     await user.type(within(dialog).getByRole('combobox', { name: /^Street/ }), '12 Elm St');
     await user.type(within(dialog).getByRole('textbox', { name: /^Postal code/ }), '79101');
-    await user.click(within(dialog).getByRole('button', { name: 'Verify address' }));
-    expect(await within(dialog).findByRole('button', { name: 'Verified ✓' })).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Check address' }));
+    expect(await within(dialog).findByRole('button', { name: 'Found ✓' })).toBeInTheDocument();
     await user.click(submit());
     expect(await screen.findByText(/Late order AMA-L90 added and logged/)).toBeInTheDocument();
     expect(nav.search).toBe('tab=orders');

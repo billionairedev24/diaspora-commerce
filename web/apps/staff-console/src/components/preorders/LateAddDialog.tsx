@@ -30,7 +30,7 @@ const staffAddressSearch: SearchAddresses = (q, options) => addressLookup(staffA
 const EMPTY: LateAddDraft = { customerId: '', addressId: '', newAddress: null, phoneConfirmed: false, items: [], payment: 'SAVED_CARD', reason: 'CUSTOMER_CALLED', note: '' };
 
 /**
- * Late add (customer service): customer, saved or verified new address, phone read back, items, payment, reason, note.
+ * Late add (customer service): customer, saved or new address Google Maps finds, phone read back, items, payment, reason, note.
  * One Idempotency-Key per dialog: made when it opens, reused on every retry until the order is added, so a retry after
  * a timeout can never charge the saved card twice. After a timeout or server error the dialog first looks the late add
  * up (it may have gone through) and only then offers to retry, with the same key.
@@ -76,19 +76,19 @@ export function LateAddDialog({ w, open, onOpenChange, onAdded }: { w: PreorderW
     }
     onOpenChange(o);
   };
-  const verify = useMutation({
+  const check = useMutation({
     mutationFn: () => {
       const na = d.newAddress;
       if (!cust || !na) throw new Error('No address');
-      return api.verifyAddress({ line1: na.line1, zip: na.zip, city: cust.city, region: cust.region, country: cust.country });
+      return api.checkAddress({ line1: na.line1, zip: na.zip, city: cust.city, region: cust.region, country: cust.country });
     },
     onSuccess: (r) => {
-      if (!r.verified || !r.placeId) {
-        toast.show('We couldn’t verify that address. Check the street and postal code.', 'error');
+      if (!r.found || !r.placeId) {
+        toast.show('We couldn’t find this address. Check the street and postal code, or pick a suggestion.', 'error');
         return;
       }
       setD((cur) => (cur.newAddress ? { ...cur, newAddress: { ...cur.newAddress, placeId: r.placeId } } : cur));
-      toast.show('Address verified with Google Places');
+      toast.show('Address found on Google Maps');
     },
     onError: (e) => toast.show(problemMessage(e), 'error')
   });
@@ -144,13 +144,13 @@ export function LateAddDialog({ w, open, onOpenChange, onAdded }: { w: PreorderW
     close(false);
     onAdded(o.number);
   }
-  const onVerify = () => {
+  const onCheck = () => {
     const na = d.newAddress;
     if (!na || !na.line1.trim() || na.zip.trim().length < 3) {
       toast.show('Enter the street and postal code first', 'error');
       return;
     }
-    verify.mutate();
+    check.mutate();
   };
   return (
     <Dialog
@@ -198,7 +198,7 @@ export function LateAddDialog({ w, open, onOpenChange, onAdded }: { w: PreorderW
                     {`${a.label} · ${a.line1}, ${a.city} ${a.zip}`}
                   </option>
                 ))}
-                <option value="new">+ New address (verify before saving)</option>
+                <option value="new">+ New address (checked on Google Maps before saving)</option>
               </select>
             </label>
             {d.newAddress ? (
@@ -219,10 +219,10 @@ export function LateAddDialog({ w, open, onOpenChange, onAdded }: { w: PreorderW
                     className={`${controlClass} min-w-0`}
                   />
                 </label>
-                <button type="button" onClick={onVerify} disabled={verify.isPending} className="h-10 cursor-pointer rounded-md border border-border-strong bg-ink-0 px-3 font-semibold">
-                  {d.newAddress.placeId ? 'Verified ✓' : 'Verify address'}
+                <button type="button" onClick={onCheck} disabled={check.isPending} className="h-10 cursor-pointer rounded-md border border-border-strong bg-ink-0 px-3 font-semibold">
+                  {d.newAddress.placeId ? 'Found ✓' : 'Check address'}
                 </button>
-                <span className="col-span-full text-xs text-muted">City: {`${cust.city}, ${cust.region}`} · checked against the address service before it can be saved</span>
+                <span className="col-span-full text-xs text-muted">City: {`${cust.city}, ${cust.region}`} · checked on Google Maps before it can be saved</span>
               </div>
             ) : null}
             <label className="flex items-center gap-2 text-sm">

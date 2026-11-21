@@ -52,25 +52,22 @@ const idemKey = (ctx: Ctx) => ctx.request.headers.get('idempotency-key') ?? '';
 
 /* ── Addresses ─────────────────────────────────────────────────── */
 
-const UNVERIFIABLE = /nowhere|^0 /i;
+/** Street lines the mock Google Maps cannot find (saved anyway, with a notice). */
+const NOT_FOUND_STREET = /nowhere|^0 /i;
+const NOT_FOUND_NOTICE = 'We couldn’t find this address. Check the street and ZIP, or pick a suggestion.';
 
 function saveAddress(a: AccountState, id: string | null, input: z.infer<typeof AddressInputSchema>) {
-  const verified = !UNVERIFIABLE.test(input.line1);
-  if (!verified && !input.acceptUnverified) {
-    throw new MockProblem(422, 'VALIDATION_FAILED', 'Check the address', 'We couldn’t verify this address.', {
-      errors: { line1: 'We couldn’t verify this address. Check it or keep it as entered.' }
-    });
-  }
+  const found = input.placeId !== undefined || !NOT_FOUND_STREET.test(input.line1);
   const isDefault = input.isDefault || a.addresses.length === 0;
   if (isDefault) a.addresses.forEach((x) => { x.isDefault = false; });
   const value = { id: id ?? `ad${seq()}`, name: input.name.trim(), phone: input.phone, line1: input.line1, line2: input.line2 ?? '', city: input.city,
-    state: input.state, zip: input.zip, isDefault: isDefault || (id !== null && (a.addresses.find((x) => x.id === id)?.isDefault ?? false)), verified };
+    state: input.state, zip: input.zip, isDefault: isDefault || (id !== null && (a.addresses.find((x) => x.id === id)?.isDefault ?? false)) };
   if (id) {
     const i = a.addresses.findIndex((x) => x.id === id);
     if (i < 0) throw new MockProblem(404, 'ADDRESS_NOT_FOUND', 'Address not found', 'That address no longer exists.');
     a.addresses[i] = value;
   } else a.addresses.push(value);
-  return value;
+  return found ? value : { ...value, notice: NOT_FOUND_NOTICE };
 }
 
 /* ── Payments ──────────────────────────────────────────────────── */

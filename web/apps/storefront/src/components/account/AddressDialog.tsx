@@ -38,8 +38,9 @@ export function prefilledDraft(name: string, addresses: Address[]): Draft {
 }
 
 /**
- * Add or edit a delivery address (S148, S047): street autocomplete through the BFF (geo: Google Places / OSM), USPS-style
- * verification by geo — an address it can't verify can be kept as entered. No "use my current location" here.
+ * Add or edit a delivery address (S148, S047): street autocomplete through the BFF (geo: Google Places). An address picked
+ * from a suggestion is final. When Google Maps cannot find a typed address the address is still saved: the dialog says so
+ * in plain words and offers to correct it or continue. No "use my current location" here.
  */
 export function AddressDialog({
   open,
@@ -56,7 +57,12 @@ export function AddressDialog({
   const qc = useQueryClient();
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [unverified, setUnverified] = useState<string | null>(null);
+  // A suggestion the person picked (Google place id); cleared as soon as they edit the street, city, state or ZIP.
+  const [placeId, setPlaceId] = useState<string | undefined>(undefined);
+  // After a save Google Maps could not find: the address is already saved (`kept`), `notice` says so in plain words, and the
+  // person may correct it (the next save updates `kept`) or continue.
+  const [kept, setKept] = useState<Address | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const me = useQuery({ ...accountQueries.me(browserApi()), enabled: open && !address });
   const saved = useQuery({ ...shopperQueries.addresses(browserApi()), enabled: open && !address });
   const user = me.data?.user;
@@ -66,26 +72,31 @@ export function AddressDialog({
     if (open) {
       setDraft(address ? fromAddress(address) : prefilledDraft(fullName, saved.data ?? []));
       setErrors({});
-      setUnverified(null);
+      setPlaceId(undefined);
+      setKept(null);
+      setNotice(null);
     }
   }, [open, address, fullName, saved.data]);
 
   const save = useMutation({
-    mutationFn: (input: { acceptUnverified: boolean }) => {
-      const body = { ...draft, line2: draft.line2 || undefined, acceptUnverified: input.acceptUnverified };
-      return address ? browserApi().updateAddress(address.id, body) : browserApi().createAddress(body);
+    mutationFn: () => {
+      const body = { ...draft, line2: draft.line2 || undefined, placeId };
+      const id = kept?.id ?? address?.id;
+      return id ? browserApi().updateAddress(id, body) : browserApi().createAddress(body);
     },
     onSuccess: async (saved) => {
       await Promise.all([qc.invalidateQueries({ queryKey: accountKeys.addresses() }), qc.invalidateQueries({ queryKey: checkoutKeys.all }), qc.invalidateQueries({ queryKey: accountKeys.me() })]);
+      if (saved.notice) {
+        setKept(saved);
+        return setNotice(saved.notice);
+      }
+      setKept(null);
       onSaved?.(saved);
       onOpenChange(false);
     },
     onError: (e) => {
       if (!isApiError(e)) return setErrors({ _: t('auth.genericError') });
-      const f = e.fieldErrors;
-      const street = f.line1 ?? f.line2;
-      if (street && Object.keys(f).every((k) => k === 'line1' || k === 'line2')) setUnverified(street);
-      else setErrors(Object.keys(f).length ? f : { _: e.message });
+      setErrors(Object.keys(e.fieldErrors).length ? e.fieldErrors : { _: e.message });
     }
   });
 
@@ -101,8 +112,7 @@ export function AddressDialog({
       return setErrors(next);
     }
     setErrors({});
-    setUnverified(null);
-    save.mutate({ acceptUnverified: false });
+    save.mutate();
   };
 
   return (
@@ -114,12 +124,16 @@ export function AddressDialog({
         <AddressFields
           idPrefix="addr"
           value={{ line1: draft.line1, line2: draft.line2, city: draft.city, state: draft.state, zip: draft.zip, country: 'US' }}
-          onChange={(a) => setDraft((d) => ({ ...d, line1: a.line1, line2: a.line2, city: a.city, state: a.state, zip: a.zip }))}
-          onPick={() => {
-            setErrors({});
-            setUnverified(null);
+          onChange={(a) => {
+            setPlaceId(undefined);
+            setDraft((d) => ({ ...d, line1: a.line1, line2: a.line2, city: a.city, state: a.state, zip: a.zip }));
           }}
-          onStreetEdit={() => setUnverified(null)}
+          onPick={(s) => {
+            setErrors({});
+            setNotice(null);
+            setPlaceId(s.source === 'google' ? s.id : undefined);
+          }}
+          onStreetEdit={() => setNotice(null)}
           searchAddresses={bffAddressSearch}
           regions={STATES}
           errors={errors}
@@ -133,17 +147,23 @@ export function AddressDialog({
             statePlaceholder: t('addr.statePlaceholder')
           }}
         />
-        {unverified && (
+        {notice && kept && (
           <div className={styles.callout} role="alert">
             <p className={styles.muted}>
-              <WarningCircle aria-hidden /> <strong>{t('addr.unverifiedTitle')}</strong> {unverified}
+              <WarningCircle aria-hidden /> {t('addr.notFound')}
             </p>
             <div className={styles.actions}>
-              <Button size="sm" variant="neutral" onClick={() => setUnverified(null)}>
+              <Button size="sm" variant="neutral" onClick={() => setNotice(null)}>
                 {t('addr.fixIt')}
               </Button>
-              <Button size="sm" onClick={() => save.mutate({ acceptUnverified: true })} loading={save.isPending}>
-                {t('addr.keepMine')}
+              <Button
+                size="sm"
+                onClick={() => {
+                  onSaved?.(kept);
+                  onOpenChange(false);
+                }}
+              >
+                {t('addr.continue')}
               </Button>
             </div>
           </div>
@@ -157,7 +177,7 @@ export function AddressDialog({
           <Button variant="neutral" onClick={() => onOpenChange(false)}>
             {t('common.cancel')}
           </Button>
-          <Button type="submit" loading={save.isPending && !unverified}>
+          <Button type="submit" loading={save.isPending}>
             {address ? t('addr.save') : t('addr.add')}
           </Button>
         </div>
