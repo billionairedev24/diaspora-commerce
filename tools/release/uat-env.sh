@@ -362,6 +362,7 @@ stage_fill() {
     example_help "$name"
     echo "      Expected: $hint"
     case "$name" in
+      R2_ACCOUNT_ID) echo "      Leave this blank: it then reuses CLOUDFLARE_ACCOUNT_ID, because the same Cloudflare account owns the buckets. Enter to skip." ;;
       R2_*|CLOUDFLARED_TUNNEL_TOKEN) echo "      Usually only available after the Cloudflare tofu run (it creates the buckets and the tunnel). Enter to skip for now." ;;
       STRIPE_*WEBHOOK_SECRET|RESEND_WEBHOOK_SECRET) echo "      Usually only available after the first deploy. Enter to skip, or type p for a random first-apply placeholder (replace it later)." ;;
       ADMIN_PASSWORD) echo "      Type g to generate a strong one (it is shown once on this screen: put it in your password manager)." ;;
