@@ -158,8 +158,8 @@ EPICS_B = [
      "geo", [
         ("Geo service: autocomplete proxy", "Google Places Autocomplete (New) with session tokens; OSM Nominatim fallback; keys never shipped to clients.",
          ["Provider chosen by configuration; both implement the same interface", "Session tokens used for Places cost control", "Results restricted to supported markets"], 5, "Highest", "geo,go"),
-        ("Address validation (Smarty / USPS CASS)", "Standardise, flag missing apartment, undeliverable and residential vs commercial.",
-         ["Corrections suggested, never silently applied", "Missing unit on multi-unit address produces a warning"], 5, "High", "geo,go"),
+        ("Address validation (Google Maps)", "Google is the only address validator: a picked suggestion or a street-level match in the same ZIP is final; anything else says it could not be found, in plain words.",
+         ["A suggestion the person picked is valid and final", "A typed address is valid on a street-level Google match in the same ZIP", "Not found shows a plain message and never blocks saving"], 5, "High", "geo,go"),
         ("Address autocomplete everywhere", "Checkout, account addresses, onboarding, warehouses, pickup points, deliver-to ZIP and category forms.",
          ["Street suggestions from the first character", "Picking a suggestion fills street, city, state, ZIP and coordinates", "No plain-text address field remains in any app"], 5, "High", "geo,web,mobile"),
         ("Service areas and delivery zones (PostGIS)", "Zones for AfroTransact Delivery, FC catchments and provider service areas.",

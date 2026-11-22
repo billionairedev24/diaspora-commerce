@@ -171,7 +171,7 @@ service_keys() {
     delivery-runs)    out+=("${common[@]}" "DELIVERY_RUNS_CLIENT_SECRET=$(gen DELIVERY_RUNS_CLIENT_SECRET)") ;;
     fulfilment)       out+=("${common[@]}" "FULFILMENT_CLIENT_SECRET=$(gen FULFILMENT_CLIENT_SECRET)") ;;
     gateway-bff)      out+=("REDIS_URL=$REDIS_URL" "OIDC_CLIENT_SECRET=$(gen GATEWAY_BFF_CLIENT_SECRET)" "SESSION_SIGNING_KEY=$(gen SESSION_SIGNING_KEY)" "STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-}") ;;
-    geo)              out+=("GOOGLE_PLACES_API_KEY=${GOOGLE_PLACES_API_KEY:-}" "GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}" "SMARTY_AUTH_ID=${SMARTY_AUTH_ID:-}" "SMARTY_AUTH_TOKEN=${SMARTY_AUTH_TOKEN:-}"
+    geo)              out+=("GOOGLE_PLACES_API_KEY=${GOOGLE_PLACES_API_KEY:-}" "GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}"
                       ${OSRM_URL:+"OSRM_URL=$OSRM_URL"}) ;;     # OSRM_URL: optional routing engine, rendered only when set
     identity)
       out+=("${common[@]}" "SIGNING_KEY_PEM=$(signing_key)" "IDENTITY_DATA_KEY=$(gen IDENTITY_DATA_KEY)" "IDENTITY_DATA_KEY_ID=k1" "IDENTITY_DATA_KEYS_PREVIOUS="

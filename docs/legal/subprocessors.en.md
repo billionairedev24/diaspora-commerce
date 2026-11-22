@@ -59,7 +59,6 @@ Conversations are not used by us to train third-party models. [[LEGAL: confirm t
 |---|---|---|---|---|
 | Google (Maps Platform: Places, Geocoding, Routes) (in use) | Address autocomplete, place details, geocoding and drive-time routing for checkout, seller pickup locations, delivery coverage and routes. | Partial and full addresses typed into address fields, coordinates, origin and destination for routing. | United States / global | https://policies.google.com/privacy; https://cloud.google.com/maps-platform/terms |
 | OpenStreetMap Nominatim (fallback when no Google key is configured) | Address search fallback. | The address text typed. | Per OSM Foundation | https://osmfoundation.org/wiki/Privacy_Policy; https://operations.osmfoundation.org/policies/nominatim/ |
-| Smarty (optional) | US address deliverability checks. | Address. | United States | https://www.smarty.com/legal/privacy-policy [[LEGAL: confirm link]] |
 
 ## 7. Hosting, storage, delivery network and databases
 

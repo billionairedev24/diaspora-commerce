@@ -196,12 +196,13 @@ Redirect URI pattern: `{identity}/login/oauth2/code/{google|apple|facebook}`, lo
   Login** → *Valid OAuth Redirect URIs* as above → **App settings → Basic**: App ID → `FACEBOOK_CLIENT_ID`, App Secret →
   `FACEBOOK_CLIENT_SECRET`. Free.
 
-### Google Maps Platform and Smarty (optional): geo
+### Google Maps Platform (required in uat and prod): geo
 
 - **Powers:** address autocomplete and the structured address of a picked suggestion (Google Places (New)
   Autocomplete + Place Details, provider `google-places`) in every address field of the storefront, Seller Center,
   staff console and customer app; reverse geocoding (`google-geocoding`, "Use my current location"); drive-time
-  routing (`google`). Smarty: US deliverability checks (`smarty`).
+  routing (`google`); address validation (Google Geocoding: a street-level match in the same ZIP, or a picked suggestion, is final).
+  geo refuses to start in uat and prod without a key; without one (local only) every address is accepted unchecked.
 - **Which provider answers:** with `GOOGLE_PLACES_API_KEY` (or, when that is blank, `GOOGLE_MAPS_API_KEY`) set,
   Google Places is the **only** autocomplete provider in every environment, local included; OpenStreetMap
   Nominatim (and the sample addresses locally) answer only when no key is configured. geo logs the chain at
@@ -228,8 +229,6 @@ Redirect URI pattern: `{identity}/login/oauth2/code/{google|apple|facebook}`, lo
   picking is billed as autocomplete requests. Google gives a monthly free usage cap per SKU; check current prices on
   the [Maps Platform pricing page](https://mapsplatform.google.com/pricing/) and set **budget alerts** and
   **per-API quotas** (APIs & Services → Places API (New) → Quotas) on production and on your local key.
-- **Smarty:** [smarty.com](https://www.smarty.com) → **API Keys → Secret keys** → `SMARTY_AUTH_ID`,
-  `SMARTY_AUTH_TOKEN` (free trial).
 - **Locally** without a key geo uses the sample addresses + OpenStreetMap Nominatim. With a key in
   `.local/secrets.env`, `tools/dev/local.sh restart geo` switches local autocomplete to Google.
 
@@ -433,7 +432,7 @@ access uses OIDC federation: no cloud keys in GitHub.
 | `STRIPE_PUBLISHABLE_KEY` | Stripe | gateway-bff | public id | **required** | Stripe.js Payment Element / Express Checkout in the storefront, PaymentSheet in the app (served by the BFF). Without: the storefront shows its labelled dev-only test card form instead of Stripe Elements |
 | `STRIPE_WEBHOOK_SECRET` | Stripe | payments | secret | **required** | verifies Stripe's webhooks (payment succeeded, refunds, disputes) at POST :8105/v1/webhooks/stripe. Without: webhooks are rejected: orders never see the payment succeed |
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | Stripe | seller | secret | optional | Connect account updates (verification, payouts enabled) at POST :8106/v1/webhooks/stripe-connect. Without: Connect events are rejected: Account health does not update |
-| `STRIPE_BILLING_WEBHOOK_SECRET` | Stripe | seller | secret | optional | plan subscription events (invoices, renewals) at POST :8106/v1/webhooks/stripe-billing. Without: billing events are rejected: plan status does not update |
+| `STRIPE_BILLING_WEBHOOK_SECRET` | Stripe | seller | secret | optional | plan-fee PaymentIntent results (bank debits that settle later) at POST :8106/v1/webhooks/stripe-billing. Without: plan-fee events are rejected: a bank-debit plan fee stays processing (card-paid ones are unaffected) |
 | `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe | mobile-customer | public id | optional | PaymentSheet in the customer app (inlined by Metro at bundle time). Without: local.sh copies STRIPE_PUBLISHABLE_KEY; without either the app uses pk_test_mock (mock sheet) |
 | `EXPO_PUBLIC_STRIPE_MERCHANT_ID` | Stripe | mobile-customer | config | optional | Apple Pay merchant identifier for PaymentSheet. Without: default merchant.com.afrotransact (Apple Pay on device only) |
 | `TWILIO_ACCOUNT_SID` | Twilio | notifications | public id | optional | SMS: sign-in and enrolment codes, order and delivery texts. Without: texts are only logged (identity's one-time codes go to Mailpit) |
@@ -469,8 +468,6 @@ access uses OIDC federation: no cloud keys in GitHub.
 | `GOOGLE_MAPS_API_KEY` | Google Maps Platform | geo | secret | optional | address autocomplete + Place Details (Google Places (New), the only autocomplete provider when set), reverse geocoding (google-geocoding) and drive-time routing (google); enable Places API (New), Geocoding API, Routes API. Without: OpenStreetMap Nominatim + sample addresses; straight-line distance × detour factor |
 | `GOOGLE_PLACES_API_KEY` | Google Maps Platform | geo | secret | optional | a separate key for Google Places (New) only; wins over GOOGLE_MAPS_API_KEY for autocomplete. Without: GOOGLE_MAPS_API_KEY, else OpenStreetMap Nominatim + sample addresses |
 | `GEO_PROVIDERS` | Google Maps Platform | geo | config | optional | autocomplete providers without a Google key (locally fixture,osm-nominatim); ignored when a key is set. Without: fixture,osm-nominatim |
-| `SMARTY_AUTH_ID` | Smarty | geo | public id | optional | US address autocomplete (provider smarty). Without: not used |
-| `SMARTY_AUTH_TOKEN` | Smarty | geo | secret | optional | US address autocomplete (provider smarty). Without: not used |
 | `UPS_CLIENT_ID` | UPS | carrier-gateway | public id | optional | UPS rates, labels, tracking (sandbox locally). Without: UPS is skipped at start-up |
 | `UPS_CLIENT_SECRET` | UPS | carrier-gateway | secret | optional | UPS OAuth. Without: UPS is skipped |
 | `UPS_ACCOUNT` | UPS | carrier-gateway | public id | optional | UPS shipper number. Without: UPS is skipped |
@@ -515,9 +512,8 @@ Locally each has a committed, labelled default; deployed it goes in the service'
 | `BOOTSTRAP_ADMIN_PASSWORD` | identity | first super admin's password (identity creates the admin once) |
 | `CART_CLIENT_SECRET` | cart, identity | OAuth2 client-credentials secret of a service at identity (identity holds the same value as <SERVICE>_CLIENT_SECRET) |
 | `CATALOG_CLIENT_SECRET` | catalog, identity | OAuth2 client-credentials secret of a service at identity (identity holds the same value as <SERVICE>_CLIENT_SECRET) |
-| `CLOUDFLARE_API_TOKEN` | GitHub Actions, storefront | storefront service: Cloudflare cache purge (also a GitHub Actions secret) |
-| `DB_PASSWORD` | ai-gateway, bookings, catalog, content, delivery-runs, fulfilment, identity, inventory, offers, orders, payments, retail, seller, tax-returns, trust-ops | the service's Postgres password (OpenTofu creates the role; one database per service) |
-| `DB_URL` | ai-gateway, bookings, carrier-gateway, cart, catalog, content, delivery-runs, fulfilment, geo, identity, inventory, media, notifications, offers, orders, payments, retail, seller, storefront, tax-returns, trust-ops | the service's Postgres URL (Go: DSN incl. password; Java: JDBC URL, password in DB_PASSWORD) |
+| `DB_PASSWORD` | ai-gateway, bookings, catalog, content, delivery-runs, fulfilment, identity, inventory, offers, orders, payments, retail, seller, tax-returns, trust-ops | the service's Postgres password (Terraform creates the role; one database per service) |
+| `DB_URL` | ai-gateway, bookings, carrier-gateway, cart, catalog, content, delivery-runs, fulfilment, geo, identity, inventory, media, notifications, offers, orders, payments, retail, seller, tax-returns, trust-ops | the service's Postgres URL (Go: DSN incl. password; Java: JDBC URL, password in DB_PASSWORD) |
 | `DELIVERY_RUNS_CLIENT_SECRET` | delivery-runs, identity | OAuth2 client-credentials secret of a service at identity (identity holds the same value as <SERVICE>_CLIENT_SECRET) |
 | `EDI_AS2_KEYSTORE_PATH` | retail | retail: AS2 keystore file for supplier EDI |
 | `EDI_SFTP_PRIVATE_KEY_PATH` | retail | retail: SFTP private key file for supplier EDI |
@@ -578,7 +574,7 @@ Plus the OpenTofu-seeded values (`DB_*`, Kafka, `ES_URLS`). Web and mobile apps:
 | delivery-runs | - | `DB_PASSWORD`, `DB_URL`, `DELIVERY_RUNS_CLIENT_SECRET` |
 | fulfilment | - | `DB_PASSWORD`, `DB_URL`, `FULFILMENT_CLIENT_SECRET` |
 | gateway-bff | `STRIPE_PUBLISHABLE_KEY` | `OIDC_CLIENT_SECRET`, `SESSION_SIGNING_KEY` |
-| geo | `GEO_PROVIDERS`, `GOOGLE_MAPS_API_KEY`, `GOOGLE_PLACES_API_KEY`, `SMARTY_AUTH_ID`, `SMARTY_AUTH_TOKEN` | `DB_URL` |
+| geo | `GEO_PROVIDERS`, `GOOGLE_MAPS_API_KEY`, `GOOGLE_PLACES_API_KEY` | `DB_URL` |
 | identity | `APPLE_CLIENT_ID`, `APPLE_CLIENT_SECRET`, `FACEBOOK_CLIENT_ID`, `FACEBOOK_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | `BFF_CLIENT_SECRET`, `BOOKINGS_CLIENT_SECRET`, `BOOTSTRAP_ADMIN_PASSWORD`, `CART_CLIENT_SECRET`, `CATALOG_CLIENT_SECRET`, `DB_PASSWORD`, `DB_URL`, `DELIVERY_RUNS_CLIENT_SECRET`, `FULFILMENT_CLIENT_SECRET`, `GATEWAY_BFF_CLIENT_SECRET`, `IDENTITY_DATA_KEY`, `IDENTITY_DATA_KEYS_PREVIOUS`, `IDENTITY_TEST_USERS_PASSWORD`, `INDEXER_CLIENT_SECRET`, `INVENTORY_CLIENT_SECRET`, `MEDIA_CLIENT_SECRET`, `NOTIFICATIONS_CLIENT_SECRET`, `OFFERS_CLIENT_SECRET`, `ORDERS_CLIENT_SECRET`, `PAYMENTS_CLIENT_SECRET`, `RETAIL_CLIENT_SECRET`, `SEARCH_CLIENT_SECRET`, `SELLER_SERVICE_CLIENT_SECRET`, `SIGNING_KEY_PEM`, `TAX_RETURNS_CLIENT_SECRET`, `TRUSTOPS_CLIENT_SECRET` |
 | indexer | - | `ES_API_KEY`, `ES_PASSWORD`, `INDEXER_CLIENT_SECRET` |
 | inventory | - | `DB_PASSWORD`, `DB_URL`, `INVENTORY_CLIENT_SECRET` |
@@ -592,9 +588,8 @@ Plus the OpenTofu-seeded values (`DB_*`, Kafka, `ES_URLS`). Web and mobile apps:
 | retail | - | `DB_PASSWORD`, `DB_URL`, `EDI_AS2_KEYSTORE_PATH`, `EDI_SFTP_PRIVATE_KEY_PATH`, `RETAIL_CLIENT_SECRET` |
 | search | - | `ADS_TOKEN_KEY`, `ES_API_KEY`, `ES_PASSWORD`, `SEARCH_CLIENT_SECRET` |
 | seller | `STRIPE_BILLING_WEBHOOK_SECRET`, `STRIPE_CONNECT_WEBHOOK_SECRET`, `STRIPE_SECRET_KEY` | `DB_PASSWORD`, `DB_URL`, `FIELD_ENCRYPTION_KEY`, `MEDIA_SERVICE_TOKEN`, `SELLER_SERVICE_CLIENT_SECRET` |
-| storefront | - | `CLOUDFLARE_API_TOKEN`, `DB_URL` |
-| tax-returns | - | `DB_PASSWORD`, `DB_URL`, `TAX_RETURNS_CLIENT_SECRET` |
-| tools/seed | `PEXELS_API_KEY`, `UNSPLASH_ACCESS_KEY` | `BFF_CLIENT_SECRET`, `GATEWAY_BFF_CLIENT_SECRET`, `SEED_CLIENT_SECRET`, `SEED_TEST_USERS_PASSWORD`, `SEED_TOKEN` |
+| tax-returns | `STRIPE_SECRET_KEY` | `DB_PASSWORD`, `DB_URL`, `TAX_RETURNS_CLIENT_SECRET` |
+| tools/seed | `PEXELS_API_KEY`, `STRIPE_SECRET_KEY`, `UNSPLASH_ACCESS_KEY` | `BFF_CLIENT_SECRET`, `GATEWAY_BFF_CLIENT_SECRET`, `SEED_CLIENT_SECRET`, `SEED_TEST_USERS_PASSWORD`, `SEED_TOKEN` |
 | trust-ops | - | `DB_PASSWORD`, `DB_URL`, `TRUSTOPS_CLIENT_SECRET` |
 | web-seller-center | `EXPO_PUBLIC_SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_AUTH_TOKEN`, `SENTRY_DSN` | - |
 | web-staff-console | `EXPO_PUBLIC_SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_AUTH_TOKEN`, `SENTRY_DSN` | - |
