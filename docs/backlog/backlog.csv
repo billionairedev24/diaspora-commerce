@@ -431,8 +431,9 @@
 "S137","Story","Geo service: autocomplete proxy","Google Places Autocomplete (New) with session tokens; OSM Nominatim fallback; keys never shipped to clients.","- Provider chosen by configuration; both implement the same interface
 - Session tokens used for Places cost control
 - Results restricted to supported markets","E22","","Highest","5","geo go","geo","Done"
-"S138","Story","Address validation (Smarty / USPS CASS)","Standardise, flag missing apartment, undeliverable and residential vs commercial.","- Corrections suggested, never silently applied
-- Missing unit on multi-unit address produces a warning","E22","","High","5","geo go","geo","Done"
+"S138","Story","Address validation (Google Maps)","Google is the only address validator: a picked suggestion or a street-level match in the same ZIP is final; anything else says it could not be found, in plain words.","- A suggestion the person picked is valid and final
+- A typed address is valid on a street-level Google match in the same ZIP
+- Not found shows a plain message and never blocks saving","E22","","High","5","geo go","geo","Done"
 "S139","Story","Address autocomplete everywhere","Checkout, account addresses, onboarding, warehouses, pickup points, deliver-to ZIP and category forms.","- Street suggestions from the first character
 - Picking a suggestion fills street, city, state, ZIP and coordinates
 - No plain-text address field remains in any app","E22","","High","5","geo web mobile","geo","Done"
@@ -2329,3 +2330,8 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Layout: slim bar, two columns with a sticky summary that starts with Place your order, sections address / payment / items, a closing Place your order with the order total, Back to cart and footer notes; a sticky bottom bar with the total on phones
 - Existing checkout behaviour (Stripe, address modal, membership, delivery fee tax rules, bundles, quotes) unchanged and tested
 - Owner review in a real browser with real Stripe and a real gateway","E06","","High","5","checkout storefront gateway-bff","checkout","In Review"
+"S643","Story","Google is the only address provider (previous vendor removed)","Remove the previous address vendor everywhere (adapter, config, secrets, docs). Address validation is Google Maps only: VALID or NOT_FOUND, never 'unverified'. Owner decision: 'Google address should be enough. We should not be integrating that vendor again.'","- The old vendor adapter, env vars and docs are gone
+- POST /v1/addresses/validate returns VALID or NOT_FOUND only
+- NOT_FOUND shows a plain message and never blocks saving
+- uat and prod geo refuse to start without a Google key
+- No UI string says unverified","E22","","High","5","geo go web mobile","geo","In Review"

@@ -32,7 +32,7 @@ Resend: missing → email to Mailpit · OpenRouter: missing → AI assistant off
 | Resend | email to real inboxes | resend.com → API Keys; verify a domain or use `onboarding@resend.dev` | `RESEND_API_KEY`, `EMAIL_FROM` | notifications |
 | OpenRouter | Lola assistant, semantic search, AI moderation | openrouter.ai → Keys | `OPENROUTER_API_KEY` | ai-gateway |
 | Google / Apple / Facebook | social sign-in buttons | each provider's developer console (OAuth client) | `GOOGLE_CLIENT_ID`/`_SECRET`, `APPLE_…`, `FACEBOOK_…` | identity |
-| Google Maps, Smarty | address autocomplete, geocoding, routing | Google Maps Platform → Keys & Credentials | `GOOGLE_PLACES_API_KEY`, `GOOGLE_MAPS_API_KEY` | geo |
+| Google Maps | address autocomplete, geocoding, routing | Google Maps Platform → Keys & Credentials | `GOOGLE_PLACES_API_KEY`, `GOOGLE_MAPS_API_KEY` | geo |
 | UPS, USPS, FedEx, DHL | rates, labels, tracking (sandboxes) | carrier developer portals | `UPS_*`, `USPS_*`, `FEDEX_*`, `DHL_*` | carrier-gateway |
 | FCM, APNs, WhatsApp | push and WhatsApp messages | Firebase, Apple Developer, Meta for Developers | `FCM_SERVICE_ACCOUNT_JSON`, `APNS_*`, `WHATSAPP_*` | notifications |
 | Pexels, Unsplash, GS1 | demo photos, product data | their developer pages | `PEXELS_API_KEY`, `UNSPLASH_ACCESS_KEY`, `GS1_API_KEY` | tools/seed, catalog |

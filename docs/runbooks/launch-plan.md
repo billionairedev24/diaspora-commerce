@@ -46,7 +46,7 @@ build machine (no Docker, no live Stripe, Kafka, Elasticsearch, browsers or devi
 | Item | Owner | Notes |
 |---|---|---|
 | Counsel review of every document in docs/legal; fill every `[[LEGAL: …]]` (entity, address, governing law, arbitration, liability caps, DMCA agent, state rules) | you + counsel | [open-questions-for-counsel.md](../legal/open-questions-for-counsel.md), [open-questions-business.md](../legal/open-questions-business.md) |
-| Read the providers' own terms (Stripe, Twilio, WhatsApp/Meta, OpenRouter, Google, Smarty, Resend and the rest) and confirm the matrices | you / re-run with network access | the drafting sessions could not reach those sites |
+| Read the providers' own terms (Stripe, Twilio, WhatsApp/Meta, OpenRouter, Google, Resend and the rest) and confirm the matrices | you / re-run with network access | the drafting sessions could not reach those sites |
 | Stripe live: Connect platform application, confirm which agreement applies to our connected accounts, webhooks, Tax settings, statement descriptor | you | verify liability settings (`losses: stripe`) with Stripe |
 | Twilio: A2P 10DLC (or toll-free) registration with the real campaign, sender numbers, STOP handling; Meta: WhatsApp Business account and template approval (names and bodies in notifications README) | you | approval takes days to weeks |
 | Email: sending domain, SPF/DKIM/DMARC | you | |

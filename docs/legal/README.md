@@ -37,7 +37,7 @@ Not covered here (another document set): seller and provider terms, payments and
 Before any document is published:
 
 1. **Counsel review** of every document and every `[[LEGAL: ...]]` item; resolve and delete each placeholder.
-2. **Provider terms:** a named person reads the live text of each provider in `provider-terms-matrix.md` (Stripe, Twilio, WhatsApp/Meta, CTIA, OpenRouter and model providers, Google Maps, Smarty, Resend, AWS, Cloudflare, carriers) and records the date. The first draft could not read the providers' own pages.
+2. **Provider terms:** a named person reads the live text of each provider in `provider-terms-matrix.md` (Stripe, Twilio, WhatsApp/Meta, CTIA, OpenRouter and model providers, Google Maps, Resend, AWS, Cloudflare, carriers) and records the date. The first draft could not read the providers' own pages.
 3. **Match the product:** the sign-up page, checkout, membership page, SMS consent box, cookie banner, Account > Help and gift card page say what the documents say. Check button labels and paths named in the documents (Account > Help, Account > Membership, Account > Notifications, Account > Privacy, Account > Credit, Account > Gift cards, Account > Refer a friend), because several are descriptions of intended screens.
 4. **Numbers:** examples (gift card $10 to $500, Plus $9.99/$99 with 14-day trial and $25 free-delivery minimum, referral $10 / $30 / 30 days, SMS marketing cap of 4 a month, 7-year tax records, 7-day membership refund window) match the staff settings at launch, or the document points to the app.
 5. **Messaging:** the SMS terms match the registered 10DLC or toll-free campaign (name, use cases, sample messages, opt-in screenshot); the quiet-hours promise matches the notifications configuration.

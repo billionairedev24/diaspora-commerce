@@ -31,7 +31,7 @@ Per-service overrides: `networkPolicy.egress.{services,datastores,postgres,https
 
 A vanilla NetworkPolicy cannot match host names, so all services with `https: true` may reach any public 443. The names they need:
 the public OIDC issuer `auth.<domain>` (every service: JWKS), api.stripe.com (payments, seller), Resend (notifications), openrouter.ai
-(ai-gateway), Google Places/Maps and Smarty and nominatim.openstreetmap.org (geo), USPS, UPS, FedEx, DHL (carrier-gateway), AvaTax
+(ai-gateway), Google Places/Maps and nominatim.openstreetmap.org (geo), USPS, UPS, FedEx, DHL (carrier-gateway), AvaTax
 (tax-returns), GS1 and world.openfoodfacts.org (catalog), Google/Apple/Facebook sign-in (identity), Cloudflare R2
 `<account>.r2.cloudflarestorage.com` (media), Layerbase (Postgres 5432). Tightening, in order of value:
 1. Set `egress.https: false` on every service that talks to no third party except the issuer, and point JWKS at the in-cluster identity (needs a config change, not done).
