@@ -81,7 +81,7 @@ cd <worktree of origin/release-1>
 | R2 buckets | `afrotransact-uat-media`, `afrotransact-uat-kyc-evidence` | `afrotransact-prod-media`, `afrotransact-prod-kyc-evidence` |
 | Backups | B2 `afrotransact-uat-backups`, 7 days | B2 `afrotransact-prod-backups`, 14 days |
 | AI | USD 2/day global cap, USD 0.50 per caller | same |
-| Google/Smarty/OpenRouter keys | optional / limited | real, with quotas |
+| Google/OpenRouter keys | optional / limited | real, with quotas |
 | `DRIVER_APP_ENABLED` | unset (default `false`) | unset (default `false`) |
 | Edge overlay | `infra/k8s/platform/edge/overlays/uat` (prod's edge, uat hosts and namespace) | `.../overlays/prod` |
 | State dir of secrets | `$HOME/.afrotransact-uat` | `$HOME/.afrotransact-prod` (never reuse) |

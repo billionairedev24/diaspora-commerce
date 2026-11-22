@@ -77,8 +77,6 @@ UAT and PROD read the same names; they differ only by value (see `release-1-go-l
 | SENDGRID_WEBHOOK_PUBLIC_KEY | afrotransact-go | required | - | Secret `afrotransact-go-secrets` (SOPS, infra/ovh-vps/secrets.sh) | secrets.sh (fixed) | ready |
 | SESSION_SIGNING_KEY | afrotransact-go | required | - | Secret `afrotransact-go-secrets` (SOPS, infra/ovh-vps/secrets.sh) | secrets.sh generates it (kept in STATE_DIR/generated.env) | ready |
 | SIGNING_KEY_PEM | afrotransact-core | required | - | Secret `afrotransact-core-secrets` (SOPS, infra/ovh-vps/secrets.sh) | secrets.sh generates it (kept in STATE_DIR/generated.env) | ready |
-| SMARTY_AUTH_ID | afrotransact-go | see runbook | - | Secret `afrotransact-go-secrets` (SOPS, infra/ovh-vps/secrets.sh) | owner (secrets.local.env) | MISSING until the owner provides it |
-| SMARTY_AUTH_TOKEN | afrotransact-go | see runbook | - | Secret `afrotransact-go-secrets` (SOPS, infra/ovh-vps/secrets.sh) | owner (secrets.local.env) | MISSING until the owner provides it |
 | STRIPE_BILLING_WEBHOOK_SECRET | afrotransact-core | see runbook | - | Secret `afrotransact-core-secrets` (SOPS, infra/ovh-vps/secrets.sh) | owner (secrets.local.env) | MISSING until the owner provides it |
 | STRIPE_CONNECT_WEBHOOK_SECRET | afrotransact-core | see runbook | - | Secret `afrotransact-core-secrets` (SOPS, infra/ovh-vps/secrets.sh) | owner (secrets.local.env) | MISSING until the owner provides it |
 | STRIPE_PUBLISHABLE_KEY | afrotransact-go | see runbook | - | Secret `afrotransact-go-secrets` (SOPS, infra/ovh-vps/secrets.sh) | owner (secrets.local.env) | MISSING until the owner provides it |
