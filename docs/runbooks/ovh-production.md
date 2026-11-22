@@ -122,7 +122,7 @@ Cloudflare R2 account id and the two bucket tokens for media (`docs/runbooks/r2-
 `GHCR_TOKEN` (read-only `read:packages`; creates the pull secret `ghcr`) and `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_PHONE` (become identity's `BOOTSTRAP_ADMIN_*`): all in `secrets.local.env`, next to the other
 third-party keys (they are no longer in `config.env`). **Geo and tax data keys: none is mandatory for the launch set** (read from `go/services/geo` and `java/services/tax-returns`): geo starts with no key
 (autocomplete and reverse geocoding fall back to OpenStreetMap Nominatim, a public service with a 1 request per second policy; routing falls back to a geodesic estimate), and `GOOGLE_MAPS_API_KEY`
-(Places + Routes; recommended, set an API restriction and a quota) and `SMARTY_AUTH_ID` / `SMARTY_AUTH_TOKEN` (USPS address validation) are optional; tax-returns runs `TAX_PROVIDER=RULES` (our own rate table, no vendor
+(Places + Routes; recommended, set an API restriction and a quota) is optional locally but required in uat and prod (geo refuses to start without a Google key: Google Maps is the only address validator); tax-returns runs `TAX_PROVIDER=RULES` (our own rate table, no vendor
 key; the Stripe Tax and Avalara keys are for the later cut-over in `tax-provider-cutover.md`). What IS mandatory is tax **data**: `ORDERS_TAX_FALLBACK_TO_TABLE=false` means the tax-returns profiles must be `ACTIVE` or checkout fails (smoke test).
 Generate **everything fresh** (never reuse trial or dev values: `STATE_DIR` must be a new directory).
 

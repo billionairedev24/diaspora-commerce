@@ -29,7 +29,7 @@ Source quality key: **A** = excerpt of the vendor's own page; **B** = vendor doc
 | OpenRouter privacy, logging and ZDR documentation; DPA | https://openrouter.ai/docs/guides/privacy/logging ; https://openrouter.ai/data-processing-agreement | 2026-10-29 | A/B (excerpts) |
 | Google Maps Platform Service Specific Terms; Places API policies | https://cloud.google.com/maps-platform/terms ; https://developers.google.com/maps/documentation/places/web-service/policies | 2026-10-29 | A/B (excerpts), C for caching limits |
 | Resend legal pages (terms, privacy, DPA, subprocessors) | https://resend.com/legal | 2026-10-29 | Not read. Search returned no Resend page |
-| Other vendors in `subprocessors.en.md` (Google Gemini, OpenAI, Anthropic via OpenRouter; Cloudflare; Grafana Cloud; Sentry; Smarty; AWS; carriers; Firebase; Apple; Layerbase; UploadThing) | see that file | not read | Not read. Links are unverified |
+| Other vendors in `subprocessors.en.md` (Google Gemini, OpenAI, Anthropic via OpenRouter; Cloudflare; Grafana Cloud; Sentry; AWS; carriers; Firebase; Apple; Layerbase; UploadThing) | see that file | not read | Not read. Links are unverified |
 
 ## Stripe
 
@@ -134,7 +134,7 @@ Excerpts: Places content must not be pre-fetched, cached or stored beyond stated
 
 Search returned no Resend page. Not read. Sub-processors lists Resend with unverified links. OQ-11.
 
-## Cloudflare, Grafana Cloud, Sentry, Smarty, AWS, cloud hosts, carriers, Firebase, APNs, Layerbase, UploadThing
+## Cloudflare, Grafana Cloud, Sentry, AWS, cloud hosts, carriers, Firebase, APNs, Layerbase, UploadThing
 
 Not read. Listed in `subprocessors.en.md` from the repository configuration and ADR 0004 only; links are best-known and must be verified. Carrier (UPS, USPS, FedEx, DHL) shipping terms and any carrier account agreements the business signed were not available; sellers who buy labels through us are charged the carrier cost plus handling (see `seller-fees.en.md`). OQ-15.
 

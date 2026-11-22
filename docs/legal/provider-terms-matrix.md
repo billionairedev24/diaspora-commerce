@@ -11,7 +11,7 @@ This matrix lists every third party the customer-facing documents depend on, wha
 - the search-result summaries and snippets of the official pages and of secondary commentary that a web search returned (the "Read" column says which); and
 - our own repository (how each provider is actually wired).
 
-Where this matrix says "obligation", it is either (a) taken from a search summary of the official page, marked **S**, or (b) general knowledge of the provider's published policy, marked **K**, not checked in this session. **Nothing marked K is verified.** Whoever reviews this must open each URL, read the current text, and record the date they read it in the "Reviewed by counsel" column. To unblock a re-run, the session would need these hosts allowed: `stripe.com`, `docs.stripe.com`, `www.twilio.com`, `help.twilio.com`, `whatsappbusiness.com`, `www.whatsapp.com`, `developers.facebook.com`, `www.ctia.org`, `www.ftc.gov`, `openrouter.ai`, `cloud.google.com`, `www.smarty.com`.
+Where this matrix says "obligation", it is either (a) taken from a search summary of the official page, marked **S**, or (b) general knowledge of the provider's published policy, marked **K**, not checked in this session. **Nothing marked K is verified.** Whoever reviews this must open each URL, read the current text, and record the date they read it in the "Reviewed by counsel" column. To unblock a re-run, the session would need these hosts allowed: `stripe.com`, `docs.stripe.com`, `www.twilio.com`, `help.twilio.com`, `whatsappbusiness.com`, `www.whatsapp.com`, `developers.facebook.com`, `www.ctia.org`, `www.ftc.gov`, `openrouter.ai`, `cloud.google.com`.
 
 Legend: **S** = summarised in a search result read 2026-10-28; **K** = from general knowledge, unverified; **R** = our repository.
 
@@ -94,12 +94,11 @@ Legend: **S** = summarised in a search result read 2026-10-28; **K** = from gene
 
 ## 5. Maps, geo and address providers
 
-**What we use it for (R):** Google Places (New) autocomplete and Place Details, Geocoding, Routes (via `geo`, server side); Smarty (US address checks); OpenStreetMap Nominatim as a no-key fallback only.
+**What we use it for (R):** Google Places (New) autocomplete and Place Details, Geocoding, Routes (via `geo`, server side; address validation uses Geocoding); OpenStreetMap Nominatim as a no-key fallback only.
 
 | Terms | URL | Read 2026-10-28 | Obligations on us | Where our documents satisfy it |
 |---|---|---|---|---|
 | Google Maps Platform Terms of Service and Service Specific Terms | https://cloud.google.com/maps-platform/terms | **Not read; the search that was run returned only OpenRouter results**; K: end users of apps using Maps APIs are subject to Google's privacy policy; no caching or scraping beyond allowed; attribution where required | Disclose use of Google Maps; show required attribution; no caching beyond allowed | `privacy` "Who we share it with" (address, map and routing services); `accessibility` "Known limitations" (third-party address tools). Counsel to check whether an explicit "Google Maps/Google Earth Additional Terms" and Google Privacy Policy link must appear (Q11) |
-| Smarty Terms of Service | https://www.smarty.com/legal/terms-of-service | Not read; K | Use for address validation only, no resale | `privacy` "Who we share it with" |
 | OpenStreetMap Nominatim usage policy | https://operations.osmfoundation.org/policies/nominatim/ | Not read; K | Fair use, attribution, no bulk geocoding | `privacy` (OpenStreetMap-based services); not used for production traffic when the Google key is set |
 
 ---

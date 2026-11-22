@@ -177,8 +177,6 @@ CATALOGUE: List[Var] = [
     Var("GEO_PROVIDERS", "Google Maps Platform", ("geo",), CONFIG,
         "autocomplete providers without a Google key (locally fixture,osm-nominatim); ignored when a key is set",
         "fixture,osm-nominatim"),
-    Var("SMARTY_AUTH_ID", "Smarty", ("geo",), PUBLIC, "US address autocomplete (provider smarty)", "not used"),
-    Var("SMARTY_AUTH_TOKEN", "Smarty", ("geo",), SECRET, "US address autocomplete (provider smarty)", "not used"),
     # Carriers -------------------------------------------------------------------------------------------------------
     Var("UPS_CLIENT_ID", "UPS", ("carrier-gateway",), PUBLIC, "UPS rates, labels, tracking (sandbox locally)",
         "UPS is skipped at start-up"),
