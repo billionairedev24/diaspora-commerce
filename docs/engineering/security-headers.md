@@ -52,7 +52,7 @@ enforced from day one and the page set is small and tested.
 ## Web apps (nonce CSP, Report-Only first)
 
 `CSP_MODE` per app (Worker var in `wrangler.jsonc`, env var elsewhere): `report-only` (default, also for an unknown value),
-`enforce`, `off`. Header names: `Content-Security-Policy-Report-Only` vs `Content-Security-Policy`. `uat`, `trial` and `prod` are `enforce` (security audit F4); dev and preview stay `report-only`, and the report endpoint
+`enforce`, `off`. Header names: `Content-Security-Policy-Report-Only` vs `Content-Security-Policy`. `uat` and `prod` are `enforce` (security audit F4); dev and preview stay `report-only`, and the report endpoint
 (`/api/csp-report`) stays on in every mode, so violations still surface as `csp.violation` log lines. Rollback switch: set
 `CSP_MODE=report-only` for the app and redeploy (below, and `docs/runbooks/csp-violations-spike.md`).
 Policy review done for the switch: fonts are self-hosted (`@fontsource`, `font-src 'self'`), images come from `MEDIA_PUBLIC_URL`

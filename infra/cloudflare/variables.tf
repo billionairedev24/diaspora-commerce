@@ -1,13 +1,12 @@
 variable "environment" {
   description = <<-EOT
-    dev | uat | trial | prod. Every host comes from the map infra/cloudflare/hosts.json (see main.tf): prod is <zone> and <role>.<zone>,
+    dev | uat | prod. Every host comes from the map infra/cloudflare/hosts.json (see main.tf): prod is <zone> and <role>.<zone>,
     any other env is <suffix>.<zone> and <role>-<suffix>.<zone> (Cloudflare's free certificate covers the apex and one label only).
-    trial is the 8-day OVH run of the prod profile (docs/runbooks/ovh-production.md, "Trial"); its suffix is test.
   EOT
   type        = string
   validation {
-    condition     = contains(["dev", "uat", "trial", "prod"], var.environment)
-    error_message = "environment must be dev, uat, trial or prod."
+    condition     = contains(["dev", "uat", "prod"], var.environment)
+    error_message = "environment must be dev, uat or prod."
   }
 }
 
@@ -30,7 +29,7 @@ variable "manage_zone" {
 
 variable "origin_mode" {
   description = <<-EOT
-    How the api and auth hosts reach the cluster (trial: always tunnel, there is no load balancer):
+    How the api and auth hosts reach the cluster (OVH uat/prod: always tunnel, there is no load balancer):
       ingress - proxied DNS record to the cluster ingress load balancer (origin_target), Authenticated Origin Pulls
       tunnel  - Cloudflare Tunnel (cloudflared in-cluster); no public load balancer at all
   EOT
@@ -107,10 +106,10 @@ variable "hsts_preload" {
 variable "edge_response_header_environments" {
   description = "Environments whose hosts get the edge baseline Referrer-Policy (when the origin sends none). One zone-wide ruleset, owned by the manage_zone run; remove an environment to switch it off there."
   type        = list(string)
-  default     = ["dev", "uat", "trial", "prod"]
+  default     = ["dev", "uat", "prod"]
   validation {
-    condition     = alltrue([for e in var.edge_response_header_environments : contains(["dev", "uat", "trial", "prod"], e)])
-    error_message = "edge_response_header_environments may only contain dev, uat, trial, prod."
+    condition     = alltrue([for e in var.edge_response_header_environments : contains(["dev", "uat", "prod"], e)])
+    error_message = "edge_response_header_environments may only contain dev, uat, prod."
   }
 }
 
@@ -121,7 +120,7 @@ variable "pages_projects_owner" {
 }
 
 variable "developers_enabled" {
-  description = "Attach developers.<host> (the docs portal on Cloudflare Pages) to this environment. false for the trial."
+  description = "Attach developers.<host> (the docs portal on Cloudflare Pages) to this environment."
   type        = bool
   default     = true
 }

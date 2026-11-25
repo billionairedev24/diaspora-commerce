@@ -3,9 +3,9 @@
 How the storefront is kept out of the index everywhere except production, how it is put into Google, and how to watch it.
 Design and decisions: [engineering/seo.md](../engineering/seo.md). Hosts: `infra/cloudflare/hosts.json` (one map, no `www`).
 
-**The one rule.** Only `https://afrotransact.com` (the prod storefront) is indexable. uat, dev, the 8-day trial on `test.afrotransact.com`,
+**The one rule.** Only `https://afrotransact.com` (the prod storefront) is indexable. uat, dev,
 `workers.dev`, PR previews, the seller / admin / api / auth hosts and the media origin's non-image responses are `noindex`.
-The trial MUST stay `noindex`: never verify it in Search Console, never submit a sitemap for it, never set `APP_ENV=prod` on it.
+UAT MUST stay `noindex`: never verify it in Search Console, never submit a sitemap for it, never set `APP_ENV=prod` on it.
 
 ## What is in place (nothing to do)
 
@@ -69,9 +69,9 @@ Do **not** add a "Disallow" for anything to hide it from Google: use `noindex`. 
 - A product that is sold out stays at 200, indexable, availability `OutOfStock`, and is not in the sitemap (engineering/seo.md, "Out of stock").
 - Never use Removals for a page that should stay: it hides it from results for six months.
 
-## Trial-safe note (the 8-day trial on `test.afrotransact.com`)
+## UAT-safe note (`uat.afrotransact.com`)
 
-The trial runs the prod profile on real hosts but must never be indexed. It is safe because four independent layers fail closed: its Worker has `APP_ENV=trial` (anything but `prod` is noindex), its host is not the prod host, the zone's edge rule adds `X-Robots-Tag: noindex` to every `*-test` host and `test.<zone>`, and robots.txt is `Disallow: /` with no sitemap. Do not add the trial to Search Console, do not link to it from public pages, and run `python3 tools/ci/seo_probe.py --env trial --strict` before and after the trial. If the trial is moved to another zone (`env_hosts.py set-trial-zone`), re-run `web/apps/storefront/test/seo-env-safety.test.ts`: it reads the host map, so a new zone is covered by the Worker layer; the edge layer covers only the shared zone.
+UAT runs on real hosts but must never be indexed. Layers that fail closed: its Worker has `APP_ENV=uat` (anything but `prod` is noindex), its host is not the prod host, the zone's edge rule adds `X-Robots-Tag: noindex` to the non-prod hosts, and robots.txt is `Disallow: /` with no sitemap. Do not add UAT to Search Console, do not link to it from public pages, and run `python3 tools/ci/seo_probe.py --env uat --strict` after each UAT deploy.
 
 ## Localised pages (hreflang)
 

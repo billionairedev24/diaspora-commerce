@@ -4,8 +4,7 @@
   "envs": {
     "prod": { "suffix": "" },
     "uat": { "suffix": "uat" },
-    "dev": { "suffix": "dev" },
-    "trial": { "suffix": "test" }
+    "dev": { "suffix": "dev" }
   },
   "roles": ["seller", "admin", "api", "auth", "media", "developers"],
   "other_roles": ["grafana", "mcp"]

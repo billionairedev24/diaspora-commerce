@@ -41,10 +41,10 @@ class Probe(unittest.TestCase):
         code, out = run(net(), "--min-urls", "1")
         self.assertEqual(code, 0, out)
 
-    def test_trial_that_is_indexable_fails(self):
-        code, out = run(net({"https://test.afrotransact.com/": (200, {}, b"<html>")}), "--env", "trial")
+    def test_uat_that_is_indexable_fails(self):
+        code, out = run(net({"https://uat.afrotransact.com/": (200, {}, b"<html>")}), "--env", "uat")
         self.assertEqual(code, 1)
-        self.assertIn("test.afrotransact.com/ is indexable", out)
+        self.assertIn("uat.afrotransact.com/ is indexable", out)
 
     def test_nonprod_with_a_sitemap_or_open_robots_fails(self):
         code, out = run(net({"https://uat.afrotransact.com/sitemap.xml": (200, {}, INDEX), "https://uat.afrotransact.com/robots.txt": (200, {}, b"User-agent: *\nAllow: /\nSitemap: x\n")}), "--env", "uat")
@@ -80,7 +80,7 @@ class Probe(unittest.TestCase):
         import json
         m = json.loads(seo_probe.MAP.read_text())
         self.assertEqual(seo_probe.hosts_of(m, "prod")["storefront"], m["zone"])
-        self.assertEqual(seo_probe.hosts_of(m, "trial")["seller"], f"seller-test.{m['zone']}")
+        self.assertEqual(seo_probe.hosts_of(m, "uat")["seller"], f"seller-uat.{m['zone']}")
 
 
 if __name__ == "__main__":

@@ -12,8 +12,6 @@ first, then in prod.**
 |---|---|---|
 | clamav | `/var/lib/clamav` (signatures), `/run/clamav` (socket, pid), `/var/log/clamav`, `/tmp` | These four were already mounted before the change. A non-root uid 100 could only write dirs owned by `clamav` plus mounts, so the set is the same. RISK: low |
 | meilisearch | `/meili_data` (PVC: index, `./dumps`, `./snapshots`, tasks), `/tmp` | Meilisearch docs: db, dumps and snapshots default to paths under the working dir `/meili_data`; temp files in `/tmp`. RISK: low |
-| postgres (trial only) | `/var/lib/postgresql/data` (PVC), `/var/run/postgresql` (memory emptyDir: unix socket + lock), `/tmp` | Official image: `unix_socket_directories=/var/run/postgresql`; entrypoint runs `initdb` and a temporary server there. RISK: low |
-| valkey (not deployed in prod, managed on Layerbase) | `/data` (PVC, `--dir /data`, AOF), `/tmp` | Valkey writes only to `--dir`. RISK: low |
 | kafka | `/var/lib/kafka/data` (PVC, KRaft log dir and `meta.properties`), `/opt/kafka/config` (emptyDir seeded by init container `config-seed` from the image's own `/opt/kafka/config`), `/opt/kafka/logs` and `/usr/logs` (emptyDir), `/tmp` | apache/kafka docker `run`/`configure` scripts render `server.properties` and log4j into `/opt/kafka/config` from `KAFKA_*`; `kafka-run-class.sh` creates `$KAFKA_HOME/logs`. RISK: MEDIUM. `/usr/logs` is a guess from older image layouts; if the container writes some other path the broker crash-loops (see below) |
 | kafka-dlq-topics Job | `/opt/kafka/logs`, `/tmp` | `kafka-topics.sh` goes through `kafka-run-class.sh` (log dir) and the JVM (`/tmp`). RISK: low |
 | temporal (auto-setup) | `/etc/temporal/config` (emptyDir seeded by `config-seed` from the image's config tree: `config_template.yaml`, `dynamicconfig/`), `/tmp`, `HOME=/tmp` | `auto-setup` renders `docker.yaml` from `config_template.yaml` with dockerize at every start. RISK: MEDIUM: schema setup tools or the CLI may write elsewhere |
@@ -29,7 +27,7 @@ first, then in prod.**
    print nothing and exit 0.
 4. Function, not just liveness: kafka: produce and consume one test message; temporal: `temporal operator namespace describe afrotransact`
    and one checkout workflow in UAT; meilisearch: `GET /health` and a re-index; clamav: send the EICAR test string through media and
-   see it quarantined; Postgres (trial): `pg_isready` and a restart of the pod keeps the data.
+   see it quarantined.
 5. Alloy: in Grafana, `up{job=~"kubelet|cadvisor"} == 1` (see below), logs arrive in Loki.
 6. Backups: `kubectl -n ops create job --from=cronjob/pg-backup pg-backup-first` and the same for `r2-backup`; the logs end with
    `backup complete`; an object is in the Backblaze bucket.

@@ -7,12 +7,12 @@ Production media lives in Cloudflare R2. Two buckets, one API token per bucket, 
 `local.r2_buckets` in `main.tf`: `afrotransact-<env>-media` and `afrotransact-<env>-kyc-evidence`), the custom domain of the public one, and prints them with
 `tofu output r2_buckets` and the CORS origins with `tofu output web_origins`. **Do not also create the buckets by hand**: the dashboard steps in sections 1 and 2 are the manual
 equivalent for someone who does not run tofu and use exactly the same names. The module does **not** manage the CORS policy or the API tokens: sections 3 and 4 are dashboard
-steps in every case. The media service takes the prod names from `config/prod.yaml`; the trial overrides them with `R2_PUBLIC_BUCKET` / `R2_PRIVATE_BUCKET`
-(`go/services/media/deploy/helm/values-trial.yaml`).
+steps in every case. The media service takes the names from `config/<env>.yaml` (`config/uat.yaml`: `afrotransact-uat-*`, `config/prod.yaml`: `afrotransact-prod-*`);
+`R2_PUBLIC_BUCKET` / `R2_PRIVATE_BUCKET` override them when set (nothing sets them today).
 
 | Bucket | Holds | Public? | Token (Object Read & Write, this bucket only) |
 |---|---|---|---|
-| `afrotransact-<env>-media` (prod: `afrotransact-prod-media`) | released product images and storefront media | yes, custom domain `media.afrotransact.com` (trial: `media-test.afrotransact.com`) | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` |
+| `afrotransact-<env>-media` (prod: `afrotransact-prod-media`) | released product images and storefront media | yes, custom domain `media.afrotransact.com` (uat: `media-uat.afrotransact.com`) | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` |
 | `afrotransact-<env>-kyc-evidence` | **quarantine** (uploads waiting for moderation), KYC documents, proof and return photos, purchase orders, shipping documents, resumes, exports | never: no custom domain, `r2.dev` off | `R2_PRIVATE_ACCESS_KEY_ID`, `R2_PRIVATE_SECRET_ACCESS_KEY` |
 
 How a public image flows: the browser gets a presigned PUT into the **private** bucket under `quarantine/...`; on
@@ -23,24 +23,24 @@ on `media.afrotransact.com` blocking URI paths that start with `/quarantine/`.
 
 No secret goes in the repo. Values go only into the secret store (below).
 
-## Test environment (8-day trial) versus production
+## UAT versus production
 
-Same steps, different names and hosts. The trial is the prod profile on its own OVH cluster (`docs/runbooks/ovh-production.md`, "Trial"); it uses the real zone
-`afrotransact.com` with the flat `-test` hosts and its **own** pair of buckets, so it never touches the production names.
+Same steps, different names and hosts. UAT is the dry run of prod on its own OVH project (`docs/runbooks/ovh-production.md`); it uses the real zone
+`afrotransact.com` with the flat `-uat` hosts and its **own** pair of buckets, so it never touches the production names.
 
-| | Trial | Production |
+| | UAT | Production |
 |---|---|---|
-| Public bucket | `afrotransact-trial-media` | `afrotransact-prod-media` |
-| Private bucket | `afrotransact-trial-kyc-evidence` | `afrotransact-prod-kyc-evidence` |
-| Created by | `tofu apply -var-file=envs/trial.tfvars` in `infra/cloudflare` | `envs/prod.tfvars` |
-| Public domain | `media-test.afrotransact.com` (`MEDIA_PUBLIC_URL`, derived by Helm from `global.mediaHost`) | `media.afrotransact.com` |
-| Bucket names reach the service by | `R2_PUBLIC_BUCKET`, `R2_PRIVATE_BUCKET` in `values-trial.yaml` | the defaults in `config/prod.yaml` |
-| Web origins for CORS | `https://test.afrotransact.com`, `https://seller-test.afrotransact.com`, `https://admin-test.afrotransact.com` | `https://afrotransact.com`, `https://seller.afrotransact.com`, `https://admin.afrotransact.com` |
-| Token TTL | 10 days | Forever (rotation reminder every 6 months) |
-| Secrets | `media-secrets` in the trial cluster (SOPS, `infra/ovh-vps/secrets.sh`) | the same path in the prod cluster, new tokens |
-| Afterwards | empty and delete both buckets, revoke both tokens | keep; never reuse the trial tokens |
+| Public bucket | `afrotransact-uat-media` | `afrotransact-prod-media` |
+| Private bucket | `afrotransact-uat-kyc-evidence` | `afrotransact-prod-kyc-evidence` |
+| Created by | `tofu apply -var-file=envs/uat.tfvars` in `infra/cloudflare` | `envs/prod.tfvars` |
+| Public domain | `media-uat.afrotransact.com` (`MEDIA_PUBLIC_URL`, derived by Helm from `global.mediaHost`) | `media.afrotransact.com` |
+| Bucket names reach the service by | `config/uat.yaml` | `config/prod.yaml` |
+| Web origins for CORS | `https://uat.afrotransact.com`, `https://seller-uat.afrotransact.com`, `https://admin-uat.afrotransact.com` | `https://afrotransact.com`, `https://seller.afrotransact.com`, `https://admin.afrotransact.com` |
+| Token TTL | 10 days (a dry run; re-create if UAT lives longer) | Forever (rotation reminder every 6 months) |
+| Secrets | `media-secrets` in the UAT cluster (SOPS, `infra/ovh-vps/secrets.sh`) | the same path in the prod cluster, new tokens |
+| Afterwards | when UAT is torn down: empty and delete both buckets, revoke both tokens | keep; never reuse the UAT tokens |
 
-Use real test data only. Do not upload real KYC documents to the trial. **The nightly copy of these two buckets to Backblaze B2 is built** (backlog story S380, CronJob `r2-backup`,
+Use test data only. Do not upload real KYC documents to UAT. **The nightly copy of these two buckets to Backblaze B2 is built** (backlog story S380, CronJob `r2-backup`,
 [backup-restore-r2.md](backup-restore-r2.md)) but has not run on live infrastructure; until its first run and the live restore drill, treat a deleted object as
 unrecoverable. Turn on R2 object versioning too (section 7).
 
@@ -50,7 +50,7 @@ unrecoverable. Turn on R2 object versioning too (section 7).
 2. Left menu: **Storage & databases** > **R2 object storage** > **Overview**. If R2 is not enabled, click
    **Purchase R2 Plan** (free tier needs a payment method) and accept.
 3. Copy the **Account ID** shown on the right of the overview page. This is `R2_ACCOUNT_ID`.
-4. (Skip sections 1 and 2 if `infra/cloudflare` created the buckets and the domain.) Click **Create bucket**. Name `afrotransact-<env>-media` (`afrotransact-trial-media` in the trial). Location: **Automatic** (or a hint near your users, for
+4. (Skip sections 1 and 2 if `infra/cloudflare` created the buckets and the domain.) Click **Create bucket**. Name `afrotransact-<env>-media` (`afrotransact-uat-media` in UAT). Location: **Automatic** (or a hint near your users, for
    example Western Europe or Eastern North America; you cannot change it later). Default storage class **Standard**.
    Click **Create bucket**.
 5. Repeat for `afrotransact-<env>-kyc-evidence`, same location.
@@ -60,7 +60,7 @@ unrecoverable. Turn on R2 object versioning too (section 7).
 ## 2. Custom domain for the public bucket only
 
 1. Open `afrotransact-<env>-media` > **Settings** > **Custom Domains** > **Add**.
-2. Enter `media.afrotransact.com` (trial: `media-test.afrotransact.com`; one label below the zone, covered by the free certificate). The domain's zone must be on this Cloudflare
+2. Enter `media.afrotransact.com` (uat: `media-uat.afrotransact.com`; one label below the zone, covered by the free certificate). The domain's zone must be on this Cloudflare
    account.
 3. Click **Continue**, review the DNS record Cloudflare will create, click **Connect Domain**. Wait until the status is
    **Active** (a minute or two, certificate issued automatically).
@@ -77,7 +77,7 @@ bucket only serves GETs to images and needs no CORS (add the GET-only rule below
 canvas).
 
 1. Open `afrotransact-<env>-kyc-evidence` > **Settings** > **CORS Policy** > **Add CORS policy**.
-2. Switch to the **JSON** tab and paste (the exact list is `tofu output web_origins`; trial: `https://test.afrotransact.com`, `https://seller-test.afrotransact.com`, `https://admin-test.afrotransact.com`):
+2. Switch to the **JSON** tab and paste (the exact list is `tofu output web_origins`; uat: `https://uat.afrotransact.com`, `https://seller-uat.afrotransact.com`, `https://admin-uat.afrotransact.com`):
 
 ```json
 [
@@ -117,10 +117,10 @@ Do this twice. Never create one token covering both buckets, and never use the a
 
 1. **R2 object storage** > **Overview** > **API** (right side) > **Manage API Tokens** (Account API Tokens).
 2. **Create Account API token** (use **User API token** only if account tokens are unavailable).
-3. Token name: `media-prod-public` (second token: `media-prod-private`; trial: `media-trial-public`, `media-trial-private`).
+3. Token name: `media-prod-public` (second token: `media-prod-private`; uat: `media-uat-public`, `media-uat-private`).
 4. Permissions: **Object Read & Write**.
 5. **Specify bucket(s)**: select `afrotransact-<env>-media` only (second token: `afrotransact-<env>-kyc-evidence` only).
-6. TTL: **Forever** for production (put a rotation reminder in the calendar every 6 months); for the trial set the TTL
+6. TTL: **Forever** for production (put a rotation reminder in the calendar every 6 months); for UAT set the TTL
    to 10 days. Client IP filtering: leave empty (cluster egress IPs change) unless you pin the cluster NAT address.
 7. Click **Create API Token**. The next page shows **Access Key ID** and **Secret Access Key** once. Copy both now into
    the secret store (section 5). Ignore the "Token value" and the jurisdiction endpoint; the media service builds the
@@ -129,11 +129,10 @@ Do this twice. Never create one token covering both buckets, and never use the a
 
 ## 5. Where each value goes
 
-Secrets are **not** put in a cloud secret store on the OVH path: they are rendered as Kubernetes Secrets by `infra/ovh-vps/secrets.sh` (`PROFILE=prod`, trial: start from
-`infra/ovh-vps/secrets.trial.env.example`), encrypted with SOPS + age and applied with `infra/ops/secrets/apply.sh` (`infra/ops/secrets/README.md`). You put the five R2 values in
+Secrets are **not** put in a cloud secret store on the OVH path: they are rendered as Kubernetes Secrets by `infra/ovh-vps/secrets.sh` (`PROFILE=uat|prod`; UAT: start from
+`infra/ovh-vps/secrets.local.env.example` with the UAT values), encrypted with SOPS + age and applied with `infra/ops/secrets/apply.sh` (`infra/ops/secrets/README.md`). You put the five R2 values in
 `secrets.local.env` on your machine; the script writes them into the Secret `media-secrets`. **`LINK_SIGNING_KEY` is generated by `secrets.sh`** (kept in `STATE_DIR`, so a
-re-render never changes it): you never type or copy it. Nothing is committed in clear. (`infra/tofu/scripts/secret-set.sh` is the cloud-secret-store path of the
-other clouds and is not used here.)
+re-render never changes it): you never type or copy it. Nothing is committed in clear.
 
 **Media host per environment, and who reads it.** One value, `MEDIA_PUBLIC_URL`, is the public media base. The media service builds every asset URL from it,
 and gateway-bff uses the same value as the allowed image prefix of seller and provider storefronts (`STORE_MEDIA_PREFIXES` is only an optional extra list, it never
@@ -143,7 +142,6 @@ sets it per chart. At startup gateway-bff logs `storefront media: allowed image 
 | Environment | Public media base (`MEDIA_PUBLIC_URL`) | Where it is set |
 |---|---|---|
 | local | `http://localhost:9000/media` (MinIO behind media :8207; assets come back as `http://localhost:9000/media/<key>`) | `publicBaseUrl` of the public store in `go/services/media/config/local.yaml`; gateway-bff `platform.mediaPublicUrl` in `go/services/gateway-bff/config/local.yaml` (LAN mode adds the phone-reachable address via `LAN_MEDIA_URL`) |
-| trial | `https://media-test.afrotransact.com` | `global.mediaHost` in `infra/argocd/envs/trial/platform-values.yaml`; the Helm library derives `MEDIA_PUBLIC_URL` for every service |
 | dev | `https://media-dev.afrotransact.com` | `global.mediaHost` in `infra/argocd/envs/dev/platform-values.yaml` |
 | uat | `https://media-uat.afrotransact.com` | `global.mediaHost` in `infra/argocd/envs/uat/platform-values.yaml` |
 | prod | `https://media.afrotransact.com` | `global.mediaHost` in `infra/argocd/envs/prod/platform-values.yaml` |
@@ -155,23 +153,23 @@ sets it per chart. At startup gateway-bff logs `storefront media: allowed image 
 | Public token Secret Access Key | `R2_SECRET_ACCESS_KEY` | |
 | Private token Access Key ID | `R2_PRIVATE_ACCESS_KEY_ID` | token scoped to `afrotransact-<env>-kyc-evidence` |
 | Private token Secret Access Key | `R2_PRIVATE_SECRET_ACCESS_KEY` | |
-| Public domain | `MEDIA_PUBLIC_URL` | not a secret: Helm derives it from `global.mediaHost` (`https://media.afrotransact.com`, trial `https://media-test.afrotransact.com`) |
-| Bucket names | `R2_PUBLIC_BUCKET`, `R2_PRIVATE_BUCKET` | not secrets: set in `values-trial.yaml` for the trial; prod uses the defaults of `config/prod.yaml` |
+| Public domain | `MEDIA_PUBLIC_URL` | not a secret: Helm derives it from `global.mediaHost` (`https://media.afrotransact.com`, uat `https://media-uat.afrotransact.com`) |
+| Bucket names | `R2_PUBLIC_BUCKET`, `R2_PRIVATE_BUCKET` | not secrets: the defaults of `config/<env>.yaml`; the variables override them only when set |
 | Link signing key | `LINK_SIGNING_KEY` | generated by `secrets.sh`, at least 32 characters |
 
 ```bash
-cd infra/ovh-vps && cp secrets.trial.env.example secrets.local.env     # fill the five R2 values (and the others) in your editor
-export PROFILE=prod STATE_DIR=$HOME/.afrotransact-trial SECRETS_OUT=$(mktemp -d)
+cd infra/ovh-vps && cp secrets.local.env.example secrets.local.env      # fill the five R2 values (and the others)
+export PROFILE=prod STATE_DIR=$HOME/.afrotransact-$ENV SECRETS_OUT=$(mktemp -d)
 ./secrets.sh services                                                     # writes <ns>.media-secrets.yaml with LINK_SIGNING_KEY generated
 # then encrypt with SOPS and apply with infra/ops/secrets/apply.sh (infra/ops/secrets/README.md)
 ```
 
-Then restart the media deployment (`kubectl -n afrotransact-prod rollout restart deploy/media`). `apply.sh` refuses empty mandatory keys. The service exits at startup with a
+Then restart media (`kubectl -n afrotransact-$ENV rollout restart deploy/media`). `apply.sh` refuses empty mandatory keys. The service exits at startup with a
 clear message if a value is missing, the endpoint still contains `ACCOUNT_ID`, the two stores share a credential or bucket, or a private purpose points at the public bucket.
 
 ## 6. Test with a presigned upload
 
-Replace the host with `api-test.afrotransact.com` for the trial (and the bucket names with the trial ones). Get a staff or seller token first.
+Replace the host with `api-uat.afrotransact.com` for UAT (and the bucket names with the UAT ones). Get a staff or seller token first.
 
 1. Request an upload:
 
@@ -228,10 +226,10 @@ The nightly copy to B2 ([backup-restore-r2.md](backup-restore-r2.md)) is the rec
 Create the replacement token first (section 4), update the secret store, restart media, confirm an upload works, then
 delete the old token (**Manage API Tokens** > the token > **Delete**).
 
-## Tear down the trial
+## Tear down UAT (when the dry run is over)
 
-Empty both buckets (**Objects** > select all > **Delete**), then `tofu destroy -var-file=envs/trial.tfvars` (buckets, custom domain, DNS, Tunnel) or delete them by hand,
-revoke both tokens, delete the trial `STATE_DIR` and SOPS files.
+Empty both buckets (**Objects** > select all > **Delete**), then `tofu destroy -var-file=envs/uat.tfvars` (buckets, custom domain, DNS, Tunnel) or delete them by hand,
+revoke both tokens, delete the UAT `STATE_DIR` and SOPS files.
 
 ## AI spend ceiling and the private MCP server
 

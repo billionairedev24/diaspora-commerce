@@ -3,7 +3,7 @@
 Before: each service had an ingress-only NetworkPolicy (whole namespace, `ingress`, `observability`) and no egress policy, so a
 compromised pod could reach the internet, the node's metadata service and any other pod. Now the at-service library chart
 (`infra/helm/library/at-service/templates/_netpol.tpl`) can add default-deny **egress** with explicit allowances. It is opt-in per
-environment (`networkPolicy.egress.enabled` in `infra/argocd/envs/<env>/platform-values.yaml`): **on in uat, off in dev, trial and prod** until uat has soaked.
+environment (`networkPolicy.egress.enabled` in `infra/argocd/envs/<env>/platform-values.yaml`): **on in uat, off in dev and prod** until uat has soaked.
 
 ## What a service may reach (egress)
 

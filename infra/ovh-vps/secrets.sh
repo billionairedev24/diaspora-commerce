@@ -9,8 +9,7 @@
 # PROFILE=prod (production secrets, run on an OPERATOR machine, never on a shared server):
 #   PROFILE=prod STATE_DIR=$HOME/.afrotransact-prod SECRETS_OUT=./out DB_MODE=external ./secrets.sh services|platform
 #   - the launch set only (services.launch.conf), APP_ENV=prod, no OpenFGA (FGA_ENABLED=false in prod), namespace afrotransact-prod
-#   - the 8-day TRIAL is the same profile (PROFILE=prod: APP_ENV=prod, seed guard on) with GRAFANA_ENV=trial and its own bucket and
-#     Stripe TEST keys: start from secrets.trial.env.example (docs/runbooks/ovh-production.md, "Trial"). LINK_SIGNING_KEY and every
+#   - LINK_SIGNING_KEY and every
 #     other internal secret is generated here (never typed); only third-party values come from secrets.local.env
 #   - SECRETS_OUT writes the Secrets as YAML files for SOPS instead of applying them (infra/ops/secrets/README.md)
 #   - STATE_DIR holds the generated values (IDENTITY_DATA_KEY, signing key ...): back it up OFFLINE, separately from the database
@@ -83,8 +82,8 @@ platform() {
     # Production extras (no OpenFGA). Values come from secrets.local.env; an empty value is a mistake the apply step refuses.
     secret ingress cloudflared "token=${CLOUDFLARED_TUNNEL_TOKEN:-}"
     secret observability grafana-cloud-otlp "GRAFANA_OTLP_ENDPOINT=${GRAFANA_OTLP_ENDPOINT:-}" "GRAFANA_INSTANCE_ID=${GRAFANA_INSTANCE_ID:-}" "GRAFANA_API_TOKEN=${GRAFANA_API_TOKEN:-}"
-    # Grafana Alloy (metrics + logs, infra/k8s/platform/lean/alloy). ONE Grafana Cloud stack serves trial and prod: GRAFANA_ENV
-    # (trial | prod, default = the profile) becomes the external label `env` on every series and log line; use a separate
+    # Grafana Alloy (metrics + logs, infra/k8s/platform/lean/alloy). ONE Grafana Cloud stack serves uat and prod: GRAFANA_ENV
+    # (uat | prod, default = the profile) becomes the external label `env` on every series and log line; use a separate
     # access-policy token per env. VALKEY_PASSWORD and MEILI_MASTER_KEY let Alloy scrape those two (same values as their own Secrets).
     secret observability grafana-cloud-alloy "CLUSTER_ENV=${GRAFANA_ENV:-$PROFILE}" \
       "GRAFANA_PROM_URL=${GRAFANA_PROM_URL:-}" "GRAFANA_PROM_USER=${GRAFANA_PROM_USER:-}" \
