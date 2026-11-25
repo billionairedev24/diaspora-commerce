@@ -116,7 +116,7 @@ category closes) goes to **IN_REVIEW** with the note "We are checking the tax de
 `catalog.product.paused` is published with that reason and status IN_REVIEW, so search and offers drop it. When every
 variant is resolved again, and only if it was held for tax, the gate puts it back on sale (`catalog.product.resumed`) once the
 seller may still sell it. A product that was never live (new, or imported from v1) has no hold row and is **never** published
-by the gate on its own: it waits for a person ([migration runbook, 4.7](../runbooks/afrotransact-v1-to-v2-migration.md#47-products--never-live-without-tax)).
+by the gate on its own: it waits for a person ([migration runbook, 4.7](../runbooks/v1-to-v2-migration.md#47-products--never-live-without-tax)).
 
 ## Every path that can make a product live or an offer purchasable
 
@@ -141,7 +141,7 @@ by the gate on its own: it waits for a person ([migration runbook, 4.7](../runbo
 | 14 | `reject`, `pause`, `takedown`, `holdForTax` (take a listing off sale) | `Product.java:97,114,129,75` | not needed (cannot make anything purchasable) | n/a |
 | 15 | **Migrations** (`V1__baseline`, `V1_1__initial_data`, `V2`, `V3`) | `src/main/resources/db/migration/` | they insert no products (V1_1 seeds categories only; V2 only sets package columns); `V4__product_tax_hold.sql` **closes** every live product without a resolved decision | `FreshCatalogDatabaseIT` (Docker; not run here) |
 | 16 | **Seed / demo loaders** (`tools/seed/seedlib/seeder.py` `_approve_product`) | `seeder.py:471` | yes: they call the API (`POST /v1/products/{id}/approve`), review the tax in tax-returns first, never write SQL | the API tests in rows 1-3 |
-| 17 | **v1 import** (nothing in the repo copies v1 products; they are re-uploaded) | `docs/runbooks/afrotransact-v1-to-v2-migration.md` 4.7 | yes: upload creates products in review, no hold row, never auto-live; SQL with LIVE is refused / closed | rows 11-12, `V4` |
+| 17 | **v1 import** (nothing in the repo copies v1 products; they are re-uploaded) | `docs/runbooks/v1-to-v2-migration.md` 4.7 | yes: upload creates products in review, no hold row, never auto-live; SQL with LIVE is refused / closed | rows 11-12, `V4` |
 | 18 | **Retail** item listing `LIVE` (`retail` -> `offers` `RetailListingSyncServiceImpl`) | `offers/.../RetailListingSyncServiceImpl.java:66` | yes, indirectly: it only sets the offer ACTIVE; an offer is purchasable only when `productLive` (catalog status LIVE), which needs the gate | `ProductEventPayloadTest.aLiveProductWithoutAResolvedTaxDecisionIsNeverAnnouncedAsLive` |
 | 19 | Offers: a second seller creates an offer on a variant (`OfferServiceImpl.resolve` -> `catalog.liveVariant`) | `offers/.../OfferServiceImpl.java:372`, catalog `PublicCatalogServiceImpl.java:81` | yes (**fixed**): the variant must be on a LIVE product with every variant resolved | `PublicVariantContractTest`; `publiclyVisible` shares the invariant with rows 12-13 |
 | 20 | Offers: `catalog.product.*` events set `productLive` | `offers/.../CatalogSyncServiceImpl.java:202` (`LIVE.equals(p.status())`) | yes (**fixed**): the payload says LIVE only when resolved | `ProductEventPayloadTest.aLiveProductWithoutAResolvedTaxDecisionIsNeverAnnouncedAsLive` |
