@@ -13,7 +13,7 @@ attacker between the node and Layerbase can impersonate it. `verify-full` checks
 | CA Secret | `secrets.sh services` writes Secret `pg-ca` (key `ca.crt`) in the service namespace |
 | Mount | at-service library chart: `postgresCA.enabled: true` mounts `pg-ca` read-only at `postgresCA.mountPath` in every Java and Go service (`infra/argocd/envs/prod/platform-values.yaml`) |
 | Guard | `EXTERNAL_PG_REQUIRE_VERIFY=true` makes `secrets.sh` refuse any prod mode other than `verify-full`; verify modes without a readable PEM file are refused |
-| Operator tools | `secrets.sh` (psql) and `backup.sh` (pg_dump) pass `PGSSLROOTCERT` from `EXTERNAL_PG_CA_FILE` |
+| Operator tools | `secrets.sh` (psql) passes `PGSSLROOTCERT` from `EXTERNAL_PG_CA_FILE` |
 
 Tests: `bash tools/ovh/test/pg-tls.test.sh` (URL rendering for both runtimes, Secret, refusals, and helm template of the mount).
 Run it in CI next to the other `tools/ovh/test` scripts (needs bash 4+, kubectl for `--dry-run=client`, helm optional).

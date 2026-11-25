@@ -40,7 +40,6 @@ uat, dev, trial, a missing or misspelled `APP_ENV`, workers.dev, previews, `www`
 per-environment Worker vars, which `tools/ci/env_hosts.py check` already proves equal `infra/cloudflare/hosts.json`.
 `test/seo-env-safety.test.ts` parses both files and asserts for every environment and every host of the map that only prod's own storefront host is indexable, that only
 the `prod` Worker block says `APP_ENV=prod`, that prod robots.txt does not block `/_next/static` or images, and that every response of a non-prod Worker carries noindex.
-The OVH test Workers (`ovh-web.yml`) and the trial (`trial.yml`) write their own vars without `APP_ENV`, so they are noindex by default.
 
 ## 3. Decisions
 

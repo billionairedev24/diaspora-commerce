@@ -294,8 +294,7 @@ Kafka history, so it works whatever the topics and outboxes still hold. It is id
 | Where | Command |
 |---|---|
 | local stack | `make reindex-search` (flags: `make reindex-search ARGS="--dry-run"`) |
-| OVH server | GitHub Actions `ovh-vps` with action `reindex-search`, or on the server `sudo bash /opt/afrotransact/infra/ovh-vps/deploy.sh reindex-search [flags]` (log streamed, exit status = the Job's) |
-| any Kubernetes | `kubectl -n <ns> create job indexer-reindex-$(date +%s) --from=cronjob/indexer-reindex`, then `kubectl -n <ns> logs -f job/indexer-reindex-<ts>`. The CronJob is suspended and exists when the indexer chart has `reindex.enabled: true` (off by default; on for the OVH server). Flags: set `reindex.args` or patch the Job's `args`, as `deploy.sh reindex-search` does |
+| any Kubernetes | `kubectl -n <ns> create job indexer-reindex-$(date +%s) --from=cronjob/indexer-reindex`, then `kubectl -n <ns> logs -f job/indexer-reindex-<ts>`. The CronJob is suspended and exists when the indexer chart has `reindex.enabled: true` (off by default). Flags: set `reindex.args` or patch the Job's `args` |
 | a container | `docker run --env-file <the indexer's env> <indexer image> reindex --dry-run` (the image's only binary has both roles) |
 
 `make seed` waits up to 30 s (`SEED_SEARCH_INDEX_WAIT`) for a seeded product to be searchable and prints `make reindex-search` when

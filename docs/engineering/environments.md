@@ -182,8 +182,6 @@ Renamed in this change (old names are no longer read): `AUTH_ISSUER_URI` and ide
   `assetlinks.json` are served on it. (Native apps are not part of the launch.)
 - **Edge:** HSTS (1 y, subdomains; preload only once `hsts_preload` is set) is zone-wide; the baseline Referrer-Policy rule lists every host of the environments in `edge_response_header_environments`.
   Each environment's run creates its own DNS records and Workers routes; the prod run (`manage_zone`) owns the zone-wide objects. The trial never touches the apex.
-- **Legacy test box:** `infra/ovh-vps` and the `ovh-web` workflow (one server on the dev profile, `OVH_DOMAIN`) keep their own free-form host variables (`OVH_SELLER_HOST`, ...); they are not one of
-  the four environments of the map and their hosts are DNS-only (Let's Encrypt), so the certificate rule does not apply to them.
 
 ## The guard
 

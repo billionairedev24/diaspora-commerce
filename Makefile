@@ -20,7 +20,7 @@ ENV          ?= dev
 TOFU         ?= $(shell command -v tofu 2>/dev/null || echo $(HOME)/go/bin/tofu)
 CONFTEST     ?= $(shell command -v conftest 2>/dev/null || echo $(HOME)/go/bin/conftest)
 
-.PHONY: supply-chain-check help db-reset ovh-gh-setup deploy-guide deploy-guide-test upup-infra down logs ps reset apps-up apps-down mobile docs-up secrets-check stripe-setup \
+.PHONY: supply-chain-check help db-reset upup-infra down logs ps reset apps-up apps-down mobile docs-up secrets-check stripe-setup \
         java-verify go-verify verify tools dev-up dev-down dev-status dev-logs dev-restart web dev-links repair-orgs reindex-search \
         taxonomy-check category-tax-verify helm-lint gitops-render rules dashboards observability-check \
         env-check render tf-check security coverage smoke-carriers perf-k6 perf-k6-smoke perf-ab perf-hey perf-wrk \
@@ -31,17 +31,6 @@ help: ## List targets
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 # ------------------------------------------------------------------------------------------------ local stack
-ovh-gh-setup: ## One-time set-up of the single-server OVHcloud environment: asks for your values, creates the GitHub Environment ovh-vps and stores them as secrets/variables (docs/runbooks/ovh-vps.md)
-	tools/ovh/gh-setup.sh
-
-deploy-guide: ## Guided, resumable deploy of the OVH + Cloudflare test environment (ARGS="--status|--explain|--doctor|--dry-run|--from N|--only N|--set NAME", docs/runbooks/deploy-guide.md)
-	tools/deploy/guide.sh $(ARGS)
-
-deploy-guide-test: ## Static tests of the deploy guide with stubbed gh/curl/dig/openssl (no network, nothing is deployed), and of the OVH web host logic
-	bash tools/deploy/test/test-guide.sh
-	bash tools/ovh/test/web-hosts.test.sh
-	bash tools/ovh/test/secrets-multiline.test.sh
-
 up: ## Start EVERYTHING locally (infra, services, web apps, docs portal, mobile apps, MCP) and print all links — the web apps run as production builds (DEV=1 for Next dev servers, REBUILD=1 to force a rebuild), MOBILE_HOST=lan serves it all on your Wi-Fi address for a phone, OBS=0 leaves out Grafana/Prometheus/Loki/Tempo
 	PROD=$(PROD) DEV=$(DEV) REBUILD=$(REBUILD) tools/dev/local.sh up $(SERVICES)
 
