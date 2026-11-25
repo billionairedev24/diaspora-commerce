@@ -35,7 +35,7 @@
         <stripe.version>34.0.0</stripe.version>
         <temporal.version>1.40.0</temporal.version>
         <logstash-encoder.version>9.0</logstash-encoder.version>
-        <resend.version>4.29.0</resend.version>
+        <resend.version>4.30.0</resend.version>
         <!-- Avalara's official AvaTax REST v2 Java SDK (Apache-2.0). Gson-based, no Jackson, no Scala classes. 26.9.0 = 2026-09-16
              (newer 26.10.x are < 4 weeks old). The Scala 2.11 library it lists as a compile dependency is never referenced by
              its classes and is excluded; httpclient 4.5.14 is the last 4.5 release. See docs/engineering/tax-shadow-mode.md. -->
