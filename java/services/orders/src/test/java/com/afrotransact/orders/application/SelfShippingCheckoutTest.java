@@ -37,7 +37,7 @@ import io.temporal.failure.ApplicationFailure;
 import org.junit.jupiter.api.Test;
 
 /**
- * The seller's own shipping (docs/engineering/seller-self-shipping-options.md, option A) is reachable only behind the staff
+ * The seller's own shipping (docs/engineering/delivery-fulfilment.md, option A) is reachable only behind the staff
  * switch, which is off by default: a shopper (or a stale page) naming it is refused in plain words, and with the switch on the
  * charge is the seller's one flat charge per package, never the AfroTransact delivery fee, and never waived by a plan.
  */

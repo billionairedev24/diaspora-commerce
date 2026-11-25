@@ -8,7 +8,7 @@ Status: accepted (owner decision, 2026-11-17). Corrects [ADR 0011 (two fulfilmen
 2. **Fulfilled by AfroTransact (FBA)**: AfroTransact goes to the seller's location (or the agreed arrangement), takes the product and delivers it.
    The customer pays the normal AfroTransact delivery fee (free when their membership plan waives it: existing rules). **AfroTransact keeps no seller
    stock** and has no warehouse for it. The seller pays **nothing**: no per-unit FBA fee, no seller delivery fee.
-3. **Seller ships** exists only behind a staff switch that is off by default (see `docs/engineering/seller-self-shipping-options.md`).
+3. **Seller ships** exists only behind a staff switch that is off by default (see `docs/engineering/delivery-fulfilment.md`).
 
 ## Compatibility and migration (nothing destructive)
 

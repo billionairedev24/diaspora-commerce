@@ -94,7 +94,7 @@ func shippingSettingsResource() *staffResource {
 				}},
 				{Title: "Sellers who ship themselves", Fields: []domain.DetailField{
 					fieldOf("Sellers may ship themselves", jstr(o, "sellerShipsText"), "text"),
-					fieldOf("Why it is off", "Off until the problem of several items from one seller with different shipping fees is solved (docs/engineering/seller-self-shipping-options.md). Turn it on only when the owner has chosen a rule.", "text"),
+					fieldOf("Why it is off", "Off until the problem of several items from one seller with different shipping fees is solved (docs/engineering/delivery-fulfilment.md). Turn it on only when the owner has chosen a rule.", "text"),
 					fieldOf("When it is on", "A seller sets one flat shipping charge per order in Settings. The shopper sees it as \"Shipped by the seller\" at checkout, the seller keeps all of it and AfroTransact takes no commission on it.", "text"),
 				}},
 				{Title: "How it applies", Fields: []domain.DetailField{

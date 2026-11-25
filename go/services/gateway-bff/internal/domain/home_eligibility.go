@@ -5,7 +5,7 @@ import (
 	"sort"
 )
 
-// Dynamic home spike (docs/engineering/dynamic-home-spike.md): a pure module-eligibility function. It is NOT wired into
+// Dynamic home (docs/engineering/dynamic-home.md, Part 0 for the design rationale): a pure module-eligibility function. It is NOT wired into
 // SiteService.Home; it proves the rule shape staff will edit and the explanation staff will read. Every count in
 // HomeSignals is already restricted to what shoppers may see: live with a stored RESOLVED tax decision, in stock, a real
 // photograph (eligibleCard), never sponsored duplicates.

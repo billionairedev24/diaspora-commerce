@@ -36,7 +36,7 @@ already show the problem detail; media-service holds or publishes images per its
 Every text task (intent, planning, chat, listing writer, translation, triage, image moderation) defaults to
 `google/gemini-2.5-flash-lite` (USD 0.10 in / 0.40 out per million tokens), falling back to `openai/gpt-5-nano`; the Spring AI
 default chat model is also `google/gemini-2.5-flash-lite`. Embeddings use `openai/text-embedding-3-small`. Premium models are only
-used when someone sets `AI_MODELS_<TASK>` (see `docs/runbooks/cost.md`); a model missing from the price table is costed at the
+used when someone sets `AI_MODELS_<TASK>` (see `docs/engineering/cloud-cost.md`, "AI model costs"); a model missing from the price table is costed at the
 conservative `default-price` (USD 15 / 75), so it uses the ceiling up quickly.
 
 ### 1a. The daily total is a runtime setting (change it without a deploy)
