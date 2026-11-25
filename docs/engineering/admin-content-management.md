@@ -74,5 +74,5 @@ By default only Super Admin holds `content:legal.edit`, so a legal change needs 
 `contracts/openapi/gateway-bff-staff.yaml` (tag Published pages, resource keys `careers-jobs`, `cookie-definitions`) and `contracts/openapi/content.yaml`.
 Go: `TestStaffContentPages` exercises every operation of the tag against the contract; Java: `LegalAuthoringIT`, `HelpAuthoringIT`, `LegalDraftTest`,
 `HelpDraftTest`; web: `web/packages/content`, `api-client` (`staff-content`), `staff-console` (`pages-edit`, `published-pages`), Playwright
-`tests/e2e/specs/staff-console.published-pages.spec.ts` (needs a fresh mock BFF: its state lives in the server process). Design notes:
-`docs/design-notes/admin-content/` (1440 and 390 px; refresh with `E2E_DESIGN_SHOTS=1`).
+`tests/e2e/specs/staff-console.published-pages.spec.ts` (needs a fresh mock BFF: its state lives in the server process). Review shots
+(1440 and 390 px): `E2E_DESIGN_SHOTS=1` writes them to `tests/e2e/test-results/design-shots/` (gitignored).
