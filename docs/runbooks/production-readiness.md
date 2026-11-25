@@ -4,7 +4,7 @@ Work through this before the first real customer and again before every major re
 and tick. Anything marked **blocker** must be done before launch.
 
 Updated 2026-11-12 to the launch decisions: v1 is replaced by v2 on the **same Stripe account** (plan:
-[v1-to-v2-cutover.md](v1-to-v2-cutover.md)); OVH Managed Kubernetes with Layerbase Postgres; the web apps on Cloudflare
+[v1-to-v2-migration.md](v1-to-v2-migration.md)); OVH Managed Kubernetes with Layerbase Postgres; the web apps on Cloudflare
 Workers; images on R2; Resend for email; staff run fulfilment and update order statuses by hand; trust-ops, ai-gateway and
 mcp-server on; OpenFGA off; no native apps (installable web app only); **full cutover, no invite-only beta** (v1 sign-ups stay open until the freeze,
 and every v1 user moves to v2).
@@ -42,7 +42,7 @@ specifics, a restore drill.
   them; sellers keep their own dashboard and can change payout settings or disconnect; v2's embedded onboarding may not accept them.
   Evidence is the owner's screen, not an account read: the real type of each account is still to be read from its page. Options A
   (keep and test in Stripe test mode), B (re-onboard sellers to v2-style accounts) and C (hybrid), the test list and the exact
-  questions for Stripe support are in [v1-to-v2-cutover.md](v1-to-v2-cutover.md), "Existing connected accounts: keep or
+  questions for Stripe support are in [v1-to-v2-migration.md](v1-to-v2-migration.md), "Existing connected accounts: keep or
   re-onboard". Nothing else in the cutover starts until this is decided.
 - [ ] **blocker** `VENDOR · Open` Stripe support's written answers to the question list in the cutover runbook (Full dashboard with separate
   charges and transfers, transfers capability, payout schedule, controller changes, the destination-charge warning), with the case id.
@@ -90,8 +90,8 @@ specifics, a restore drill.
   Fulfilment staff hold `orders:update-status` or `orders:manage` only if they are trained on the pickup step (section 5).
 - [ ] `OWNER · Open` Retail (AfroTransact Retail) organisation, suppliers and warehouse centres are configured; exchange rates for the currencies
   you source in are entered (Settings → Exchange rates).
-- [ ] **blocker** `OWNER · Open` v1 data migrated and verified: users and passwords, the seller, order history ([data runbook](afrotransact-v1-to-v2-migration.md)),
-  with answers to the open questions in [v1-to-v2-cutover.md](v1-to-v2-cutover.md).
+- [ ] **blocker** `OWNER · Open` v1 data migrated and verified: users and passwords, the seller, order history ([data runbook](v1-to-v2-migration.md)),
+  with answers to the open questions in [v1-to-v2-migration.md](v1-to-v2-migration.md).
 - [ ] **blocker** `ENGINEERING · Open` Every migrated v1 user can sign in on v2 with no invite: there is **no sign-up gate** (v1 sign-ups stay open until the
   freeze; v1 registrations are blocked from the freeze; v2 sign-up is open from the switch). Story S355 is closed as not needed.
 
@@ -150,7 +150,7 @@ specifics, a restore drill.
 
 ## 5. Payments and money
 
-- [ ] **blocker** `OWNER · Open` Stripe cutover on the **same account** done per [v1-to-v2-cutover.md](v1-to-v2-cutover.md): inventory, test-mode rehearsal, freeze
+- [ ] **blocker** `OWNER · Open` Stripe cutover on the **same account** done per [v1-to-v2-migration.md](v1-to-v2-migration.md): inventory, test-mode rehearsal, freeze
   window, three v2 webhook endpoints (payments, seller Connect, seller plan fees) created fresh by the owner with the SDK API version and
   separate secrets, v1's endpoints stopped and deleted at the freeze step (not before; their URLs and events are written down
   first), the connected-account decision above applied, customer ids and saved cards migrated by the owner. v1 captures immediately,
@@ -284,6 +284,6 @@ specifics, a restore drill.
 
 - [ ] `ENGINEERING · Open` Freeze merges; tag the release; deploy in order: data stores → identity → platform services → BFF → web (Worker deploys).
 - [ ] `ENGINEERING · Open` Run the smoke tests (`tools/smoke`) against production.
-- [ ] `OWNER · Open` Follow the order of events, go/no-go checklist and rollback in [v1-to-v2-cutover.md](v1-to-v2-cutover.md).
+- [ ] `OWNER · Open` Follow the order of events, go/no-go checklist and rollback in [v1-to-v2-migration.md](v1-to-v2-migration.md).
 - [ ] `ENGINEERING · Open` Watch error rate, latency, checkout success and payment webhook lag for the first hours; keep maintenance mode ready.
 - [ ] `OWNER · Open` Confirm a real first order, a staff pickup that captured the payment, a delivery and (a week later) a payout.

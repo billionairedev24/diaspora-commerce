@@ -1404,7 +1404,7 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - An order and its payment read back correctly
 - Point-in-time recovery to a chosen minute is exercised if Layerbase offers it
 - Minutes taken, date and name recorded in the readiness checklist","E29","","Highest","3","ovh backup launch","infra","To Do"
-"S372","Story","v1 to v2 production cutover (same Stripe account)","Execute docs/runbooks/v1-to-v2-cutover.md: dashboard inventory, decision on existing connected accounts, test-mode rehearsal, freeze, fresh v2 webhook endpoints with v1's deleted at the freeze, data load with customer ids, DNS switch, rollback ready. Full cutover, no invite gate.","- Connected accounts decision (keep, re-onboard or hybrid) is recorded with the test-mode results and Stripe's written answers
+"S372","Story","v1 to v2 production cutover (same Stripe account)","Execute docs/runbooks/v1-to-v2-migration.md: dashboard inventory, decision on existing connected accounts, test-mode rehearsal, freeze, fresh v2 webhook endpoints with v1's deleted at the freeze, data load with customer ids, DNS switch, rollback ready. Full cutover, no invite gate.","- Connected accounts decision (keep, re-onboard or hybrid) is recorded with the test-mode results and Stripe's written answers
 - Test-mode rehearsal done within 14 days of cutover
 - Go/no-go checklist fully ticked and signed by the owner
 - Three live v2 webhook endpoints return 2xx and a real payment and refund are applied
