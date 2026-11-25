@@ -714,7 +714,7 @@ module "confluent" {
   services        = local.service_names
 }
 
-# Temporal Cloud namespace afrotransact-<env> (orders-service checkout saga; docs/runbooks/first-environment.md).
+# Temporal Cloud namespace afrotransact-<env> (orders-service checkout saga; not used on OVH, where Temporal is self-hosted).
 module "temporal" {
   source             = "../../modules/shared/temporal"
   for_each           = local.on.temporal
