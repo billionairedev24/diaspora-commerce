@@ -19,7 +19,7 @@ customer app and a driver app. The design source of truth is `design/` (the Clau
 | BFF | [gateway-bff](../services/gateway-bff.md) (Go): screen-shaped APIs for web and mobile, token relay |
 | Domain services | Spring Boot 4.1 services (identity, catalog, offers, inventory, orders, payments, seller, retail, fulfilment, bookings, trust-ops, tax-returns, content) and Go services (search, indexer, cart, promise, geo, storefront, media, notifications, carrier-gateway) |
 | AI | [ai-gateway](../services/ai-gateway.md) (Lola, OpenRouter via Spring AI) and [mcp-server](../services/mcp-server.md) (MCP tools for agents) |
-| Data | PostgreSQL 17 (one database per service), Redis/Valkey 8, Elasticsearch 9, Temporal for the checkout saga |
+| Data | PostgreSQL 17 (release-1: one database per deployable, one schema per module), Redis/Valkey 8, Meilisearch (Elasticsearch 9 optional, not on the launch path), Temporal for the checkout saga |
 | Events | Kafka (KRaft); every producer writes a transactional outbox and consumers de-duplicate on `event-id` |
 
 The [service catalogue](../services/index.md) lists every service with its port, store and contract.
