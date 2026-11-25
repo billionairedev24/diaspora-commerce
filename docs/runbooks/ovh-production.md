@@ -325,7 +325,7 @@ outbound traffic charges. **Cloudflare:** free-plan WAF and rate-limit rule quot
 - The backup CronJobs run from the pre-built `backup-tools` image (non-root, read-only root; build it first: `read-only-root-first-boot.md`). Every lean workload now runs with a read-only root filesystem and the mounts listed there are UNVERIFIED until the UAT dry run.
 - The OTLP collector only has an OTLP receiver: service metrics (`/actuator/prometheus`, `/metrics`) are not scraped and logs are not shipped; decide between
   a Prometheus receiver, OTLP metrics or `kubectl logs` + traces only at launch.
-- The tax, legal, Stripe Connect, Resend domain and counsel items of `docs/runbooks/launch-plan.md` and `production-readiness.md` are external lead-time gates.
+- The tax, legal, Stripe Connect, Resend domain and counsel items of `production-readiness.md` are external lead-time gates.
 - Keycloak user migration (`docs/engineering/keycloak-migration.md`) if real users exist.
 
 ## Seller self-shipping switch must be off at launch
