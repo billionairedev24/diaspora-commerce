@@ -63,8 +63,7 @@ const blocks: Record<string, { block: Block; env: string }> = {
   dev: { block: wrangler, env: 'dev' },
   preview: { block: wrangler.env['preview']!, env: 'dev' },
   uat: { block: wrangler.env['uat']!, env: 'uat' },
-  prod: { block: wrangler.env['prod']!, env: 'prod' },
-  trial: { block: wrangler.env['trial']!, env: 'trial' }
+  prod: { block: wrangler.env['prod']!, env: 'prod' }
 };
 
 describe('wrangler.jsonc against the host map', () => {
@@ -74,7 +73,7 @@ describe('wrangler.jsonc against the host map', () => {
     for (const r of block.routes ?? []) expect(allHosts(env)).toContain(r.pattern.replace(/\/\*$/, ''));
   });
 
-  it('only the prod Worker says APP_ENV=prod (uat, dev, previews and the 8-day trial on test.<zone> never do)', () => {
+  it('only the prod Worker says APP_ENV=prod (uat, dev and previews never do)', () => {
     for (const [name, { block }] of Object.entries(blocks)) expect(block.vars['APP_ENV'] === 'prod', name).toBe(name === 'prod');
   });
 });
@@ -125,7 +124,7 @@ describe('indexing policy: every host of every environment', () => {
     const env = envOf('prod');
     expect(wwwRedirectTarget(env, new URL(`https://www.${storefrontHost('prod')}/p/AT-1?x=1`))?.toString()).toBe(`https://${storefrontHost('prod')}/p/AT-1?x=1`);
     expect(wwwRedirectTarget(env, new URL(`https://${storefrontHost('prod')}/`))).toBeUndefined();
-    expect(wwwRedirectTarget(envOf('trial'), new URL(`https://www.${storefrontHost('trial')}/`))).toBeUndefined();
+    expect(wwwRedirectTarget(envOf('uat'), new URL(`https://www.${storefrontHost('uat')}/`))).toBeUndefined();
   });
 });
 
@@ -133,7 +132,7 @@ describe('robots.txt', () => {
   const prod = indexingPolicy({ APP_ENV: 'prod', PUBLIC_WEB_URL: `https://${storefrontHost('prod')}` }, storefrontHost('prod'));
 
   it('every non-prod host: Disallow: / and no Sitemap line', () => {
-    for (const name of ['dev', 'uat', 'trial'] as const) {
+    for (const name of ['dev', 'uat'] as const) {
       const env = { APP_ENV: blocks[name]!.block.vars['APP_ENV'], PUBLIC_WEB_URL: blocks[name]!.block.vars['PUBLIC_WEB_URL'] };
       const txt = buildRobotsTxt(indexingPolicy(env, storefrontHost(name)));
       expect(txt).toBe('User-agent: *\nDisallow: /\n');
@@ -158,7 +157,7 @@ describe('robots.txt', () => {
 describe('every response of a non-prod Worker carries noindex (middleware)', () => {
   afterEach(() => vi.unstubAllEnvs());
 
-  it('dev, uat, trial and preview: X-Robots-Tag on pages, 404s, routes and the BFF proxy; prod only on private paths', () => {
+  it('dev, uat and preview: X-Robots-Tag on pages, 404s, routes and the BFF proxy; prod only on private paths', () => {
     for (const [name, { block, env }] of Object.entries(blocks)) {
       vi.stubEnv('APP_ENV', block.vars['APP_ENV']!);
       vi.stubEnv('PUBLIC_WEB_URL', block.vars['PUBLIC_WEB_URL']!);
@@ -194,10 +193,10 @@ describe('route handlers: only prod serves robots.txt allow rules and a sitemap'
   afterEach(() => vi.unstubAllEnvs());
 
   it('non-prod: robots.txt disallows all; sitemap index, children and revalidate are 404 with noindex', async () => {
-    vi.stubEnv('APP_ENV', 'trial');
-    vi.stubEnv('PUBLIC_WEB_URL', 'https://test.afrotransact.com');
+    vi.stubEnv('APP_ENV', 'uat');
+    vi.stubEnv('PUBLIC_WEB_URL', 'https://uat.afrotransact.com');
     vi.stubEnv('SEO_REVALIDATE_TOKEN', 'secret');
-    const get = (path: string) => new Request(`https://test.afrotransact.com${path}`, { headers: { host: 'test.afrotransact.com' } });
+    const get = (path: string) => new Request(`https://uat.afrotransact.com${path}`, { headers: { host: 'uat.afrotransact.com' } });
     const robots = await (await import('@/app/robots.txt/route')).GET(get('/robots.txt'));
     expect(await robots.text()).toBe('User-agent: *\nDisallow: /\n');
     expect(robots.headers.get('X-Robots-Tag')).toMatch(/noindex/);
@@ -205,7 +204,7 @@ describe('route handlers: only prod serves robots.txt allow rules and a sitemap'
     expect(index.status).toBe(404);
     const child = await (await import('@/app/sitemaps/[name]/route')).GET(get('/sitemaps/products-1.xml'), { params: Promise.resolve({ name: 'products-1.xml' }) });
     expect(child.status).toBe(404);
-    const reval = await (await import('@/app/api/seo/revalidate/route')).POST(new Request('https://test.afrotransact.com/api/seo/revalidate', { method: 'POST', headers: { host: 'test.afrotransact.com', authorization: 'Bearer secret' } }));
+    const reval = await (await import('@/app/api/seo/revalidate/route')).POST(new Request('https://uat.afrotransact.com/api/seo/revalidate', { method: 'POST', headers: { host: 'uat.afrotransact.com', authorization: 'Bearer secret' } }));
     expect(reval.status).toBe(404);
   });
 

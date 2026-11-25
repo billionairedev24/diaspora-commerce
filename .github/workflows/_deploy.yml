@@ -20,7 +20,7 @@ on:
         type: string
         required: true
       environment:
-        description: dev | uat | trial | prod (trial has its own GitHub environment and writes values-trial.yaml, never values-prod.yaml)
+        description: dev | uat | prod
         type: string
         required: true
       cloud:
@@ -48,7 +48,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Refuses an UNVERIFIED image (built by uat-unverified-image.yml, verify skipped) for prod and trial BEFORE the environment's reviewers
+  # Refuses an UNVERIFIED image (built by uat-unverified-image.yml, verify skipped) for prod BEFORE the environment's reviewers
   # are asked to approve the deploy job. dev has no guard (it only receives images of the green pipelines).
   guard:
     if: inputs.environment != 'dev'
@@ -66,7 +66,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
-      - name: Image verdict (verified | unverified), refused for prod and trial when unverified
+      - name: Image verdict (verified | unverified), refused for prod when unverified
         env:
           SERVICE: ${{ inputs.service }}
           ENVIRONMENT: ${{ inputs.environment }}
@@ -98,7 +98,7 @@ jobs:
       CLOUD: ${{ inputs.cloud || vars.CLOUD }}
       TAG: ${{ inputs.tag }}
       REGISTRY_URL: ${{ vars.REGISTRY_URL }}
-      # Release 1 (production line): the Argo CD apps of uat, trial and prod track release-1, so EVERY pin for those environments is committed
+      # Release 1 (production line): the Argo CD apps of uat and prod track release-1, so EVERY pin for those environments is committed
       # there (the deployables' and a per-service image's alike: a pin written to main would be invisible to prod until a sync merge).
       # dev pins of a per-service image stay on the GitOps branch (main's per-service pipelines write them; sync-main carries them over).
       GITOPS_BRANCH: ${{ (inputs.service == 'afrotransact-core' || inputs.service == 'afrotransact-go' || inputs.environment != 'dev') && 'release-1' || vars.GITOPS_BRANCH || 'main' }}
@@ -106,12 +106,12 @@ jobs:
       # Keyless certs from reusable workflows carry the called workflow as identity.
       # Per-service images are signed by the reusable pipelines on main; the deployables by their own workflows on release-1, and, for UAT
       # only, by uat-unverified-image.yml (verify skipped): its signature carries org.afrotransact.verified=false, which the guard below
-      # (tools/release/image_verdict.py) refuses for prod and trial.
+      # (tools/release/image_verdict.py) refuses for prod.
       SIGNER: ^https://github\.com/${{ github.repository }}/\.github/workflows/(_(java|go)-service\.yml@refs/heads/main|(core|afrotransact-go|uat-unverified-image)\.yml@refs/heads/release-1)$
     steps:
       - name: Validate inputs
         run: |
-          case "$ENVIRONMENT" in dev|uat|trial|prod) ;; *) echo "::error::bad environment $ENVIRONMENT"; exit 1 ;; esac
+          case "$ENVIRONMENT" in dev|uat|prod) ;; *) echo "::error::bad environment $ENVIRONMENT"; exit 1 ;; esac
           if [[ -z "$CLOUD" ]]; then
             # The GitHub environment has no CLOUD variable yet: nothing to deploy to (S249).
             echo "::notice::No CLOUD set for the $ENVIRONMENT environment; $SERVICE is built and signed but not deployed."
@@ -169,7 +169,7 @@ jobs:
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
           echo "::notice::verified ${src} = ${digest}"
 
-      - name: Image verdict (second check on the verified signature, refuses unverified for prod and trial)
+      - name: Image verdict (second check on the verified signature, refuses unverified for prod)
         if: env.skip != 'true' && inputs.environment != 'dev'
         id: verdict
         run: python3 tools/release/image_verdict.py --env "$ENVIRONMENT" --service "$SERVICE" --file verify.json
@@ -260,7 +260,7 @@ jobs:
             # Argo CD Image Updater-friendly: a single image.tag key per environment file.
             # Pin the tag (readable) and the digest (what the kubelet actually pulls: repo:tag@sha256:...).
             TAG="$TAG" DIGEST="$DIGEST" yq -i '.image.tag = strenv(TAG) | .image.digest = strenv(DIGEST)' "$values"
-            # An unverified image (UAT only) leaves a marker that check_launch_set.py --require-tags refuses in prod and trial files;
+            # An unverified image (UAT only) leaves a marker that check_launch_set.py --require-tags refuses in prod files;
             # every other pin removes a stale marker.
             if [[ "$VERDICT" == unverified ]]; then yq -i '.image.unverified = true' "$values"; else yq -i 'del(.image.unverified)' "$values"; fi
             if git diff --quiet; then echo "::notice::already at $TAG ($DIGEST)"; break; fi

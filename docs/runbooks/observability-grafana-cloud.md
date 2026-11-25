@@ -1,7 +1,7 @@
 # Observability on Grafana Cloud (Alloy, alerts, dashboards)
 
 Production runs on one OVH node with no in-cluster Prometheus, Loki or Grafana (ADR 0004,
-[cloud-cost.md](../engineering/cloud-cost.md)). Everything is looked at in **Grafana Cloud**, one stack for the 8-day trial and for
+[cloud-cost.md](../engineering/cloud-cost.md)). Everything is looked at in **Grafana Cloud**, one stack for UAT and for
 production: **https://afrotransact.grafana.net/** (the stack URL is not a secret). **Nothing here has run against the live stack yet**:
 every Grafana Cloud menu name, default data-source uid and limit below is **UNVERIFIED** (menus move; the owner's screen wins).
 
@@ -18,11 +18,11 @@ OTLP metrics or logs in a service, remove that pipeline or you will pay for the 
 
 ## 1. One stack, two environments: the `env` label
 
-Alloy puts the external label `env` on **every** series and **every** log line, from the Secret key `CLUSTER_ENV` (`trial` or `prod`,
+Alloy puts the external label `env` on **every** series and **every** log line, from the Secret key `CLUSTER_ENV` (`uat` or `prod`,
 rendered from `GRAFANA_ENV` in `secrets.local.env`, default = the profile, so `prod`). Consequences:
 
 - Dashboards have an `env` variable that starts on `prod` (the loader sets it); alert rules keep `env` on every alert.
-- **Notification routing sends only `env="prod"` alerts to the contact point.** Trial alerts go to a quiet receiver (section 8), so the trial cluster can
+- **Notification routing sends only `env="prod"` alerts to the contact point.** UAT alerts go to a quiet receiver (section 8), so the UAT cluster can
   fail all day without paging anyone.
 - Each environment uses its **own access-policy token** (section 3), so one can be revoked without touching the other.
 - Rules that must only exist for production (`absent(...)` alerts) hard-code `env="prod"`.
@@ -64,9 +64,9 @@ put the date in the calendar) and **copy the `glc_...` value once**.
 | Policy name | Scopes | Token goes to | Lives |
 |---|---|---|---|
 | `afrotransact-alloy-prod` | `metrics:write`, `logs:write` **only** | `GRAFANA_ALLOY_TOKEN` in the prod `secrets.local.env` (-> Secret key `GRAFANA_TOKEN`) | the prod cluster |
-| `afrotransact-alloy-trial` | `metrics:write`, `logs:write` **only** | `GRAFANA_ALLOY_TOKEN` in the trial `secrets.local.env` | the trial cluster only; delete the policy when the trial ends |
+| `afrotransact-alloy-uat` | `metrics:write`, `logs:write` **only** | `GRAFANA_ALLOY_TOKEN` in the UAT `secrets.local.env` | the UAT cluster only; delete the policy when UAT is torn down |
 | `afrotransact-rules-deploy` | `rules:read`, `rules:write` | env var `MIMIR_API_KEY` on **your machine** when you run the loader | never in the cluster |
-| `afrotransact-otlp-prod` / `afrotransact-otlp-trial` | `traces:write` (+ `metrics:write`, `logs:write`, see 3.4) | `GRAFANA_API_TOKEN` (Secret `grafana-cloud-otlp`) | the cluster of that env |
+| `afrotransact-otlp-prod` / `afrotransact-otlp-uat` | `traces:write` (+ `metrics:write`, `logs:write`, see 3.4) | `GRAFANA_API_TOKEN` (Secret `grafana-cloud-otlp`) | the cluster of that env |
 
 ### 3.4 Traces: the OTLP credential (endpoint, instance id, token)
 
@@ -79,13 +79,13 @@ and an access-policy token as the password. Three values, one per `secrets.local
 | `GRAFANA_INSTANCE_ID` | the same page: **Instance ID** (a number; it is the stack's id, not the Prometheus or Loki user id of 3.1 and 3.2) | `123456` |
 | `GRAFANA_API_TOKEN` | the same page, **Generate now**, or create a policy by hand (below). The token starts with `glc_` and is shown once | `glc_...` |
 
-By hand (preferred, so the policy has our name and only the scopes we want): **Administration > Cloud access policies > Create access policy**, name `afrotransact-otlp-trial` (and `afrotransact-otlp-prod` for
+By hand (preferred, so the policy has our name and only the scopes we want): **Administration > Cloud access policies > Create access policy**, name `afrotransact-otlp-uat` (and `afrotransact-otlp-prod` for
 production), **Realm: this stack only**, scopes **`traces:write`**; because the collector's pipelines in `infra/k8s/platform/envs/prod/opentelemetry-collector-gateway.yaml` also export metrics and logs over OTLP,
-tick **`metrics:write`** and **`logs:write`** as well (or delete those two pipelines and keep traces only; the service metrics and logs already come from Alloy). **Add token**, expiry 1 year (trial: 10 days), copy `glc_...`.
+tick **`metrics:write`** and **`logs:write`** as well (or delete those two pipelines and keep traces only; the service metrics and logs already come from Alloy). **Add token**, expiry 1 year (uat: a few weeks, the dry run), copy `glc_...`.
 UNVERIFIED: the page and scope names are written from memory of the Grafana Cloud UI; if they differ, the OTLP gateway needs a token that may write traces and an instance id from the same page.
 
 Check: the collector pod logs no `401` or `403` from the exporter (`kubectl -n observability logs deploy/opentelemetry-collector-gateway | tail`), and in Grafana **Explore** > the Tempo data source,
-a search `{ resource.deployment.environment = "trial" }` (prod: `"prod"`) returns traces of `gateway-bff` within a few minutes of browsing the storefront (10 percent of normal traces are kept, all slow and failed ones).
+a search `{ resource.deployment.environment = "uat" }` (prod: `"prod"`) returns traces of `gateway-bff` within a few minutes of browsing the storefront (10 percent of normal traces are kept, all slow and failed ones).
 
 Dashboards use a Grafana **service account**, not an access policy: **Administration > Users and access > Service accounts > Add service
 account** `afrotransact-dashboards`, role **Editor**, then **Add service account token** (expiry set). -> env var `GRAFANA_SA_TOKEN` on your machine.
@@ -99,7 +99,7 @@ SOPS, apply.
 
 | `secrets.local.env` key | Secret `grafana-cloud-alloy` (ns `observability`) key | Value |
 |---|---|---|
-| `GRAFANA_ENV` | `CLUSTER_ENV` | `prod` (on the 8-day trial cluster: `trial`) |
+| `GRAFANA_ENV` | `CLUSTER_ENV` | `prod` (on the UAT cluster: `uat`) |
 | `GRAFANA_PROM_URL` | `GRAFANA_PROM_URL` | endpoint from 3.1 |
 | `GRAFANA_PROM_USER` | `GRAFANA_PROM_USER` | id from 3.1 |
 | `GRAFANA_LOKI_URL` | `GRAFANA_LOKI_URL` | URL from 3.2 |
@@ -181,7 +181,7 @@ infra/observability/scripts/grafana-cloud-load.sh all          # rules + dashboa
 | Alloy (1 pod, Deployment, strategy Recreate) | 96 Mi / 256 Mi | scrape, tail logs through the Kubernetes API, remote write; `GOMEMLIMIT 200MiB` |
 | kafka-exporter (1 pod) | 24 Mi / 64 Mi | consumer-group lag and DLQ offsets (the metric names `rules/kafka.yaml` uses). A separate pod because Alloy's built-in Kafka exporter makes Alloy fail its initial load while the broker is unreachable (observed with the Alloy binary), which would blind everything during a Kafka outage |
 | kube-state-metrics (1 pod) | 32 Mi / 96 Mi | pod restarts, OOMKilled reason, node conditions, CronJob state (restricted to 7 resources and an explicit metric allowlist) |
-| **Total new** | **152 Mi requests**, 416 Mi limits | **UNMEASURED**: read `kubectl top pods -n observability` in the trial and adjust |
+| **Total new** | **152 Mi requests**, 416 Mi limits | **UNMEASURED**: read `kubectl top pods -n observability` in UAT and adjust |
 
 Other changes: the Kafka, Valkey, Meilisearch and Temporal NetworkPolicies admit the `observability` namespace on their metrics port; Temporal
 gets `PROMETHEUS_ENDPOINT=0.0.0.0:9090` and the scrape annotations; Meilisearch gets `MEILI_EXPERIMENTAL_ENABLE_METRICS=true` (experimental in
@@ -202,15 +202,14 @@ mailbox silently never gets alerts, so send the test notification (step 1) and c
 The placeholder `example.invalid` is gone; CI (`.github/workflows/observability-config.yml`, which runs `grafana-cloud-load.sh check`) fails
 if a placeholder or malformed recipient comes back into the routing.
 
-Routing chosen (consistent with the earlier prod -> email, trial -> quiet design; the one extension is that a trial page is now mailed):
+Routing chosen (prod -> email, uat -> quiet; `infra/observability/grafana-cloud/alertmanager.yaml`):
 
 | env | severity | result |
 |---|---|---|
 | `prod` | `page` | email to both, repeat every 1h |
 | `prod` | `ticket` | email to both, repeat every 4h |
-| `trial` | `page` (critical) | email to both, repeat every 4h; the subject carries `(trial)` |
-| `trial` | `ticket` | nobody (`trial-quiet`), visible only in the alert list |
-| `dev`, `uat` | any | unchanged (not in this stack) |
+| `uat` | any | nobody (`uat-quiet`), visible only in the alert list |
+| `dev` | any | not in this stack |
 | no `env` label | any | email, so a mis-labelled alert is not lost |
 
 Grouping: `alertname`, `env`, `service`; group wait 30s, group interval 5m, default repeat 4h.
@@ -223,11 +222,10 @@ Grouping: `alertname`, `env`, `service`; group wait 30s, group interval 5m, defa
    limit is shown in the contact point's error]. The Mimir Alertmanager file path below needs an SMTP smarthost and is the less certain one.
 2. Optional second contact point for urgent pages (Grafana IRM / OnCall, Slack, or a phone push; UNVERIFIED what the free tier includes).
 3. **Alerting > Notification policies**: set the **default policy** to `afrotransact-ops-email`; group by `alertname`, `env`, `service`.
-   Nested policies, in this order: (a) `env` `=` `trial` AND `severity` `=` `page` -> `afrotransact-ops-email`, repeat interval 4h;
-   (b) `env` `=` `trial` -> `trial-quiet` (create it empty: a contact point with no integration), or attach a mute timing "always";
-   (c) `env` `=` `prod` AND `severity` `=` `page` with a repeat interval of 1 hour (tickets: 4 hours). (a) must come before (b).
-4. **Alerting > Alert rules**: confirm the loaded rules are in state Normal, not "no data" noise. Trigger one on purpose in the trial (scale a trial
-   service to 0: `DeploymentUnavailable` for `env="trial"`) and check that a ticket-level trial alert mails **nothing** (a page-level trial alert does mail); then check prod routing with a test notification
+   Nested policies, in this order: (a) `env` `=` `uat` -> `uat-quiet` (create it empty: a contact point with no integration), or attach a mute timing "always";
+   (b) `env` `=` `prod` AND `severity` `=` `page` with a repeat interval of 1 hour (tickets: 4 hours).
+4. **Alerting > Alert rules**: confirm the loaded rules are in state Normal, not "no data" noise. Trigger one on purpose in UAT (scale a UAT
+   deployment to 0: `DeploymentUnavailable` for `env="uat"`) and check that it mails **nothing**; then check prod routing with a test notification
    on the policy (**More > Test**).
 5. Where the loaded rules deliver (Grafana Alertmanager or the Mimir Alertmanager) is UNVERIFIED: **Alerting > Admin** lists the Alertmanagers.
    `infra/observability/grafana-cloud/alertmanager.yaml` holds the same routing as code for the Mimir one (`grafana-cloud-load.sh alertmanager`).
@@ -270,7 +268,7 @@ Runbook links on the alerts point at this page. Business SLO alerts (`slo-*.yaml
 ## 10. Watching usage so the free tier is not exceeded
 
 I do not know the current free-tier numbers, and this repository does not either: cloud-cost.md lists "10k metric series, 50 GB logs, 50 GB traces"
-as **UNVERIFIED**. Read the live numbers before the trial starts: on https://grafana.com open **My Account > your organisation > Billing**
+as **UNVERIFIED**. Read the live numbers before UAT starts: on https://grafana.com open **My Account > your organisation > Billing**
 (or **Usage**) and the stack's **Details** page, and write the limits you see into cloud-cost.md.
 
 Where to watch:
@@ -286,7 +284,7 @@ Where to watch:
 Rough expected volume (computed from the repository's configuration, **not measured**): 14 Java services at a few hundred series each after the
 allowlist (HTTP buckets, JVM, Hikari, Kafka client, business meters), 7 Go services at ~100-200, kafka-exporter ~300-700 (lag and offsets per partition),
 cadvisor and kube-state-metrics ~300-500, Valkey, Meilisearch, Temporal, cloudflared ~150. A plausible total is **5-10 thousand** series:
-close to a 10 thousand limit if that figure is right. Measure it in the trial (point 3) before the real launch. Logs: JSON lines of ~21 services at launch traffic
+close to a 10 thousand limit if that figure is right. Measure it in UAT (point 3) before the real launch. Logs: JSON lines of ~21 services at launch traffic
 are small, but one chatty service or an error loop can dominate; Alloy caps each pod at 100 lines/s.
 
 ## 11. If usage is near or over the limit (do these in order)
@@ -303,7 +301,7 @@ are small, but one chatty service or an error loop can dominate; Alloy caps each
    `AlloyNotReporting` fires; say so in the on-call channel). Scale back to 1 after the fix.
 7. **Decide with the owner** whether a paid plan or a spending cap is acceptable (UNVERIFIED what Grafana Cloud does at the limit: reject, throttle or bill;
    check **Billing > Plan** and any spend-limit setting before relying on a free tier).
-8. Trial data: delete the `afrotransact-alloy-trial` access policy when the trial ends so no stray cluster can still write `env="trial"`.
+8. UAT data: delete the `afrotransact-alloy-uat` access policy when UAT is torn down so no stray cluster can still write `env="uat"`.
 
 ## 12. Alloy configuration notes
 
@@ -317,7 +315,7 @@ are small, but one chatty service or an error loop can dominate; Alloy caps each
 - **Logs**: JSON lines are sent as they are. Labels are only `app`, `namespace`, `pod` (+ `env`). Dropped: kube-probe and `/healthz`, `/readyz`, `/metrics`, `/actuator/health|prometheus` request lines.
   Redacted (the matched value is replaced, the line stays): Authorization header values, Bearer tokens, JWTs, Stripe keys and webhook secrets, `password|secret|token|api_key|client_secret|signature = value`,
   e-mail addresses, card-like numbers (four groups of digits, or 15-16 digits with a Visa/Mastercard/Amex/Discover prefix). **Not redacted**: names, street addresses, phone numbers,
-  and anything the services log in a shape these patterns do not match. The real protection is not logging PII in the first place; review a day of logs after the trial.
+  and anything the services log in a shape these patterns do not match. The real protection is not logging PII in the first place; review a day of logs in UAT.
 - **Positions** are kept in an `emptyDir`: after an Alloy restart a few seconds of lines can be re-sent or missed.
 - **Health checks and metrics** of the Alloy pod itself are on port 12345 (`/-/ready`, `/metrics`).
 

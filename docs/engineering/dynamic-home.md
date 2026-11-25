@@ -52,7 +52,7 @@ Staff edit these in the staff console under Marketing, Home (settings, version h
 
 | Setting | Default | What it does |
 |---|---|---|
-| Mode `home.dynamic` | on in local, dev, uat and trial; **off in production until you switch it** | off = today's page; shadow = today's page is served while the new engine is computed and compared; on = the new page |
+| Mode `home.dynamic` | on in local, dev and uat; **off in production until you switch it** | off = today's page; shadow = today's page is served while the new engine is computed and compared; on = the new page |
 | Per module: on/off, minimum products, minimum sellers, minimum departments or communities, product and seller minimums per department or community, newest-product age, weight, how many items it shows, band | see section 3 | when a module is shown and how it is ordered |
 | Communities | 3 communities, each 8 products and 2 sellers | below this: not on the home, menu, footer or sitemap, and the community page answers "not found", never "0 results" |
 | Items shown vs pool | pool is 3 times the shown count | variety |
@@ -82,7 +82,7 @@ English) and a season never promises stock: the module it boosts is still shown 
 
 1. The migration `V20__remove_demo_placements` removes the ten demo placements (the community tiles, four demo heroes, the
    Kente banner, the pantry rail, three announcement bars) from every environment, but only rows staff never edited. Demo
-   content for local and dev now comes only from `make seed`, which refuses production, UAT and the trial environment.
+   content for local and dev now comes only from `make seed`, which refuses production and UAT.
 2. Production starts with `home.dynamic` off. Run the search reindex (below), put the mode on shadow, watch the mismatch counter,
    then switch to on. If anything looks wrong, set it back to off: no deploy needed.
 3. With zero products the page is honest: a text-only brand headline and the Sell band.

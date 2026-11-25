@@ -14,14 +14,14 @@ tunnel_service = "http://envoy-gateway.ingress.svc.cluster.local:80"
 # hstspreload.org submission), nosniff, and a baseline Referrer-Policy per environment. No CSP at the edge.
 hsts_enabled                      = true
 hsts_preload                      = false
-edge_response_header_environments = ["dev", "uat", "trial", "prod"]
+edge_response_header_environments = ["dev", "uat", "prod"]
 
 workers_routes_enabled = true
 
 # Zone-wide (manage_zone = true only)
-admin_allowlist                   = [] # e.g. ["203.0.113.10/32"] office / VPN egress
-auth_rate_limit                   = { requests = 20, period = 60, timeout = 600 }
-checkout_rate_limit               = { requests = 30, period = 60, timeout = 300 }
+admin_allowlist     = [] # e.g. ["203.0.113.10/32"] office / VPN egress
+auth_rate_limit     = { requests = 20, period = 60, timeout = 600 }
+checkout_rate_limit = { requests = 30, period = 60, timeout = 300 }
 
 # Google Search Console domain verification (owner): paste the token Search Console shows after "google-site-verification=",
 # then apply. A public DNS value, not a secret. docs/runbooks/seo-and-search-console.md

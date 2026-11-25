@@ -63,9 +63,6 @@ enabled:
   prod:
     afrotransact-core: [identity, catalog, offers, inventory, orders, payments, seller, fulfilment, bookings, trust-ops, tax-returns, content, ai-gateway, mcp-server]
     afrotransact-go: [gateway-bff, cart, search, indexer, geo, media, notifications]
-  trial:
-    afrotransact-core: []
-    afrotransact-go: []
 # Batches (release-1-architecture.md section 5), the order modules move in. A batch ships to prod on its own.
 batches:
   - {id: 1, core: [catalog, tax-returns], go: [cart, geo]}

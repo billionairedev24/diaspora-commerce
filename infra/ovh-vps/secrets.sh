@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Creates the Kubernetes Secrets this single server needs (there is no External Secrets Operator or cloud secret store):
+# Renders the Kubernetes Secrets of an environment (there is no External Secrets Operator or cloud secret store):
 #   secrets.sh platform   postgres / valkey / meilisearch / temporal / openfga, each in its namespace
 #   secrets.sh databases  one Postgres role + database per service (idempotent)
 #   secrets.sh services   <service>-secrets in $NS, the keys listed in each chart's "Secret keys expected" comment
@@ -9,9 +9,9 @@
 # PROFILE=prod (production secrets, run on an OPERATOR machine, never on a shared server):
 #   PROFILE=prod STATE_DIR=$HOME/.afrotransact-prod SECRETS_OUT=./out DB_MODE=external ./secrets.sh services|platform
 #   - the launch set only (services.launch.conf), APP_ENV=prod, no OpenFGA (FGA_ENABLED=false in prod), namespace afrotransact-prod
-#   - the 8-day TRIAL is the same profile (PROFILE=prod: APP_ENV=prod, seed guard on) with GRAFANA_ENV=trial and its own bucket and
-#     Stripe TEST keys: start from secrets.trial.env.example (docs/runbooks/ovh-production.md, "Trial"). LINK_SIGNING_KEY and every
-#     other internal secret is generated here (never typed); only third-party values come from secrets.local.env
+#   - PROFILE=uat is the same launch set with APP_ENV=uat and Stripe TEST keys: start from secrets.uat.env.example (or
+#     tools/release/uat-env.sh split). LINK_SIGNING_KEY and every other internal secret is generated here (never typed); only
+#     third-party values come from secrets.local.env
 #   - SECRETS_OUT writes the Secrets as YAML files for SOPS instead of applying them (infra/ops/secrets/README.md)
 #   - STATE_DIR holds the generated values (IDENTITY_DATA_KEY, signing key ...): back it up OFFLINE, separately from the database
 #   - `databases` is for a self-hosted Postgres only in dev; for Layerbase run infra/tofu/scripts/postgres-bootstrap.sh
@@ -49,7 +49,7 @@ fi
 KAFKA="kafka-0.kafka.kafka.svc.cluster.local:9092"
 VALKEY_PW="$(gen VALKEY_PASSWORD)"
 # Release 1 go-live: Valkey is a MANAGED service on Layerbase, not a pod. EXTERNAL_REDIS_URL (rediss://<user>:<password>@<host>:<port>, a secret VALUE
-# that stays in secrets.local.env) becomes REDIS_URL of every service that uses it. Unset = the in-cluster Valkey of the dev box / trial.
+# that stays in secrets.local.env) becomes REDIS_URL of every service that uses it. Unset = an in-cluster Valkey (dev profile only).
 REDIS_URL="${EXTERNAL_REDIS_URL:-redis://:${VALKEY_PW}@valkey.data.svc.cluster.local:6379}"
 MEILI_KEY="$(gen MEILI_MASTER_KEY)"
 FGA_TOKEN=""; [[ "$PROD_LIKE" == true ]] || FGA_TOKEN="$(gen FGA_API_TOKEN)"   # prod: OpenFGA is not deployed (FGA_ENABLED=false)
@@ -104,8 +104,8 @@ platform() {
     # Production extras (no OpenFGA). Values come from secrets.local.env; an empty value is a mistake the apply step refuses.
     secret ingress cloudflared "token=${CLOUDFLARED_TUNNEL_TOKEN:-}"
     secret observability grafana-cloud-otlp "GRAFANA_OTLP_ENDPOINT=${GRAFANA_OTLP_ENDPOINT:-}" "GRAFANA_INSTANCE_ID=${GRAFANA_INSTANCE_ID:-}" "GRAFANA_API_TOKEN=${GRAFANA_API_TOKEN:-}"
-    # Grafana Alloy (metrics + logs, infra/k8s/platform/lean/alloy). ONE Grafana Cloud stack serves trial and prod: GRAFANA_ENV
-    # (trial | prod, default = the profile) becomes the external label `env` on every series and log line; use a separate
+    # Grafana Alloy (metrics + logs, infra/k8s/platform/lean/alloy). ONE Grafana Cloud stack serves uat and prod: GRAFANA_ENV
+    # (uat | prod, default = the profile) becomes the external label `env` on every series and log line; use a separate
     # access-policy token per env. VALKEY_PASSWORD and MEILI_MASTER_KEY let Alloy scrape those two (same values as their own Secrets).
     secret observability grafana-cloud-alloy "CLUSTER_ENV=${GRAFANA_ENV:-$PROFILE}" \
       "GRAFANA_PROM_URL=${GRAFANA_PROM_URL:-}" "GRAFANA_PROM_USER=${GRAFANA_PROM_USER:-}" \

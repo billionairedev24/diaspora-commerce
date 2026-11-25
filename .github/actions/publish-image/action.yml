@@ -40,7 +40,7 @@ inputs:
     description: >
       'true' (default): the image comes from a pipeline whose verify job passed. 'false' = the one-time manual UAT-only build
       (.github/workflows/uat-unverified-image.yml): adds the OCI label org.afrotransact.verified=false, the extra tag <sha>-unverified and
-      signs with the annotation org.afrotransact.verified=false, which promote / _deploy refuse for prod and trial.
+      signs with the annotation org.afrotransact.verified=false, which promote / _deploy refuse for prod.
     required: false
     default: "true"
 outputs:

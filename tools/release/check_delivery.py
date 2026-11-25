@@ -51,7 +51,7 @@ for dep, chart in CHARTS.items():
     want = set(plan["deployables"][dep]["modules"])
     if set(mods) != want:
         fail(f"{dep}: chart modules differ from release-1.yaml: only in chart {sorted(set(mods) - want)}, only in release-1.yaml {sorted(want - set(mods))}")
-    for env in ("dev", "uat", "trial", "prod"):
+    for env in ("dev", "uat", "prod"):
         if not (chart / f"values-{env}.yaml").exists():
             fail(f"{dep}: missing values-{env}.yaml")
     print(f"{dep}: {len(pools)} modules with a database, pools {total} per pod ({2 * total} with a rolling-update surge), budget {budget['total']}")

@@ -1,8 +1,7 @@
-# Alertmanager routing for the Grafana Cloud stack (https://afrotransact.grafana.net/): ONE stack serves trial and prod, so
+# Alertmanager routing for the Grafana Cloud stack (https://afrotransact.grafana.net/): ONE stack serves uat and prod, so
 # routing is by the `env` label that Alloy puts on every series (and therefore on every alert).
 #   env=prod   -> email to the recipient list (every severity)
-#   env=trial  -> email only for severity="page" (our "critical"); ticket-level trial alerts go to "trial-quiet" (no notification,
-#                 still visible in the Grafana alert list for debugging)
+#   env=uat    -> "uat-quiet" (no notification, still visible in the Grafana alert list; docs/runbooks/release-1-go-live.md section 3)
 #   anything else (an alert with no env label) -> email, so a mis-labelled alert is not lost
 # Recipients: ONE list in alert-recipients.env (ALERT_EMAIL_RECIPIENTS). This file holds the token __ALERT_EMAIL_RECIPIENTS__, which
 # grafana-cloud-load.sh substitutes; CI (`grafana-cloud-load.sh check`) fails on any placeholder or unrendered recipient.
@@ -20,11 +19,8 @@ route:
   group_interval: 5m
   repeat_interval: 4h
   routes:
-    - receiver: ops-email
-      matchers: [env="trial", severity="page"]
-      repeat_interval: 4h
-    - receiver: trial-quiet
-      matchers: [env="trial"]
+    - receiver: uat-quiet
+      matchers: [env="uat"]
     - receiver: ops-email
       matchers: [env="prod", severity="page"]
       repeat_interval: 1h
@@ -38,7 +34,7 @@ inhibit_rules:
     equal: [alertname, env, service]
 
 receivers:
-  - name: trial-quiet
+  - name: uat-quiet
   - name: ops-email
     email_configs:
       - to: __ALERT_EMAIL_RECIPIENTS__

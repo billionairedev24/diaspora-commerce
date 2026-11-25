@@ -26,7 +26,7 @@ The profile is `infra/tofu/envs/prod/sizing.tf` (`node_size = "lean"`, `zone_cou
 | Web apps | Cloudflare Workers (unchanged) |
 | Images and private files | **Cloudflare R2 only**: public bucket `afrotransact-prod-media` (product images) and private bucket `afrotransact-prod-kyc-evidence` (quarantine, KYC, proof photos, exports), one token each (`docs/runbooks/r2-buckets.md`; the media service refuses to start in prod otherwise). OVH Object Storage is the Terraform state and the backup copy |
 | Registry | GHCR with a read-only pull secret (no OVH Harbor) |
-| Telemetry | Grafana Cloud free tier (one stack, `env` = trial or prod): traces through one OTLP collector, **metrics and logs through Grafana Alloy** (+ kube-state-metrics, kafka-exporter); no public Grafana. [observability-grafana-cloud.md](../runbooks/observability-grafana-cloud.md) |
+| Telemetry | Grafana Cloud free tier (one stack, `env` = uat or prod): traces through one OTLP collector, **metrics and logs through Grafana Alloy** (+ kube-state-metrics, kafka-exporter); no public Grafana. [observability-grafana-cloud.md](../runbooks/observability-grafana-cloud.md) |
 | Secrets | SOPS + age files (`infra/ops/secrets`); OKMS + External Secrets optional and unverified |
 | Deploy | Argo CD (trimmed), manual sync in prod |
 | Backups | nightly age-encrypted `pg_dump` of the 19 databases to a **Backblaze B2** bucket (S3 API, rclone; not Cloudflare R2, so backups do not depend on the Cloudflare account), one bucket and key per environment (`infra/k8s/platform/lean/backup`, `docs/runbooks/backups-backblaze.md`) |
@@ -117,11 +117,11 @@ Requests are what the scheduler counts; limits are what the kernel enforces. Com
 | Allocatable on a 16 GB node (the repo's figure, **UNVERIFIED** on `b3-16`) | | ~13 GiB | |
 | **Spare requests** | | **~3.0 GiB** | |
 
-- Alloy, kube-state-metrics and kafka-exporter add **152 Mi of requests** (the only memory cost of the Grafana Cloud monitoring); both figures are guesses until `kubectl top pods -n observability` runs in the trial.
+- Alloy, kube-state-metrics and kafka-exporter add **152 Mi of requests** (the only memory cost of the Grafana Cloud monitoring); both figures are guesses until `kubectl top pods -n observability` runs in UAT.
 - The **backup CronJob** (128 Mi, limit 512 Mi) runs for minutes at night and is not counted above; a deploy surge adds one JVM
   (384 Mi) at a time (`maxSurge 25 %`, `maxUnavailable 0`).
 - Limits sum to more than the node. That is normal for a single node, but it means that if every JVM grows to its limit at once the
-  kernel OOM-kills something. Real RSS is **unmeasured**: measure it in the trial (`kubectl top`, `ovh-production.md` section 12)
+  kernel OOM-kills something. Real RSS is **unmeasured**: measure it in UAT (`kubectl top`, `release-1-go-live.md` section 8.5)
   before deciding the node is big enough. An 8 GB node does not hold this.
 - CPU requests: services 1,575 m + platform 525 m = ~2.1 cores of ~3.9 allocatable, plus Argo and system. Concurrent JVM
   starts spike CPU: sync a few services at a time.
@@ -166,7 +166,7 @@ extrapolated to 0.9-1.2 GB, **an extrapolation from two modules**). Re-measure a
 | Core memory request schedule (values-prod.yaml `resources.requests.memory`) | | batch 1: 768 Mi, batch 2: 1,024 Mi, batch 3: 1,280 Mi, from batch 4 (or when RSS passes 700 MB): 1,536 Mi | 2 x request + the old pods still up stays under ~11 GiB with the 2.2 GiB of system and Argo; the limit stays 2,048 Mi throughout |
 
 CPU requests: core 500 m + Go 100 m instead of about 1,575 m of services (**UNMEASURED**; concurrent JVM starts were the CPU spike on the per-service build, one JVM starts once).
-The node stays `b3-16`: the gain is headroom (a second replica of core, ClamAV, a rolling update that does not squeeze the node), **not a smaller bill** until someone decides to resize after a trial
+The node stays `b3-16`: the gain is headroom (a second replica of core, ClamAV, a rolling update that does not squeeze the node), **not a smaller bill** until someone decides to resize after UAT
 measurement; an 8 GB node is still not supported by these numbers.
 
 **Postgres connections.** Pool maximums per pod, with a rolling-update surge of two pods (`values.yaml` `dbBudget`, enforced at `helm template` and by a `CONNECTION LIMIT` of 2 x pool + 2 on every role):
@@ -219,8 +219,8 @@ What differs on OVH, all documented in the module headers:
 
 ## Test first, decide later
 
-[trial-environment.md](../runbooks/trial-environment.md) runs the whole workflow on a disposable project (hourly billing, separate
-project, `disposable = true`) with a short Layerbase probe, and produces the measurements this page marks as missing.
+UAT ([release-1-go-live.md](../runbooks/release-1-go-live.md)) runs the whole workflow on a disposable project (hourly billing, separate
+project, `disposable = true`) with its own Layerbase server, and produces the measurements this page marks as missing (go-live section 8).
 Nothing there needs a commitment.
 
 ## Growing out of it

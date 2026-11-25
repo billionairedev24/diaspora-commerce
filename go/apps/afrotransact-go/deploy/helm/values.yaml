@@ -23,7 +23,7 @@ rollout:
   maxErrorRate: "0.01"
 # The seven separate Go processes request 7 x 48 Mi = 336 Mi (limit 160 Mi each, cloud-cost.md). One process pays the Go runtime
 # once; 128 Mi request / 384 Mi limit is an ESTIMATE (UNMEASURED: the Go batch has not been measured; re-measure with
-# `kubectl top pod` in the trial). media's image processing is the part that can spike; ClamAV is a separate pod. GOMEMLIMIT is
+# `kubectl top pod` in UAT). media's image processing is the part that can spike; ClamAV is a separate pod. GOMEMLIMIT is
 # derived by the library as 90 % of the limit.
 resources:
   requests: {cpu: 100m, memory: 128Mi}

@@ -25,7 +25,7 @@ locals {
   # tools/ci/env_hosts.py and tools/ci/check_env_urls.py. Cloudflare's FREE Universal certificate covers the zone apex and ONE label
   # below it, so every host is flat:
   #   prod:  afrotransact.com (storefront)         <role>.afrotransact.com
-  #   other: <suffix>.afrotransact.com (storefront) <role>-<suffix>.afrotransact.com      (suffix: dev | uat | test for the trial)
+  #   other: <suffix>.afrotransact.com (storefront) <role>-<suffix>.afrotransact.com      (suffix: dev | uat)
   hostmap   = jsondecode(file("${path.module}/hosts.json"))
   env_cfg   = local.hostmap.envs[var.environment]
   suffix    = local.env_cfg.suffix

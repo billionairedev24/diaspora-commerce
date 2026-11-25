@@ -5,7 +5,7 @@ Reads the JSON `cosign verify` prints (one entry per signature). The publish-ima
 `org.afrotransact.verified=true|false`; the annotation is part of the keyless signature, so it cannot be changed without a
 certificate of an allowed workflow. Verdicts: verified | unverified | unmarked (signed before the annotation existed).
 
-  prod and trial accept `verified` only (`unmarked` is also accepted for a per-service image, which predates the annotation, never for
+  prod accepts `verified` only (`unmarked` is also accepted for a per-service image, which predates the annotation, never for
   afrotransact-core / afrotransact-go: those have never been published without it). uat and dev accept everything and record it.
 
     cosign verify ... > verify.json; python3 tools/release/image_verdict.py --env prod --service afrotransact-core --file verify.json
@@ -18,7 +18,7 @@ import sys
 
 ANNOTATION = "org.afrotransact.verified"
 DEPLOYABLES = {"afrotransact-core", "afrotransact-go"}
-STRICT_ENVS = {"prod", "trial"}
+STRICT_ENVS = {"prod"}
 
 
 def verdict(signatures):

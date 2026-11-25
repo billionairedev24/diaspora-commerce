@@ -1,5 +1,5 @@
 # Offline checks of the Grafana Cloud rules, dashboards and alert routing. Fails if a placeholder recipient (example.invalid etc.)
-# is left in the prod routing, or if prod/trial routes or the recipient list are broken.
+# is left in the prod routing, or if the prod/uat routes or the recipient list are broken.
 name: observability-config
 # MANUAL ONLY: automatic triggers are off (tools/ci/manual_only.py enable restores them).
 on:

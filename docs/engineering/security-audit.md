@@ -129,9 +129,9 @@ Pinning: Maven/Go/pnpm versions pinned; Java and Go runtime images: distroless r
 
 ## 9a. Fix status (F2, F3, F4, F5, F14, F16)
 
-Fixed in the repo; live behaviour UNVERIFIED until `docs/runbooks/edge-hardening-verification.md` passes on the trial. F2: one trusted header per tier
+Fixed in the repo; live behaviour UNVERIFIED until `docs/runbooks/edge-hardening-verification.md` passes on uat. F2: one trusted header per tier
 (web proxies `cf-connecting-ip` only, BFF `clientIpHeader`, identity `at.client-ip.header`), Cloudflare rules use `contains`. F3: Cloudflare + Envoy
-deny rules, a management port for Java actuator and Go `/metrics`. F4: `enforce` for uat, trial, prod. F5: Java and Go startup guards plus
+deny rules, a management port for Java actuator and Go `/metrics`. F4: `enforce` for uat, prod. F5: Java and Go startup guards plus
 `tools/ci/check_security_off.py`. F14: scopes `media:career-resume` and `payments:membership-offer.read`, empty scope refused. F16: `Request.UserBearer`.
 
 ## 10. Owner decisions
@@ -193,7 +193,7 @@ Owner approved fixing these. The findings above are left as written.
 | `trivyignore.yaml` | KSV-0125 (trusted registries list; note corrected, see F8) | 2027-04-10 | platform |
 | `dependency-check-suppressions.xml` | first-party `com.afrotransact` CPE name collision | 2027-06-30 | platform |
 
-**F8 (supply chain part).** `_deploy.yml` now reads the manifest digest from `cosign verify`, re-verifies by digest, mirrors by digest and writes **both** `image.tag` and `image.digest` to `values-<env>.yaml` (prod, trial, uat and dev), so pods pull `repo:tag@sha256:...`; `check_launch_set.py --require-tags` also requires `image.digest`. The wrong "Kyverno admits only signed images" note in `trivyignore.yaml` is corrected. `docs/runbooks/ovh-production.md` ("Image trust in production" under section 7, and section 16) states that signatures are verified at promote and by digest pinning, and that Kyverno admission control is deferred (about 0.3-0.5 GiB on the single node). Kyverno was not installed. Existing `values-prod.yaml` files carry no digest until the next promote of each service.
+**F8 (supply chain part).** `_deploy.yml` now reads the manifest digest from `cosign verify`, re-verifies by digest, mirrors by digest and writes **both** `image.tag` and `image.digest` to `values-<env>.yaml` (prod, uat and dev), so pods pull `repo:tag@sha256:...`; `check_launch_set.py --require-tags` also requires `image.digest`. The wrong "Kyverno admits only signed images" note in `trivyignore.yaml` is corrected. `docs/runbooks/ovh-production.md` ("Image trust in production" under section 7, and section 16) states that signatures are verified at promote and by digest pinning, and that Kyverno admission control is deferred (about 0.3-0.5 GiB on the single node). Kyverno was not installed. Existing `values-prod.yaml` files carry no digest until the next promote of each service.
 
 **F9 (action pinning).** All 48 third-party `uses:` (wrangler, trivy, zaproxy, cosign, docker/*, aws/azure/google auth and login, helm, opentofu, tflint, pnpm, golangci-lint, expo, anchore) are pinned to full commit SHAs with the tag in a trailing comment; SHAs resolved with `gh api repos/<owner>/<repo>/git/ref/tags/<tag>` (all were lightweight or dereferenced to commits). GitHub-owned `actions/*` and `github/*` stay on version tags (the check allows them). `tools/ci/check_action_pins.py` fails on any unpinned third-party action (job `supply-chain`). osv-scanner download is verified against a SHA-256 stored in `osv-gate.sh` (it matches the release's `osv-scanner_SHA256SUMS`). Dependabot `github-actions` is unchanged. Not pinned: container images run with `docker run` in workflows (`ghcr.io/gitleaks/gitleaks:v8.30.1`) and the actionlint download script, which are tag/version based.
 

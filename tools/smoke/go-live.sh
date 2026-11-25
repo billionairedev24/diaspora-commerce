@@ -7,7 +7,7 @@ set -uo pipefail
 ENV="${ENV:?set ENV=uat or ENV=prod}"; ZONE="${ZONE:-afrotransact.com}"
 case "$ENV" in
   prod) WEB="$ZONE"; SELLER="seller.$ZONE"; ADMIN="admin.$ZONE"; API="api.$ZONE"; AUTH="auth.$ZONE"; MEDIA="media.$ZONE" ;;
-  uat|dev|trial) s="$ENV"; [[ "$ENV" != trial ]] || s="test"
+  uat|dev) s="$ENV"
     WEB="$s.$ZONE"; SELLER="seller-$s.$ZONE"; ADMIN="admin-$s.$ZONE"; API="api-$s.$ZONE"; AUTH="auth-$s.$ZONE"; MEDIA="media-$s.$ZONE" ;;
   *) echo "ENV must be uat or prod" >&2; exit 2 ;;
 esac

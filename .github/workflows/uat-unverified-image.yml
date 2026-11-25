@@ -8,8 +8,8 @@
 #   - tag <full sha>-unverified an extra human-visible tag (not a valid promote input)
 #   - OCI label                 org.afrotransact.verified=false
 #   - cosign signature annotation org.afrotransact.verified=false (signed, tamper-proof; this is what the guard reads)
-# promote.yml / _deploy.yml refuse such an image for prod and trial (tools/release/image_verdict.py) and write image.unverified: true into
-# values-uat.yaml; check_launch_set.py --require-tags refuses that marker in values-prod.yaml / values-trial.yaml.
+# promote.yml / _deploy.yml refuse such an image for prod (tools/release/image_verdict.py) and write image.unverified: true into
+# values-uat.yaml; check_launch_set.py --require-tags refuses that marker in values-prod.yaml.
 # A green core.yml / afrotransact-go.yml run still produces the verified image (label and annotation = true) exactly as before.
 # Steps for the owner: docs/runbooks/release-1-go-live.md, "Interim: unverified UAT images".
 name: uat-unverified-image
@@ -92,7 +92,7 @@ jobs:
             echo "### UNVERIFIED image (UAT only): afrotransact-core"
             echo "- image: \`${IMAGE}:${TAG}@${DIGEST}\` (also tagged \`${TAG}-unverified\`)"
             echo "- next: promote with \`gh workflow run promote.yml --ref release-1 -f service=afrotransact-core -f environment=uat -f tag=${TAG}\`"
-            echo "- prod and trial refuse this image (label and signature annotation org.afrotransact.verified=false)"
+            echo "- prod refuses this image (label and signature annotation org.afrotransact.verified=false)"
           } >> "$GITHUB_STEP_SUMMARY"
 
   image-go:
@@ -137,5 +137,5 @@ jobs:
             echo "### UNVERIFIED image (UAT only): afrotransact-go"
             echo "- image: \`${IMAGE}:${TAG}@${DIGEST}\` (also tagged \`${TAG}-unverified\`)"
             echo "- next: promote with \`gh workflow run promote.yml --ref release-1 -f service=afrotransact-go -f environment=uat -f tag=${TAG}\`"
-            echo "- prod and trial refuse this image (label and signature annotation org.afrotransact.verified=false)"
+            echo "- prod refuses this image (label and signature annotation org.afrotransact.verified=false)"
           } >> "$GITHUB_STEP_SUMMARY"

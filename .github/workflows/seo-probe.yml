@@ -1,7 +1,7 @@
 # SEO drift probe (docs/runbooks/seo-and-search-console.md). Hand-written (tools/ci/gen_workflows.py generates only the per-service, web and promote workflows).
 #   pull_request : the probe's own unit tests (fake network)
 #   schedule     : every morning, probes the DEPLOYED hosts from infra/cloudflare/hosts.json:
-#                  non-prod storefronts (uat, dev, the 8-day trial on test.<zone>) must be noindex with no sitemap, every back
+#                  non-prod storefronts (uat, dev) must be noindex with no sitemap, every back
 #                  office / api / auth host noindex, prod robots + sitemap index + children + a sample of URLs valid, and the
 #                  prod sitemap URL count not below the floor (repository variable SEO_MIN_SITEMAP_URLS) = the "sitemap URL
 #                  count drop" alert. A failing run is the alert (GitHub notifies the workflow owner).

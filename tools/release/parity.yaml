@@ -30,7 +30,7 @@ per_service_only:
 #   reusable          workflow_call only (called by another workflow)
 # tools/release/parity.py verifies each class against the workflow's real triggers and fails on a mismatch or an unclassified workflow.
 workflows:
-  _deploy.yml:               {line: reusable, reason: "deploy of one signed image: pins the digest on release-1 (uat, trial, prod and the deployables)"}
+  _deploy.yml:               {line: reusable, reason: "deploy of one signed image: pins the digest on release-1 (uat, prod and the deployables)"}
   _go-service.yml:           {line: reusable, reason: "per-service Go pipeline, called by go-<service>.yml on main/develop"}
   _java-service.yml:         {line: reusable, reason: "per-service Java pipeline, called by java-<service>.yml on main/develop"}
   _web-app.yml:              {line: reusable, reason: "web build and Cloudflare deploy; prod only from a commit release-1 contains"}
@@ -72,7 +72,7 @@ workflows:
   mobile.yml:                {line: release-1, reason: "OTA preview from release-1; production store builds only from a commit release-1 contains"}
   observability-config.yml:  {line: release-1, reason: "rules, dashboards and Alloy config"}
   backup-tools-image.yml:    {line: manual, reason: "tools image of the backup CronJobs (pg client, rclone, age, curl; non-root), built on demand when infra/ops/backup-tools changes"}
-  promote.yml:               {line: manual, reason: "promotes a signed image to uat, trial or prod (runs only from release-1)"}
+  promote.yml:               {line: manual, reason: "promotes a signed image to uat or prod (runs only from release-1)"}
   release-1-guard.yml:       {line: release-1, reason: "release-1 contains main"}
   release-1-parity.yml:      {line: release-1, reason: "parity of main's changes in the monolith, and the offline delivery checks"}
   release-1-sync.yml:        {line: manual, reason: "scheduled and manual: opens the PR that merges main (and develop on request) into release-1"}
@@ -83,7 +83,6 @@ workflows:
   storybook.yml:             {line: release-1, reason: "UI package visual tests"}
   tofu.yml:                  {line: release-1, reason: "infrastructure plan on pull requests, dev apply on push"}
   tool-kafka-replay.yml:     {line: release-1, reason: "Kafka replay tool tests"}
-  trial.yml:                 {line: manual, reason: "web apps for the 8-day trial on Cloudflare Workers"}
   web-seller-center.yml:     {line: release-1, reason: "web app: preview on pull requests, dev on push, prod by dispatch"}
   web-staff-console.yml:     {line: release-1, reason: "web app: preview on pull requests, dev on push, prod by dispatch"}
   web-storefront.yml:        {line: release-1, reason: "web app: preview on pull requests, dev on push, prod by dispatch"}
@@ -156,7 +155,7 @@ observability:
 
 # ---------------------------------------------------------------------------------------------------------------------------------
 # Capacity of the ONE b3-16 node (docs/engineering/cloud-cost.md, "Release 1"): tools/release/check_capacity.py. Figures are the repo's own,
-# UNVERIFIED on the node until `kubectl top` runs in the trial.
+# UNVERIFIED on the node until `kubectl top` runs in UAT.
 capacity:
   allocatable_mib: 13312           # ~13 GiB of the 16 GB node
   fixed_mib:                       # what runs next to the deployables (cloud-cost.md table), requests

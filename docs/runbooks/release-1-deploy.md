@@ -1,10 +1,10 @@
 # Release 1 deploy: build, deploy, cut over per batch, roll back, watch
 
 Status: **written, never run against a live cluster.** Checked offline: workflow YAML (`actionlint` 1.7.7 with shellcheck), shellcheck, the SQL on a scratch
-PostgreSQL 16, the Argo CD emulation in `infra/argocd/scripts` with `kustomize` 5.6 (all four environments: `make launch-set-check`, `render_apps.py`), and
+PostgreSQL 16, the Argo CD emulation in `infra/argocd/scripts` with `kustomize` 5.6 (every environment: `make launch-set-check`, `render_apps.py`), and
 **`helm` 3 with `kubeconform` 0.7** (lint, template for dev, uat and prod, and `tools/release/test_cutover_render.sh`, which had never run with a real helm: both
 `Chart.yaml` files were invalid YAML, so the helm jobs could not have passed until 2026-11-16). `tofu` was **not** run. The first run of `core.yml` and of the first
-cutover will find things: treat the trial (`ovh-production.md`, "Trial") as the rehearsal. Vendor facts are tagged **UNVERIFIED** as elsewhere in this repository.
+cutover will find things: treat UAT ([release-1-go-live.md](release-1-go-live.md)) as the rehearsal. Vendor facts are tagged **UNVERIFIED** as elsewhere in this repository.
 
 **Go-live (UAT dry run, then PROD, one parameterised ordered checklist): [release-1-go-live.md](release-1-go-live.md).**
 
@@ -55,7 +55,7 @@ route-diff tests, shellcheck), then `make launch-set-check` (needs `kustomize` o
    private by default. Link each package to the repository (Package settings, "Manage Actions access": this repository, role Write) so
    `GITHUB_TOKEN` can push. Create the read-only pull token (`read:packages`) that `GHCR_TOKEN` in `secrets.local.env` carries (the `ghcr` pull Secret; already part of
    `ovh-production.md` section 6). Names only: `GHCR_USER`, `GHCR_TOKEN`.
-2. **GitHub environments** `dev`, `uat`, `trial`, `prod` (they already exist for the per-service deploys): `_deploy.yml` reads their variables `CLOUD` (= `ovh`) and
+2. **GitHub environments** `dev`, `uat`, `prod` (they already exist for the per-service deploys): `_deploy.yml` reads their variables `CLOUD` (= `ovh`) and
    `REGISTRY_URL` (= `ghcr.io/<owner>/<repo>`, so nothing is mirrored). `prod` keeps its required reviewers. Secrets `GITOPS_APP_ID` and `GITOPS_APP_PRIVATE_KEY` (the GitOps
    app) must be allowed to push to **release-1**: the deployables' image pins are committed there (`values-<env>.yaml`), not on main.
 3. **Branch protection on `release-1`:** see section 10b for the exact list (the checks of `release-1-parity`, `core` and `afrotransact-go`; **not** `release-1-guard`). The GitOps app must be a bypass actor
@@ -111,7 +111,7 @@ every environment. **`release-1-sync.yml`** opens the pull request that carries 
 | `web-*` (generated) | preview on pull requests, dev on pushes to main **and** release-1 (one concurrency group), prod only by dispatch and only of a commit release-1 contains |
 | `mobile` | OTA preview from release-1; a production store build only of a commit release-1 contains |
 | `promote` (generated) | runs only from release-1; the tag's commit must be on release-1 (deployables) or main/release-1 (a per-service image) |
-| `_deploy` | pins of the deployables **and of every uat, trial and prod promotion** are committed to release-1 (Argo CD tracks it); a per-service dev pin stays on the GitOps branch (main) and arrives with the sync |
+| `_deploy` | pins of the deployables **and of every uat and prod promotion** are committed to release-1 (Argo CD tracks it); a per-service dev pin stays on the GitOps branch (main) and arrives with the sync |
 | `uat-unverified-image`, `carrier-sandboxes` | manual only; `uat-unverified-image` builds an unverified image for UAT only (go-live section 4.3) |
 
 Verify a published image by hand:
@@ -134,9 +134,9 @@ cosign verify ghcr.io/<owner>/<repo>/afrotransact-core:<full-sha> \
    and `afrotransact-go-secrets` (`<MODULE>_DB_URL`, ...). Encrypt with SOPS and apply as before (`infra/ops/secrets/README.md`).
 3. Local: a fresh `make up` volume creates both databases (`infra/local/postgres/20-release-1.sh`); an existing volume: `make db-release-1`. Roles are named after the module, password = the name.
 
-Data that already lives in per-service databases (dev, uat, or the trial) is **not** moved by any of this. Prod has none (it was never deployed). To bring a dev database over: in a scratch copy of the old database run
+Data that already lives in per-service databases (dev or uat) is **not** moved by any of this. Prod has none (it was never deployed). To bring a dev database over: in a scratch copy of the old database run
 `ALTER SCHEMA public RENAME TO <schema>`, `pg_dump -Fc --no-owner`, then `pg_restore --no-owner --role=<schema>_app -d core -n <schema>` into the empty schema made by the bootstrap and run `release-1-verify.sql`.
-**Untested**: rehearse it on the trial before relying on it.
+**Untested**: rehearse it on UAT before relying on it.
 
 ## 5. Deploy
 
@@ -145,7 +145,7 @@ Data that already lives in per-service databases (dev, uat, or the trial) is **n
 **uat and prod**: promote a signed build, then sync by hand (prod is manual, `argocd.autoSync: false`).
 
 1. Actions > `promote` > service `afrotransact-core` (or `afrotransact-go`), environment `prod`, tag = the **full sha** of a green release-1 build. `prod` waits for its reviewers; the workflow verifies the signature
-   and commits `image.tag` and `image.digest` to `values-prod.yaml` on release-1. (`trial` has its own pin file, `values-trial.yaml`.)
+   and commits `image.tag` and `image.digest` to `values-prod.yaml` on release-1.
 2. `python3 infra/argocd/scripts/check_launch_set.py --env prod --require-tags` (every deployable pinned by tag and digest).
 3. `argocd app diff afrotransact-core-prod`, then `argocd app sync afrotransact-core-prod`. A rolling update runs two core pods for about a minute (`maxSurge 25 %`, `maxUnavailable 0`): 2 x 48 connections and 2 x the current memory request (fits while the request follows the batch schedule, `cloud-cost.md`).
 
@@ -328,7 +328,7 @@ Delivery files that main also edits and where a merge can conflict: the **genera
 | Repository secrets | `GITOPS_APP_ID`, `GITOPS_APP_PRIVATE_KEY` of the GitOps app, with **Contents, Pull requests, Issues, Actions and Workflows: write** on the app | `release-1-sync` then uses a narrowed app token: needed whenever main changes `.github/workflows/**` (GITHUB_TOKEN cannot push workflow files; without the app the job opens an issue instead) and it makes the PR's checks start by themselves |
 | Branch protection / ruleset on `release-1` | require a pull request; **required checks** (always report): `release-1-parity / parity (what main and develop have, the monolith has)` and `release-1-parity / delivery (workflows, charts, Argo CD, secrets renderer)`; and, now that the workflows always start, `core / verify (checkstyle, unit, ArchUnit, integration, route diff)`, `core / helm (lint, template, kubeconform, cutover and budget tests)`, `core / image (build)`, `core / security (gitleaks, trivy fs)`, `afrotransact-go / verify (lint, vet, unit, integration)`, `afrotransact-go / helm (lint, template, kubeconform, cutover and budget tests)`, `afrotransact-go / image (build)`, `afrotransact-go / security (gitleaks, trivy fs, govulncheck)` (copy the exact names from the first run; the `image` name changes on a push); **not** `release-1-guard` (red by design on the sync PR); the GitOps app is a bypass actor only for the pin commits | merge only green; the part after the slash is the job's `name:` |
 | Branch protection on `main` and `develop` | keep as is; the sync never pushes there | |
-| Environments `dev`, `uat`, `trial`, `prod` | `prod` keeps required reviewers; variables `CLOUD=ovh`, `REGISTRY_URL=ghcr.io/<owner>/<repo>`; `GITOPS_APP_*` secrets allowed on all four; deployment branch rule of `prod` and `trial`: **`release-1`** | promote and `_web-app` prod deploys come from release-1 only |
+| Environments `dev`, `uat`, `prod` | `prod` keeps required reviewers; variables `CLOUD=ovh`, `REGISTRY_URL=ghcr.io/<owner>/<repo>`; `GITOPS_APP_*` secrets allowed on all three; deployment branch rule of `prod` and `trial`: **`release-1`** | promote and `_web-app` prod deploys come from release-1 only |
 | Packages | link `afrotransact-core` and `afrotransact-go` to the repository (Write) after the first push | `GITHUB_TOKEN` pushes the images |
 
 ## 11. Known gaps (honest list)

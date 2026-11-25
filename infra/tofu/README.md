@@ -62,7 +62,7 @@ admin_cidrs      = ["203.0.113.7/32"]    # your office/VPN: the Kubernetes API i
 Only that cloud's modules and provider are instantiated (`for_each = local.on.<cloud>`), so `tofu plan` never needs credentials for the
 others. OVH credentials are **API keys** (no OIDC): `OVH_APPLICATION_KEY`, `OVH_APPLICATION_SECRET`, `OVH_CONSUMER_KEY`, created at
 `https://api.us.ovhcloud.com/createToken/` for the US entity with rights on `/cloud/project/<id>/*` and `/me`.
-`disposable = true` (trial) removes deletion protection and shortens KYC retention to one day: **never** for the real project.
+`disposable = true` (uat, a dry run) removes deletion protection and shortens KYC retention to one day: **never** for the real project.
 Switching an existing environment to another cloud is a migration, not a flag flip (back up, destroy, change, apply, restore).
 
 ## 3. Bootstrap remote state (once per project)

@@ -22,7 +22,7 @@ resource "cloudflare_workers_route" "web" {
   script   = "${each.key}-${var.environment}"
 }
 
-# Google Search Console domain verification (DNS TXT at the zone apex). Prod only: the trial and the other environments stay
+# Google Search Console domain verification (DNS TXT at the zone apex). Prod only: the other environments stay
 # unverified on purpose (they are noindex). Covers every subdomain of the zone once verified.
 resource "cloudflare_dns_record" "google_site_verification" {
   count   = var.environment == "prod" && var.google_site_verification != "" ? 1 : 0
@@ -104,7 +104,7 @@ resource "cloudflare_turnstile_widget" "this" {
 
 # ------------------------------------------------------------------------------ R2 buckets (media service)
 # Two buckets, names from local.r2_buckets (the one source of truth; the media service takes them from config/prod.yaml, or from
-# R2_PUBLIC_BUCKET / R2_PRIVATE_BUCKET in the trial). The module does not manage CORS or the API tokens: both are dashboard steps
+# R2_PUBLIC_BUCKET / R2_PRIVATE_BUCKET when set). The module does not manage CORS or the API tokens: both are dashboard steps
 # in docs/runbooks/r2-buckets.md (sections 3 and 4). Do not also create the buckets by hand.
 # Public bucket: released product and storefront images, served only through the custom domain below.
 resource "cloudflare_r2_bucket" "media" {

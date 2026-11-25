@@ -6,7 +6,7 @@
 #   backup        nightly pg_dump of the 18 databases to another vendor's bucket backup/
 #   alloy         Grafana Alloy + kube-state-metrics: metrics and logs to Grafana Cloud    alloy/
 # NOT here on purpose: OpenFGA, Elasticsearch, MinIO, Mailpit, Kafka UI, Prometheus/Loki/Grafana (Grafana Cloud: traces via the OTel
-# collector, metrics and logs via Alloy), Postgres (postgres-trial.yaml is for throwaway trials only).
+# collector, metrics and logs via Alloy), Postgres (Layerbase).
 # Secrets are not in git in clear and not synced by Argo CD: infra/ops/secrets/apply.sh (SOPS/age). Optional OKMS path:
 # external-secrets/. Sizing and the memory table: docs/engineering/cloud-cost.md. Argo CD: platform-manifests element `lean`.
 apiVersion: kustomize.config.k8s.io/v1beta1
@@ -23,4 +23,3 @@ resources:
   - data/clamav.yaml      # F10: malware scan of uploads, ~1.25 GiB request; remove if a hosted scanner is used (docs/runbooks/malware-scanning.md)
   - backup
   - alloy
-  # - data/postgres-trial.yaml   # TRIAL ONLY: a Postgres pod on the node's disk (never production)

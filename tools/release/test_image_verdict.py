@@ -35,10 +35,9 @@ class Verdict(unittest.TestCase):
         self.assertEqual(iv.verdict([sig("true"), sig("false")]), "unverified")
         self.assertEqual(iv.verdict([sig("true"), sig()]), "unmarked")
 
-    def test_prod_and_trial_refuse_unverified(self):
-        for env in ("prod", "trial"):
-            for svc in ("afrotransact-core", "afrotransact-go", "cart"):
-                self.assertIsNotNone(iv.decide(env, svc, [sig("false")])[1], (env, svc))
+    def test_prod_refuses_unverified(self):
+        for svc in ("afrotransact-core", "afrotransact-go", "cart"):
+            self.assertIsNotNone(iv.decide("prod", svc, [sig("false")])[1], svc)
 
     def test_prod_refuses_unmarked_deployable_but_not_legacy_service(self):
         self.assertIsNotNone(iv.decide("prod", "afrotransact-core", [sig()])[1])
@@ -53,16 +52,15 @@ class Verdict(unittest.TestCase):
 
 
 class RequireTagsRule(unittest.TestCase):
-    def test_marker_refused_in_prod_and_trial_only(self):
+    def test_marker_refused_in_prod_only(self):
         pinned = {"image": {"tag": "a" * 40, "digest": "sha256:" + "b" * 64, "unverified": True}}
         self.assertTrue(cls.unverified_pin_error("prod", "x", pinned))
-        self.assertTrue(cls.unverified_pin_error("trial", "x", pinned))
         self.assertIsNone(cls.unverified_pin_error("uat", "x", pinned))
         self.assertIsNone(cls.unverified_pin_error("prod", "x", {"image": {"tag": "a" * 40}}))
         self.assertIsNone(cls.unverified_pin_error("prod", "x", {}))
 
-    def test_committed_prod_and_trial_pins_are_not_marked(self):
-        files = glob.glob(str(ROOT / "*/*/*/deploy/helm/values-prod.yaml")) + glob.glob(str(ROOT / "*/*/*/deploy/helm/values-trial.yaml"))
+    def test_committed_prod_pins_are_not_marked(self):
+        files = glob.glob(str(ROOT / "*/*/*/deploy/helm/values-prod.yaml"))
         self.assertTrue(files)
         for f in files:
             values = yaml.safe_load(pathlib.Path(f).read_text()) or {}
