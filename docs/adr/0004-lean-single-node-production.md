@@ -65,7 +65,7 @@ Nothing in this ADR has been applied to a live account. Every vendor fact is tag
   upgrades and the control plane. Kept as the **test** path only; it deploys the dev profile and is not production.
 - **A second node** or a managed OVH PostgreSQL: both add cost without a measured need; revisit with data from the trial.
 
-## Addendum 2026-11-15: Release 1 runs the services as two deployables (ADR 0011)
+## Addendum 2026-11-15: Release 1 runs the services as two deployables ([ADR 0015](0015-modular-monolith-release-1.md), formerly numbered 0011)
 
 Applies to the `release-1` branch; `main` and `develop` keep what is written above. Nothing in the decision changes (one `b3-16` node, one
 replica, Layerbase, GHCR, Argo CD with manual sync in prod); the **shape of what runs on that node** does:

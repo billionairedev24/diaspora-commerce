@@ -8,7 +8,7 @@ cutover will find things: treat UAT ([release-1-go-live.md](release-1-go-live.md
 
 **Go-live (UAT dry run, then PROD, one parameterised ordered checklist): [release-1-go-live.md](release-1-go-live.md).**
 
-Decision and success criteria: [ADR 0011](../adr/0011-modular-monolith-release-1.md). Shape and inventory:
+Decision and success criteria: [ADR 0015](../adr/0015-modular-monolith-release-1.md) (formerly numbered 0011). Shape and inventory:
 [release-1-architecture.md](../engineering/release-1-architecture.md). Local run: [release-1-local.md](release-1-local.md).
 Production from zero: [release-1-go-live.md](release-1-go-live.md). Sizing and cost: [cloud-cost.md](../engineering/cloud-cost.md).
 

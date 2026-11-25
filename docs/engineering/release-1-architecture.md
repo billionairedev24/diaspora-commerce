@@ -1,6 +1,6 @@
 # Release 1 architecture: two deployables, every service a module
 
-Decision and success criteria: [ADR 0011](../adr/0011-modular-monolith-release-1.md). This page is the inventory behind it, the module
+Decision and success criteria: [ADR 0015](../adr/0015-modular-monolith-release-1.md) (formerly numbered 0011). This page is the inventory behind it, the module
 design, the risks and the migration order. Everything marked **(config-derived)** was read from `application*.yml`, `@KafkaListener`
 and adapter class names, not from running code; it must be re-checked per module in its batch (the checklist is at the end).
 Measured numbers are in the Phase 2 section of this page once they exist.

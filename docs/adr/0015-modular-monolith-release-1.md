@@ -1,5 +1,6 @@
-# ADR 0011 — Release 1 ships two deployables: `afrotransact-core` (Java) and `afrotransact-go`, every service stays a module
+# ADR 0015 — Release 1 ships two deployables: `afrotransact-core` (Java) and `afrotransact-go`, every service stays a module
 
+- **Formerly numbered 0011** (renumbered 2026-11-25: `0011-two-fulfilment-modes.md` holds that number; "ADR 0011" in older text about the two deployables means this ADR).
 - **Status:** Proposed (Phase 0, 2026-11-15). Applies to the `release-1` branch only. `main` and `develop` keep the per-service build.
 - **Date:** 2026-11-15
 - **Deciders:** platform owner (one developer)

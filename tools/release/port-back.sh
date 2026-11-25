@@ -42,7 +42,7 @@ git fetch origin "${ONTO_NAME}:refs/remotes/origin/${ONTO_NAME}" "release-1:refs
 SRC="origin/release-1"
 
 # release-1-only paths (glob pathspecs): include form for "touches", exclude form for "touches anything else"
-R1_GLOBS=('java/apps/core/**' 'java/libs/module-*/**' 'go/apps/**' 'docs/adr/0011-modular-monolith-release-1.md' 'docs/engineering/release-1-*'
+R1_GLOBS=('java/apps/core/**' 'java/libs/module-*/**' 'go/apps/**' 'docs/adr/0015-modular-monolith-release-1.md' 'docs/engineering/release-1-*'
   'docs/runbooks/release-1-*' 'tools/release/**' '.github/workflows/core.yml' '.github/workflows/afrotransact-go.yml'
   '.github/workflows/release-1-*.yml' 'infra/argocd/launch-set/release-1.yaml' 'go/Dockerfile.afrotransact-go'
   'infra/argocd/applicationsets/deployables.yaml')
