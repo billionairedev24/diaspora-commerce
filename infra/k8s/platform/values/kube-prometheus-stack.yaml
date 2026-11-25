@@ -79,9 +79,6 @@ alertmanager:
       - source_matchers: [severity="page"]
         target_matchers: [severity="ticket"]
         equal: [slo, env]
-      - source_matchers: [alertname="ElasticsearchClusterRed"]
-        target_matchers: [alertname="ElasticsearchClusterYellow"]
-        equal: [cluster]
     receivers:
       - name: "null"
       - name: pagerduty
