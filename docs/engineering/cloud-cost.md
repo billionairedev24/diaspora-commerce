@@ -196,6 +196,42 @@ and fewer pushes). Backups: 4 dumps a night instead of 19 (the bucket size is th
 - **Connection counts** are capped (above). **Kafka** keeps 72 hours, dead letters 14 days, on a 10 GiB disk.
 - **Backups** keep `RETENTION_DAYS` (default 14, the owner may set 7) at Backblaze B2; alerts at 600 MB per night and 8 GB in the bucket (`infra/observability/rules/backup.yaml`).
 
+## AI model costs (`AI_MODELS_<TASK>`)
+
+(Moved from the former `docs/runbooks/cost.md`.) Every ai-gateway text task (`INTENT`, `PLANNING`, `CHAT`, `LISTING_WRITER`, `TRANSLATION`,
+`TRIAGE`, `IMAGE_MODERATION`) defaults to the cheapest capable models: `google/gemini-2.5-flash-lite` (USD 0.10 in / 0.40 out per million
+tokens), then `openai/gpt-5-nano` (USD 0.05 / 0.40); embeddings use `openai/text-embedding-3-small`
+(`java/services/ai-gateway/src/main/resources/application.yml`, `at.ai.routes`). A task is raised with one variable, comma-separated in
+fallback order, for example `AI_MODELS_CHAT=anthropic/claude-sonnet-4.5,openai/gpt-5-mini`. A model missing from the price table is costed at
+the conservative `default-price` (USD 15 / 75 per million), so it reaches the daily ceiling quickly: add its price before raising a task.
+The ceiling itself (USD 2.00 per UTC day, USD 0.50 per caller) and the OpenRouter key limit are in "Cost guards that are real" above and
+`docs/runbooks/ai-spend-and-mcp-access.md`. Review OpenRouter spend per task monthly (below).
+
+## Budget alerts: what to do when one fires, and the monthly review
+
+(Budget-alert actions moved from the former `docs/runbooks/cost.md`, rewritten for the OVH launch profile.) The OVH budget module
+(`infra/tofu/modules/ovh/budget`) creates Public Cloud consumption alerts at 50, 80 and 100 % of `monthly_budget` in
+`infra/tofu/envs/<env>/sizing.tf` (a placeholder until the OVH quote; UAT on the USD 200 credit: `docs/runbooks/release-1-go-live.md`
+section 10). Layerbase, Cloudflare, Grafana Cloud, Backblaze B2, Resend and OpenRouter are budgeted in their own consoles: set a monthly
+spend alert in each when the account is created.
+
+When an alert fires:
+
+1. **Which environment and which line?** OVH console > Public Cloud > the project > Billing / consumption: node, block storage, traffic.
+2. **Forecast or 50 %:** usually a new steady cost (a resized node pool, a bigger volume). Confirm it was intended (recent PRs to
+   `sizing.tf`, `values-<env>.yaml`); if so, adjust `monthly_budget`. Never raise a budget to silence an alert without the review below.
+3. **80 % before the 20th, or 100 % at any time:** look for a second node or a node flavour change (`kubectl get nodes -o wide`), a
+   `LoadBalancer` Service that created a paid load balancer (`kubectl get svc -A | grep LoadBalancer`: there must be none), growing PVCs
+   (`kubectl get pvc -A`), unexpected egress; outside OVH, OpenRouter spend per task and Grafana Cloud series/log volume.
+4. **Mitigate** with the least risky lever: pause UAT (scale to zero, go-live section 10), lower log levels or drop a noisy log line
+   (`observability-grafana-cloud.md`), fix a runaway job. Never scale prod below what serves traffic during an incident.
+5. Record the cause and the fix in the monthly review notes.
+
+**Monthly review (first Monday of the month):** actual against `monthly_budget` per environment and per vendor; requests against p95 usage
+(`kubectl top pods -A`, Grafana) and lower requests in `values-<env>.yaml` where usage stays under half of the request; OpenRouter spend per
+task (ai-gateway usage rows) and whether any `AI_MODELS_<TASK>` override is still wanted; Grafana Cloud usage against the free limits;
+backup bucket size. Update `monthly_budget` if the baseline changed for a known reason.
+
 ## Accepted trade-offs
 
 One node and one replica of everything: a node restart, a node upgrade or a bad deploy is **a few minutes of downtime**, with no canary.

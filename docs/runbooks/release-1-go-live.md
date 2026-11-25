@@ -408,7 +408,7 @@ outbound traffic charges. **Cloudflare:** free-plan WAF and rate-limit rule quot
 
 `select seller_self_shipping_enabled from shipping_settings;` on the orders database must return `false` in uat and prod (the column default is false;
 orders `V15`). Staff turn it on only in Staff console > Fees > Flat delivery fee, with a reason, after the owner picks a rule in
-`docs/engineering/seller-self-shipping-options.md`. Fulfilled by AfroTransact costs sellers nothing: there is no per-unit FBA fee to configure.
+`docs/engineering/delivery-fulfilment.md`. Fulfilled by AfroTransact costs sellers nothing: there is no per-unit FBA fee to configure.
 
 ## 19. Launch readiness: owner, vendor, legal and blocker items
 

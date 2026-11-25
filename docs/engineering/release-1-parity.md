@@ -66,6 +66,19 @@ Other offline gates in `make release-1-check`: `check_launch_set.py` (Applicatio
 ApplicationSet generator reads release-1**), `check_delivery.py` (pools, modules, `service=` labels), `check_capacity.py` (the plan fits the one b3-16
 node at every batch, with core's rolling-update surge), `chart_env_sync.py`, the generated workflows, action pins, shellcheck, the tests of all of the above.
 
+### Re-running a full branch diff audit (main / develop vs release-1)
+
+(From the former `branch-diff-audit.md`, section 5; that one-off audit found 0 functional differences to port back.)
+
+```
+git fetch origin main develop +refs/heads/release-1:refs/remotes/origin/release-1
+git cherry origin/main origin/release-1 | grep '^+'                  # step 1: commits main lacks (by patch id)
+python3 tools/release/parity.py --reverse --main origin/main         # on release-1: migrations, contracts, permissions, i18n, direction-labelled
+git diff --name-only $(git merge-base origin/main origin/release-1) origin/release-1   # then compare each non-architecture file with main
+```
+
+On release-1 `parity.py --reverse` (`tools/release/reverse_parity.py`) automates the four functional comparisons and is a non-blocking step of `release-1-parity.yml`.
+
 ## Contributor rules
 
 1. **Working on main or develop?** Open the PR as usual. Before you call a story `Done`, look at the next sync pull request (or run

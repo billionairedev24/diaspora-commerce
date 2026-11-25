@@ -1,4 +1,4 @@
-# Release 1 deploy: build, deploy, cut over per batch, roll back, watch
+# Release 1 deploy: build, deploy, which modules run where, roll back, watch
 
 Status: **written, never run against a live cluster.** Checked offline: workflow YAML (`actionlint` 1.7.7 with shellcheck), shellcheck, the SQL on a scratch
 PostgreSQL 16, the Argo CD emulation in `infra/argocd/scripts` with `kustomize` 5.6 (every environment: `make launch-set-check`, `render_apps.py`), and
@@ -23,7 +23,7 @@ Production from zero: [release-1-go-live.md](release-1-go-live.md). Sizing and c
 | Argo CD Application | `afrotransact-core-<env>` | `afrotransact-go-<env>` |
 | Secret | `afrotransact-core-secrets` | `afrotransact-go-secrets` |
 | Database | `core` (one schema and one role per module) | `go` (one schema and one role per module) |
-| Memory | request 768 Mi growing to 1,536 Mi with the batches (section 6), limit 2,048 Mi (= the S1 cap, 2.0 GiB RSS) | request 128 Mi, limit 384 Mi (**UNMEASURED estimate**) |
+| Memory | request 1,536 Mi (the whole launch set, `values-uat.yaml` / `values-prod.yaml`), limit 2,048 Mi (= the S1 cap, 2.0 GiB RSS) | request 128 Mi, limit 384 Mi (**UNMEASURED estimate**) |
 | Connections | pools add up to 48 per pod, 96 with a rolling-update surge | 4 x 3 = 12 per pod, 24 with a surge |
 
 The per-service workflows (`java-<service>.yml`, `go-<service>.yml`), charts and Argo Applications still exist. The workflows trigger only on
@@ -35,7 +35,7 @@ Where things are:
 
 | Concern | File |
 |---|---|
-| Which modules each environment runs, batch order | `infra/argocd/launch-set/release-1.yaml` (reviewed list) and `cutover.services` in `infra/argocd/envs/<env>/platform-values.yaml` (what Argo CD reads) |
+| Which modules each environment runs (uat and prod: all 21; the `batches` list is the dev history) | `infra/argocd/launch-set/release-1.yaml` (reviewed list) and `cutover.services` in `infra/argocd/envs/<env>/platform-values.yaml` (what Argo CD reads) |
 | The two Applications per environment | `infra/argocd/applicationsets/deployables.yaml` (and `lean/deployables.yaml`) |
 | Scale an old Application to 0 and route its Service | `cutover.movedTo` parameter in `services.yaml`, implemented in `infra/helm/library/at-service` |
 | Generators and root apps read the release-1 branch | `infra/argocd/release-branch/`, `infra/argocd/bootstrap/root-<env>.yaml` (`targetRevision: release-1`) |
@@ -147,9 +147,9 @@ Data that already lives in per-service databases (dev or uat) is **not** moved b
 1. Actions > `promote` > service `afrotransact-core` (or `afrotransact-go`), environment `prod`, tag = the **full sha** of a green release-1 build. `prod` waits for its reviewers; the workflow verifies the signature
    and commits `image.tag` and `image.digest` to `values-prod.yaml` on release-1.
 2. `python3 infra/argocd/scripts/check_launch_set.py --env prod --require-tags` (every deployable pinned by tag and digest).
-3. `argocd app diff afrotransact-core-prod`, then `argocd app sync afrotransact-core-prod`. A rolling update runs two core pods for about a minute (`maxSurge 25 %`, `maxUnavailable 0`): 2 x 48 connections and 2 x the current memory request (fits while the request follows the batch schedule, `cloud-cost.md`).
+3. `argocd app diff afrotransact-core-prod`, then `argocd app sync afrotransact-core-prod`. A rolling update runs two core pods for about a minute (`maxSurge 25 %`, `maxUnavailable 0`): 2 x 48 connections and 2 x the memory request (the surge fits the node, `cloud-cost.md` and go-live section 3).
 
-A deployable whose `cutover.services` has no entry for it renders **replicas 0**: the Application is Healthy and costs nothing until its first batch.
+A deployable whose `cutover.services` has no entry for it renders **replicas 0**: the Application is Healthy and costs nothing until a module is enabled in it.
 
 ## 5a. Upstream wiring (who calls whom, outside the local profile)
 
@@ -177,7 +177,7 @@ nothing is scraped twice). They are **not** a valid upstream: a **flat** call th
 through the alias of a **prefixed** Go module (`http://cart`, `http://search`) reaches gateway-bff's facade, not the module, and `http://payments` + `POST /v1/reconciliation/runs` reaches
 the first module that maps it (inventory). The only things that still use alias names are the public HTTPRoutes (`api` -> `gateway-bff`, `/identity`, `/bookings`, `/fulfilment`, `/media`, `/notifications`,
 `/payments/v1/webhooks`, `/seller/v1/webhooks/*`; `auth` -> `identity`), which keep working before and after a cutover for exactly that reason, so **a per-service Application must exist for every
-Service the routes name until the cutover phase**. Rolling a batch back is therefore always: remove the `cutover.services` line (URLs go back to the standalone Services by themselves).
+Service the routes name until the cutover phase**. Rolling a module back is therefore always: remove the `cutover.services` line (URLs go back to the standalone Services by themselves).
 
 **Exposure.** A moved Service selects a deployable's pods, which serve **every** module of the deployable, not only the one the route was written for. The route files
 (`infra/k8s/platform/edge/overlays/<env>/routes.yaml`) therefore deny `<prefix>/modules` on every prefix, `<prefix>/mcp`, `/v1/tools` and `/.well-known/oauth-protected-resource` on the prefixes that land on core,
@@ -195,46 +195,24 @@ edge; it also checks the routes above (private Services, rule limit) and `MCP_PU
 **Set by the owner in the cluster:** nothing new for the URLs. Before the first cutover of a module that the Go deployable calls (everything but `geo`, `media`, `notifications`), check `kubectl -n afrotransact-<env> get svc afrotransact-core afrotransact-go`
 (created by the deployable charts at replicas 0 already).
 
-## 6. Cutover, one batch at a time
+## 6. Which modules run where (no batches)
 
-A batch is a few modules that move from their own Deployments into a deployable (batches: `release-1.yaml`, `batches`). **Nothing is deleted**: the old Deployment is scaled to 0 and its Service keeps its name and
-now selects the deployable's pods (the rollback path and what the public HTTPRoutes use); callers do not rely on it: their URLs are rendered from `cutover.services` (section 5a).
+UAT and PROD run the **whole launch set at once** inside the two deployables (owner decision 2026-11-17; nothing ran in either before, so there is no
+standalone traffic to protect): `enabled.uat` / `enabled.prod` in `infra/argocd/launch-set/release-1.yaml` and `cutover.services` in
+`infra/argocd/envs/<env>/platform-values.yaml` list all 21 modules, and the old per-service Applications stay at replicas 0 (rollback path only).
+Go-live steps: [release-1-go-live.md](release-1-go-live.md) sections 5 to 8.
 
-**Before the batch (once per batch)**
+The same two files switch a module on or off later (a new module, or taking one out):
 
-1. The deployable's image is pinned and healthy in this environment (section 5), with the modules of earlier batches running. **Set core's memory request for this batch** in `java/apps/core/deploy/helm/values-prod.yaml`
-   (`resources.requests.memory`: batch 1 **768Mi**, batch 2 1024Mi, batch 3 1280Mi, batch 4 on 1536Mi; the limit stays 2048Mi). With the old pods still up, 1,536 Mi twice (the rolling-update surge) does not fit the ~13 GiB node (`cloud-cost.md`).
-2. The module's schema exists and is verified (section 4) and **its data is there**: in prod from the start (schema layout), in dev/uat after the move in section 4.
-3. The module's secrets are in `afrotransact-core-secrets` (check the key names for the module: `<MODULE>_DB_USER`, `<MODULE>_DB_PASSWORD`, `<X>_CLIENT_SECRET`, third-party keys).
-4. `tools/release/route_diff.py` is green in CI for the module and `make release-1-check` is green.
-
-**The change (one pull request, reviewed)**
-
-5. In `infra/argocd/launch-set/release-1.yaml` add the modules under `enabled.<env>.<deployable>` **and** add `service: deployable` lines to `cutover.services` in
-   `infra/argocd/envs/<env>/platform-values.yaml` (for example `catalog: afrotransact-core`). Do one environment per pull request, dev first, then uat, then prod.
-6. `make launch-set-check` must print, for the environment, `catalog-<env>   scaled to 0, Service routed to afrotransact-core` and `afrotransact-core-<env>: runs 1 module(s) catalog`, and end with `OK`
-   (a mismatch between the two files fails it).
-
-**Apply (the order matters: never two writers on one schema)**
-
-7. dev and uat: merge; Argo CD syncs both Applications. Argo applies them in the same wave, so a few seconds of overlap are possible: the old pod's and core's schedulers and outbox relays may both run once, and the
-   Kafka consumers share the old group ids (so they split partitions rather than duplicate). If you are not sure a module tolerates that, use the prod order below there too.
-8. **prod (manual, in this order):** (a) `argocd app sync <module>-prod` for each moved module: its Deployment goes to 0 and its Service now selects core pods; (b) `argocd app sync afrotransact-core-prod`: the module's
-   env switch (`MODULE_<NAME>_ENABLED=true`) is rendered and core rolls. The module is unavailable between (a) and core being Ready again (target under 60 s, ADR 0011 S2). For an urgent order
-   path do it in a quiet hour: this is the same downtime class as any single-replica deploy on this cluster (ADR 0004).
-
-**Verify (do not skip; 15 minutes)**
-
-9. `kubectl -n afrotransact-<env> get deploy` shows the old Deployment at 0/0 and core 1/1; `kubectl -n afrotransact-<env> get svc catalog -o jsonpath='{.spec.selector}'` says `afrotransact-core`.
-10. Readiness: `kubectl -n afrotransact-<env> port-forward deploy/afrotransact-core 9090` then `curl -s localhost:9090/actuator/health/readiness` lists the module UP; `/actuator/health/<module>` adds its database.
-11. Dashboard **AfroTransact / Release 1 modules**: the module is `UP`, its pool is not saturated, p95 and 5xx by module are as before the cutover. Alerts `ModuleNotReady`, `CoreMemoryNearCap` quiet.
-12. Kafka: consumer group lag of the module's groups (`<module>-service`) is 0 or falling (`kafka-consumer-lag` board): the group ids are the old ones, so offsets carried over.
-13. Outbox: `outbox_pending_events` is not growing (the module's relay runs in core).
-14. One real journey through gateway-bff that touches the module (`tools/smoke`, or by hand: the smoke test of `release-1-go-live.md` section 8 for the batch's modules).
-15. Memory: `kubectl top pod -l app.kubernetes.io/name=afrotransact-core` after 30 minutes. **If a batch adds more than 80 MB RSS per module or core startup passes 60 s, stop and re-plan** (ADR 0011 review rule).
-
-Keep a batch in place for at least a week (checkout SLO unchanged for the money path) before the next one. Do not delete the old chart, workflow or Application: only the cutover phase of ADR 0011, after two release cycles
-without a rollback, may.
+1. One pull request per environment: add (or remove) the module under `enabled.<env>.<deployable>` in `release-1.yaml` **and** the matching
+   `<module>: <deployable>` line in `cutover.services`.
+2. `make launch-set-check` must print, for the environment, `<module>-<env>   scaled to 0, Service routed to <deployable>` and `<deployable>-<env>: runs N module(s) ...`,
+   and end with `OK` (a mismatch between the two files fails it). The module's schema, role and secrets must exist first (section 4).
+3. prod (manual, in this order, never two writers on one schema): `argocd app sync <module>-prod` (its Deployment goes to 0), then
+   `argocd app sync afrotransact-core-prod` (or `afrotransact-go-prod`): `MODULE_<NAME>_ENABLED=true` is rendered and the deployable rolls.
+4. Verify: readiness lists the module UP (`/actuator/health/readiness` on 9090, `/readyz` for Go), the **AfroTransact / Release 1 modules** board shows it `UP`,
+   consumer lag of its groups is 0 or falling, `outbox_pending_events` is not growing, one real journey through gateway-bff that touches it works, and core's RSS
+   after 30 minutes is within budget (`CoreMemoryNearCap` quiet; stop and re-plan if startup passes 60 s, ADR 0015 review rule).
 
 ## 7. Roll back
 
@@ -342,8 +320,6 @@ Delivery files that main also edits and where a merge can conflict: the **genera
 - Fixed 2026-11-16: `infra/ovh-vps/secrets.sh` split a multi-line value (`SIGNING_KEY_PEM`) into one junk key per line (identity's Secret and `afrotransact-core-secrets`), and put every value in
   kubectl's argv. Records are now NUL-terminated and values go through 0600 files (`--from-file`); `tools/ovh/test/secrets-multiline.test.sh` proves it with a throwaway PEM and a stub kubectl.
   **A Secret already applied from the old script has junk keys: re-render and re-apply it before the first prod sync.**
-- Open item for the orders batch: `uat` runs orders with the profile `uat,temporal-cloud`; a deployable cannot switch a profile for one module. Its `TEMPORAL_*` values are copied into the core chart; check that
-  the settings of `application-temporal-cloud.yml` reach core in uat before orders moves there (`parity.yaml` `config.env_skip.SPRING_PROFILES_ACTIVE`).
 - The non-secret settings of every module (peer URLs, zones, TTLs) were missing from both deployable charts until 2026-11-16 (core would have used the localhost defaults of each `application.yml`): they are generated
   into the charts now (`tools/release/chart_env_sync.py`) and `parity.py config` keeps them current.
 - `generate_rules.py --check` used to report `r2-backup.yaml` as a missing generated file on this branch: the PrometheusRule CR is committed now (`make observability-check` is green).

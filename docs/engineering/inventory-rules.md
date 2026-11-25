@@ -16,7 +16,7 @@ external claim below is marked **[verify]** until someone reads the page. Do not
 | Seller cannot fulfil | **No seller cancel action.** Only the customer (until packed) or staff can cancel. No reason codes, no reroute. |
 | Seller accept step | `placed -> confirmed` is a manual click that gates nothing, has no timer, and does not touch payment. Ship-by date is informational. |
 | Payment | Manual capture. Authorise at checkout, capture when the **first shipment is picked up** (all lines of the order, since multicapture is off). Cancel before capture = PaymentIntent cancelled, no fee. After capture = line refund; Stripe's fee share is not returned (`Postings.java:62`). |
-| Authorisation expiry | ~7 days for cards. **Not handled for ordinary orders** (capture retries 12 times then parks as FAILED). A design exists in `docs/spikes/preorder-delivery-runs.md` section 7. |
+| Authorisation expiry | ~7 days for cards. **Not handled for ordinary orders** (capture retries 12 times then parks as FAILED). A design exists in `docs/spikes/preorder-design-implementation.md` section 8.B. |
 | Seller cancel metric | trust-ops counts 90-day cancellation rate vs 2.5% target, but only cancels by SELLER or SYSTEM, and sellers cannot cancel, so it reads ~0. |
 
 ## 2. How Amazon does it (summary; official pages need reading [verify])

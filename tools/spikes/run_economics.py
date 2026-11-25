@@ -19,7 +19,7 @@ Two break-even lenses are printed:
                  smallest n with n * (fee * (1 - card_pct) + seller_fee + basket * take_rate) >= cost(n)
 
 Every assumption is a CLI flag. Defaults are the Bastrop example in
-docs/spikes/preorder-delivery-runs.md; change them and re-run, e.g.
+docs/spikes/preorder-design-implementation.md (section 8.A); change them and re-run, e.g.
 
     python3 tools/spikes/run_economics.py
     python3 tools/spikes/run_economics.py --drive-minutes 60 --driver-per-hour 30
