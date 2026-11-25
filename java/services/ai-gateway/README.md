@@ -109,7 +109,7 @@ every chat, stream and embeddings request (Spring AI `extraBody`):
   `ai.model.fallback`, and the next candidate of the route is tried. If every candidate is skipped the request fails as
   `ai.model-unavailable`, which is the intended outcome: we do not fall back to a provider that retains data.
 - This is request-side only. The OpenRouter account settings (logging off, training consent off, account ZDR policy,
-  allowed providers, DPAs) must also be set: see `docs/runbooks/production-readiness.md` section 10.
+  allowed providers, DPAs) must also be set: see `docs/runbooks/release-1-go-live.md` section 19.10.
 
 ## Configuration
 

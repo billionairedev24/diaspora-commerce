@@ -2,7 +2,7 @@
 
 **Targets (owner to accept): RPO 24 hours, RTO 4 hours** for the production PostgreSQL data on Layerbase. They are targets, not
 measurements: the first drill produces the real numbers and they go in the table at the end of this page. A backup that has never been
-restored is not a backup: **the first drill is a launch blocker** (`production-readiness.md` section 9) and it is repeated monthly.
+restored is not a backup: **the first drill is a launch blocker** (`release-1-go-live.md` section 19.9) and it is repeated monthly.
 
 ## What is backed up, where, and what is not
 
@@ -81,7 +81,7 @@ Then prove the data is usable, not just present:
 3. `fulfilment` and `geo`: `select postgis_version()` and one nearest-driver query succeed.
 4. Rebuild what is not backed up: `reindex-1` job and a search query; check that the outbox republish tooling is understood.
 5. Also drill once, separately: a **full cluster rebuild** from tofu + SOPS secrets + Argo in an empty OVH project (target 2 to 4 hours, not proven), and
-   Layerbase's own restore/PITR if they offer it (ask how, section 14 of `ovh-production.md`).
+   Layerbase's own restore/PITR if they offer it (ask how, section 16 of `release-1-go-live.md`).
 
 ## Restoring production after an incident
 

@@ -125,7 +125,7 @@ Ignore noise from browser extensions: `blocked` of `inline`/`eval`/`blob` with a
    dismissed as extension noise. Expected sources of change: media CDN hostname (`MEDIA_PUBLIC_URL` set per Worker), telemetry hosts.
 3. **Seven days with no unexplained reports** (or only dismissed ones) -> set `CSP_MODE=enforce` in uat (`wrangler.jsonc` `env.uat.vars`) and repeat the walk for two days.
 4. **prod** stays `report-only` for the same 7-day review on real customers, then `enforce`. Change the three `wrangler.jsonc`
-   `env.prod.vars` values in one reviewed PR and deploy; record the date in `docs/runbooks/production-readiness.md`.
+   `env.prod.vars` values in one reviewed PR and deploy; record the date in `docs/runbooks/release-1-go-live.md`.
 5. Rollback is a var change: `CSP_MODE=report-only` (or `off`) and redeploy (`wrangler deploy --env prod --var CSP_MODE:report-only`); no code change.
    A spike of reports or breakage after promotion: [CSP violations spike](../runbooks/csp-violations-spike.md).
 

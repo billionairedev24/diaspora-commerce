@@ -109,5 +109,5 @@ Web Push is deliberately not built. The notifications service has only FCM and A
 ## Mobile apps are out of launch
 
 `mobile/apps/{customer,driver}` (Expo) stay in the repository but are not part of the launch. See
-[production readiness](../runbooks/production-readiness.md) for the items that still
+[production readiness](../runbooks/release-1-go-live.md) for the items that still
 mention them, and `.github/workflows/mobile.yml` (EAS build/update; tag- and `main`-triggered, skipped without `EXPO_TOKEN`).

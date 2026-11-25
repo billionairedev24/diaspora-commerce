@@ -2,7 +2,7 @@
 
 This page is the sizing and cost design for the **production launch**: OVH Managed Kubernetes (one node) + Layerbase PostgreSQL +
 Cloudflare. Decision and reasons: [ADR 0004](../adr/0004-lean-single-node-production.md). Step by step from zero:
-[ovh-production.md](../runbooks/ovh-production.md).
+[release-1-go-live.md](../runbooks/release-1-go-live.md).
 
 **Reading the numbers.** Nothing here has been applied or priced on a live account. A figure tagged **UNVERIFIED** is a vendor fact
 (OVH, Layerbase, Cloudflare, GitHub, Grafana) not confirmed against a primary source: confirm it before relying on it. Memory and
@@ -46,7 +46,7 @@ Layerbase's site by an earlier version of this page). The platform lives in **Vi
 `layerbase_region = "virginia"` maps to OVH `US-EAST-VA-1` (it used to map to Quebec `BHS5`, which made the database tens of
 milliseconds away). With external data `tofu plan` fails if `region` is not the mapped one, and fails if a `US-*` region is used
 without `ovh_endpoint = "ovh-us"` (the OVH US entity is a separate account with separate credentials). Which cloud and data
-centre host the Layerbase server is unknown (**ask**, see the Layerbase questions in ovh-production.md); latency between the two
+centre host the Layerbase server is unknown (**ask**, see the Layerbase questions in release-1-go-live.md section 16); latency between the two
 sites is expected to be a few ms in the same metro (**UNVERIFIED**: measure it before the first deploy).
 
 ## Monthly cost: what is known and what is not
@@ -87,7 +87,7 @@ All plan facts here are **UNVERIFIED** (copied from Layerbase's site and an owne
 
 Confirmed verbally by the owner, still to get in writing: PostGIS is available; no egress charges. Still unknown: which cloud hosts the
 server, `max_connections` per plan, whether mTLS is optional, backup/PITR terms, behaviour at the storage limit (full list in
-ovh-production.md).
+release-1-go-live.md section 16).
 
 ## Will it fit on one node? Memory table
 

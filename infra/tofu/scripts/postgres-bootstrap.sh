@@ -37,7 +37,7 @@ if [[ "${DB_LAYOUT:-database}" == schema ]]; then
 fi
 
 # The launch databases. Keep in step with: infra/ops (backup CronJob DATABASES), infra/ovh-vps/services.launch.conf,
-# docs/runbooks/ovh-production.md, and infra/tofu/envs/*/main.tf `services`.
+# docs/runbooks/release-1-go-live.md, and infra/tofu/envs/*/main.tf `services`.
 LAUNCH_DATABASES="identity catalog offers inventory orders payments seller fulfilment bookings trustops taxreturns content ai cart geo media notifications temporal temporal_visibility"
 
 : "${PGHOST:?}" "${PGUSER:?}" "${PGPASSWORD:?}"
@@ -83,7 +83,7 @@ for db in $DATABASES; do
     if [[ "${pair%%:*}" == "$db" ]]; then
       ext="${pair#*:}"
       if ! psql_admin -d "$db" -c "CREATE EXTENSION IF NOT EXISTS ${ext}"; then
-        echo "FATAL: cannot create extension ${ext} in ${db}. Ask the provider to enable it for this server or to grant the admin the right (docs/runbooks/ovh-production.md, Layerbase questions)." >&2
+        echo "FATAL: cannot create extension ${ext} in ${db}. Ask the provider to enable it for this server or to grant the admin the right (docs/runbooks/release-1-go-live.md section 16, Layerbase questions)." >&2
         exit 1
       fi
       # Prove it is really there (a no-op `IF NOT EXISTS` on a different schema would be a silent failure).

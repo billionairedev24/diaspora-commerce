@@ -44,4 +44,4 @@ the database backups** (a perfect database restore without `IDENTITY_DATA_KEY` l
 
 Edit the value in `STATE_DIR/generated.env` (or delete the line to regenerate), re-render, re-encrypt, re-apply, then
 `kubectl -n afrotransact-prod rollout restart deploy/<service>`. `IDENTITY_DATA_KEY` and `LINK_SIGNING_KEY` have a
-`*_PREVIOUS` list for graceful rotation; follow `docs/runbooks/production-readiness.md` section 3.
+`*_PREVIOUS` list for graceful rotation; follow `docs/runbooks/release-1-go-live.md` section 19.3.

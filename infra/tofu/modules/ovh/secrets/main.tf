@@ -26,7 +26,7 @@ locals {
     PAR = "eu-west-par"
     BHS = "ca-east-bhs"
   }
-  # OKMS is OPTIONAL on the OVH launch path (SOPS/age is the default, docs/runbooks/ovh-production.md). The OVH US regions have
+  # OKMS is OPTIONAL on the OVH launch path (SOPS/age is the default, docs/runbooks/release-1-go-live.md). The OVH US regions have
   # no entry: UNVERIFIED whether OKMS exists in the US, so applying this module with a US region fails here rather than
   # silently creating the KMS domain in Europe.
   okms_region = local.okms_regions[local.site]

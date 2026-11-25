@@ -26,7 +26,7 @@ func Open(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("postgres config: %w", err)
 	}
-	// Explicit, small connection budget (docs/runbooks/ovh-production.md): pgx would default to max(4, NumCPU).
+	// Explicit, small connection budget (docs/runbooks/release-1-go-live.md): pgx would default to max(4, NumCPU).
 	// A lower pool_max_conns in the DSN is respected.
 	if poolCfg.MaxConns > maxPoolConns {
 		poolCfg.MaxConns = maxPoolConns

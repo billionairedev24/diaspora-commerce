@@ -77,7 +77,7 @@ func build(host Deps, ctx context.Context, closers *module.Closers) (Module, err
 		return Module{}, err
 	}
 
-	// Explicit, small connection budget: ~15 services share one managed Postgres server (docs/runbooks/ovh-production.md,
+	// Explicit, small connection budget: ~15 services share one managed Postgres server (docs/runbooks/release-1-go-live.md,
 	// connection budget). pgx would otherwise default to max(4, NumCPU). A lower pool_max_conns in DB_URL is respected.
 	poolCfg, err := pgxpool.ParseConfig(cfg.DatabaseURL)
 	if err != nil {

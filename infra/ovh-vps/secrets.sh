@@ -162,7 +162,7 @@ databases() {
     # geo's 001 migration run `create extension if not exists postgis` as the service role, which only works once it exists.
     # (bookings: btree_gist, a trusted extension, pre-created too.) Same list as infra/tofu/scripts/postgres-bootstrap.sh.
     case "$db" in
-      geo|fulfilment) psql_admin "$db" -c "CREATE EXTENSION IF NOT EXISTS postgis" >/dev/null || die "cannot create postgis in $db (ask the provider; docs/runbooks/ovh-production.md)" ;;
+      geo|fulfilment) psql_admin "$db" -c "CREATE EXTENSION IF NOT EXISTS postgis" >/dev/null || die "cannot create postgis in $db (ask the provider; docs/runbooks/release-1-go-live.md)" ;;
       bookings) psql_admin "$db" -c "CREATE EXTENSION IF NOT EXISTS btree_gist" >/dev/null || die "cannot create btree_gist in $db" ;;
     esac
   done

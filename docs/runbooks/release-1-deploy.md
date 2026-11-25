@@ -10,7 +10,7 @@ cutover will find things: treat UAT ([release-1-go-live.md](release-1-go-live.md
 
 Decision and success criteria: [ADR 0011](../adr/0011-modular-monolith-release-1.md). Shape and inventory:
 [release-1-architecture.md](../engineering/release-1-architecture.md). Local run: [release-1-local.md](release-1-local.md).
-Production from zero: [ovh-production.md](ovh-production.md). Sizing and cost: [cloud-cost.md](../engineering/cloud-cost.md).
+Production from zero: [release-1-go-live.md](release-1-go-live.md). Sizing and cost: [cloud-cost.md](../engineering/cloud-cost.md).
 
 ## 1. What ships
 
@@ -54,7 +54,7 @@ route-diff tests, shellcheck), then `make launch-set-check` (needs `kustomize` o
 1. **GHCR.** The packages `afrotransact-core` and `afrotransact-go` are created by the first push of `core.yml` / `afrotransact-go.yml` from release-1,
    private by default. Link each package to the repository (Package settings, "Manage Actions access": this repository, role Write) so
    `GITHUB_TOKEN` can push. Create the read-only pull token (`read:packages`) that `GHCR_TOKEN` in `secrets.local.env` carries (the `ghcr` pull Secret; already part of
-   `ovh-production.md` section 6). Names only: `GHCR_USER`, `GHCR_TOKEN`.
+   `release-1-go-live.md` section 6). Names only: `GHCR_USER`, `GHCR_TOKEN`.
 2. **GitHub environments** `dev`, `uat`, `prod` (they already exist for the per-service deploys): `_deploy.yml` reads their variables `CLOUD` (= `ovh`) and
    `REGISTRY_URL` (= `ghcr.io/<owner>/<repo>`, so nothing is mirrored). `prod` keeps its required reviewers. Secrets `GITOPS_APP_ID` and `GITOPS_APP_PRIVATE_KEY` (the GitOps
    app) must be allowed to push to **release-1**: the deployables' image pins are committed there (`values-<env>.yaml`), not on main.
@@ -64,8 +64,8 @@ route-diff tests, shellcheck), then `make launch-set-check` (needs `kustomize` o
    `targetRevision: release-1`). A running cluster that was bootstrapped from main: apply the new file over the old Application.
 5. **Layerbase:** the plan now needs **4 databases** (`core`, `go`, `temporal`, `temporal_visibility`) instead of 19, and the admin needs `CREATEROLE` and `CREATEDB`, the ability
    to `GRANT` a role to itself (`WITH SET TRUE`, PostgreSQL 16 syntax), `CREATE EXTENSION postgis` and `btree_gist`, and `pg_read_all_data` (or superuser) for the dump. The `max_connections` of
-   the plan: the owner says up to 500 (UNVERIFIED in writing; ask, `ovh-production.md` section 14). Roles carry `CONNECTION LIMIT`; check Layerbase accepts it.
-6. **Secrets** (names only, values come from `secrets.local.env`, never from git): unchanged from `ovh-production.md` section 6; the only new inputs are `DB_LAYOUT=schema` and
+   the plan: the owner says up to 500 (UNVERIFIED in writing; ask, `release-1-go-live.md` section 16). Roles carry `CONNECTION LIMIT`; check Layerbase accepts it.
+6. **Secrets** (names only, values come from `secrets.local.env`, never from git): unchanged from `release-1-go-live.md` section 6; the only new inputs are `DB_LAYOUT=schema` and
    the two Secrets it renders.
 
 ## 3. Build
@@ -124,7 +124,7 @@ cosign verify ghcr.io/<owner>/<repo>/afrotransact-core:<full-sha> \
 
 ## 4. Database and secrets for a new environment
 
-1. Bootstrap the Postgres (once, then whenever a module is added): `ovh-production.md` section 5. In short:
+1. Bootstrap the Postgres (once, then whenever a module is added): `release-1-go-live.md` section 5.4. In short:
    `PGHOST=... PGUSER=<admin> PGPASSWORD=... PGSSLMODE=require STATE_DIR=$HOME/.afrotransact-prod infra/ops/postgres/release-1-bootstrap.sh`
    (or `DB_LAYOUT=schema infra/tofu/scripts/postgres-bootstrap.sh`, or `DB_LAYOUT=schema ... infra/ovh-vps/secrets.sh databases`: all three run the same SQL). It creates the roles **without a password**, sets
    the passwords from `STATE_DIR/generated.env` (`DBPW_<schema>`, generated once, 0600, never printed) and runs `release-1-verify.sql`, which fails if a role is too powerful, a connection limit
@@ -230,7 +230,7 @@ now selects the deployable's pods (the rollback path and what the public HTTPRou
 11. Dashboard **AfroTransact / Release 1 modules**: the module is `UP`, its pool is not saturated, p95 and 5xx by module are as before the cutover. Alerts `ModuleNotReady`, `CoreMemoryNearCap` quiet.
 12. Kafka: consumer group lag of the module's groups (`<module>-service`) is 0 or falling (`kafka-consumer-lag` board): the group ids are the old ones, so offsets carried over.
 13. Outbox: `outbox_pending_events` is not growing (the module's relay runs in core).
-14. One real journey through gateway-bff that touches the module (`tools/smoke`, or by hand: the smoke test of `ovh-production.md` section 10 for the batch's modules).
+14. One real journey through gateway-bff that touches the module (`tools/smoke`, or by hand: the smoke test of `release-1-go-live.md` section 8 for the batch's modules).
 15. Memory: `kubectl top pod -l app.kubernetes.io/name=afrotransact-core` after 30 minutes. **If a batch adds more than 80 MB RSS per module or core startup passes 60 s, stop and re-plan** (ADR 0011 review rule).
 
 Keep a batch in place for at least a week (checkout SLO unchanged for the money path) before the next one. Do not delete the old chart, workflow or Application: only the cutover phase of ADR 0011, after two release cycles

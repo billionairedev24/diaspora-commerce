@@ -178,7 +178,7 @@ architecture doc, "Route collisions").
 Java modules no longer reach each other over HTTP in core (ai-gateway's readers and mcp-server's tools included, 12.10 and 12.11 of
 `docs/engineering/release-1-architecture.md`); the only HTTP left is to the Go services and, for an edge whose callee is switched off (delivery-runs by
 default), the old `http://localhost:81xx` URL, which locally is core, so nothing needs re-configuring. **Only the local profile serves the old ports**: in uat and prod these edges and gateway-bff's calls need their URLs set, see
-`docs/runbooks/release-1-verification.md` section 5.
+`docs/runbooks/release-1-deploy.md` section 5a ("Upstream wiring").
 
 #### Database: one database, one schema per module
 

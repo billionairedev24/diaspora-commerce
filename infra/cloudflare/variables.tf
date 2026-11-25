@@ -98,7 +98,7 @@ variable "hsts_max_age" {
 }
 
 variable "hsts_preload" {
-  description = "Add the preload token to HSTS. Keep false until the apex is submitted at hstspreload.org (docs/runbooks/production-readiness.md); the list is hard to leave."
+  description = "Add the preload token to HSTS. Keep false until the apex is submitted at hstspreload.org (docs/runbooks/release-1-go-live.md); the list is hard to leave."
   type        = bool
   default     = false
 }

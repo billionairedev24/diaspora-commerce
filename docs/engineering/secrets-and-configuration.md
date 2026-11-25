@@ -175,7 +175,7 @@ Prices and free tiers change: check the provider's pricing page.
 - **Privacy:** ai-gateway sends `provider: {data_collection: "deny"}` on every request and `zdr: true` in uat and prod
   (`AI_PROVIDER_DATA_COLLECTION`, `AI_PROVIDER_ZDR`), so only providers that do not train on or retain prompts serve it. A
   model without such an endpoint is skipped and the next one in the route is tried. Also set the account-level privacy
-  options in OpenRouter (see `docs/runbooks/production-readiness.md`, section 10) and see the ai-gateway README.
+  options in OpenRouter (see `docs/runbooks/release-1-go-live.md` section 19.10) and see the ai-gateway README.
 - **Cost:** pay per token; set a credit limit on the key.
 
 ### Social sign-in (optional): identity

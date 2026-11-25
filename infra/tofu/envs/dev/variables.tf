@@ -169,7 +169,7 @@ variable "ovh_endpoint" {
 }
 
 variable "ovh_okms" {
-  description = "cloud = ovh only: create the OVH Secret Manager (OKMS) and write per-service seed secrets there. Default false: the launch path keeps secrets in SOPS/age files (docs/runbooks/ovh-production.md). OKMS in the US regions is UNVERIFIED and the module refuses a US region."
+  description = "cloud = ovh only: create the OVH Secret Manager (OKMS) and write per-service seed secrets there. Default false: the launch path keeps secrets in SOPS/age files (docs/runbooks/release-1-go-live.md). OKMS in the US regions is UNVERIFIED and the module refuses a US region."
   type        = bool
   default     = false
 }

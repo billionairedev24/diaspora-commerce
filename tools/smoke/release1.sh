@@ -2,7 +2,7 @@
 # make smoke: does the running local stack work, end to end? One PASS / FAIL line per check, the failing URL and status on a
 # FAIL, a summary, and a non-zero exit when anything failed. bash + curl + jq; read-only except an add-to-cart and (unless
 # SMOKE_CHECKOUT=0) one checkout that stops at the payment step, which leaves an unpaid "awaiting payment" order of the test
-# customer. Never prints a secret. Run it after `make up` and `make seed`. Docs: docs/runbooks/release-1-verification.md.
+# customer. Never prints a secret. Run it after `make up` and `make seed`. Docs: docs/runbooks/release-1-go-live.md (Appendix A, the owner checklist).
 #
 # Where things are (override any of them; the defaults are what `make up` starts):
 #   STACK=monolith (default) core :8120 + afrotransact-go :8200      STACK=services the old per-service processes

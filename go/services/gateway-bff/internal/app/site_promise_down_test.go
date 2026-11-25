@@ -17,7 +17,7 @@ func (downPromise) Promises(context.Context, string, []port.PromiseOffer) ([]por
 	return nil, errors.New("promise: dial tcp: lookup promise: no such host")
 }
 
-// Production launches WITHOUT the promise service (docs/runbooks/ovh-production.md). The BFF must keep serving the home page:
+// Production launches WITHOUT the promise service (docs/runbooks/release-1-go-live.md). The BFF must keep serving the home page:
 // only the rail that needs promised delivery days ("deliverable-fast") disappears; every other rail stays and Home does
 // not fail. Delivery dates elsewhere are simply not shown (no real basis, no date: ArrivalService).
 func TestHomeDegradesWhenThePromiseServiceIsNotDeployed(t *testing.T) {

@@ -1,5 +1,5 @@
 # LAUNCH SET: the services that get an Argo CD Application in uat and prod (dev uses no component and runs all 26).
-# Single source of truth (docs/runbooks/ovh-production.md, check: infra/argocd/scripts/check_launch_set.py):
+# Single source of truth (docs/runbooks/release-1-go-live.md, check: infra/argocd/scripts/check_launch_set.py):
 #   14 Java: identity catalog offers inventory orders payments seller fulfilment bookings tax-returns content trust-ops
 #            ai-gateway mcp-server
 #    7 Go:   gateway-bff cart search indexer geo media notifications

@@ -3,7 +3,7 @@
 # Plain-manifest / kustomize platform layers for one environment. manifestPath may contain CLOUD and ENV, replaced
 # with platform-values.yaml's cloud and argocd.env.
 # Secrets are NOT synced by Argo CD: they are SOPS/age files applied by infra/ops/secrets/apply.sh
-# (docs/runbooks/ovh-production.md section 7). To use OKMS + External Secrets instead (optional, not verified against a live
+# (docs/runbooks/release-1-go-live.md section 6). To use OKMS + External Secrets instead (optional, not verified against a live
 # account): add the external-secrets chart to platform-charts.yaml, add the element
 #   {component: secret-store, wave: "-3", manifestPath: infra/k8s/platform/secret-stores/CLOUD}
 # below and `infra/k8s/platform/lean/external-secrets` to the lean kustomization.

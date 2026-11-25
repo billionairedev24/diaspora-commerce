@@ -24,7 +24,7 @@
 -- To add a module: add `schema:pool` to core_modules or go_modules below, re-run, then run release-1-bootstrap.sh to set its password.
 -- The pools MUST equal modules.<name>.pool in java/apps/core/deploy/helm/values.yaml and go/apps/afrotransact-go/deploy/helm/values.yaml:
 -- `python3 tools/release/check_delivery.py` fails when they drift.
--- Verify with release-1-verify.sql. Admin needs CREATEROLE and CREATEDB (Layerbase: UNVERIFIED, docs/runbooks/ovh-production.md section 14).
+-- Verify with release-1-verify.sql. Admin needs CREATEROLE and CREATEDB (Layerbase: UNVERIFIED, docs/runbooks/release-1-go-live.md section 16).
 
 \set ON_ERROR_STOP on
 \if :{?role_suffix}

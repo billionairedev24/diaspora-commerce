@@ -9,7 +9,7 @@
 #   PASSWORD_MODE=generated (default)  <STATE_DIR>/generated.env holds DBPW_<schema>=<value>, the file infra/ovh-vps/secrets.sh reads with
 #                                      the same key names, so the Secrets rendered later carry the same values (the old per-service
 #                                      roles <db>_app are the same roles). A missing value is generated there (mode 0600). Back that
-#                                      directory up OFFLINE, separately from the database dumps (docs/runbooks/ovh-production.md section 6).
+#                                      directory up OFFLINE, separately from the database dumps (docs/runbooks/release-1-go-live.md section 6).
 #   PASSWORD_MODE=name                 password = the schema name: LOCAL AND CI ONLY (infra/local, the CI Postgres service).
 # Other variables: ROLE_SUFFIX (default _app; local and CI use "" or what their init uses), EXTENSIONS (default postgis,btree_gist),
 #   CONN_LIMITS=false for no per-role CONNECTION LIMIT (local), EXTRA_CORE_MODULES=retail:3,delivery_runs:3 for modules outside the launch set,

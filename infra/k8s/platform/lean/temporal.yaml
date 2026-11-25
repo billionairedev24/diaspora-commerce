@@ -4,7 +4,7 @@
 # One replica means workflows pause (and resume) during a restart; they are durable in Postgres.
 # Secret "temporal" (namespace temporal; infra/ops/secrets/apply.sh): POSTGRES_SEEDS (Layerbase host), DB_PORT, POSTGRES_USER
 # (temporal_app), POSTGRES_PWD. Both databases are created by infra/tofu/scripts/postgres-bootstrap.sh BEFORE this starts
-# (SKIP_DB_CREATE=true). Connections: DB_CONNECT_MAX_CONNS=5 per database, so at most 10 (docs/runbooks/ovh-production.md).
+# (SKIP_DB_CREATE=true). Connections: DB_CONNECT_MAX_CONNS=5 per database, so at most 10 (docs/runbooks/release-1-go-live.md).
 apiVersion: v1
 kind: Service
 metadata:

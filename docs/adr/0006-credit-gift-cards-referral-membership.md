@@ -38,7 +38,7 @@ One shopper **credit ledger** is the base of everything; the other three program
    Benefits are applied through the fee rule resolution of ADR 0005 and the credit ledger and recorded on every order. Cancel
    any time; the benefit runs to period end; failed renewals retry, then lapse.
 5. **Money rules.** Credit is stored value: terms (no cash-out, non-transferable) are shown at the point of use; legal review of
-   stored-value and gift card rules per state is a launch checklist item (docs/runbooks/production-readiness.md). Finance sees
+   stored-value and gift card rules per state is a launch checklist item (docs/runbooks/release-1-go-live.md). Finance sees
    credit and gift card liabilities as separate reports.
 
 ## Consequences

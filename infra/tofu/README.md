@@ -4,7 +4,7 @@
 roots can also target AWS, Google Cloud or Azure with one variable (`cloud`), but those are alternatives, not the launch path
 ([ADR 0004](../../docs/adr/0004-lean-single-node-production.md), [cost and sizing](../../docs/engineering/cloud-cost.md)).
 Nothing here has been applied to a live account: treat every OVH resource as **unrun** until the first apply in a disposable project
-(step by step: [docs/runbooks/ovh-production.md](../../docs/runbooks/ovh-production.md)).
+(step by step: [docs/runbooks/release-1-go-live.md](../../docs/runbooks/release-1-go-live.md)).
 
 Cloudflare sits in front (`infra/cloudflare`, Tunnel, no load balancer). Search is Meilisearch, events are Kafka and workflows are
 Temporal, all **in the cluster** (`infra/k8s/platform/lean`). Elastic Cloud, Confluent Cloud and Temporal Cloud are not used
@@ -92,7 +92,7 @@ conftest test plan.json --policy ../../../policy/tofu
 tofu apply plan.out
 ```
 
-After the first apply (full runbook in `docs/runbooks/ovh-production.md`):
+After the first apply (full runbook in `docs/runbooks/release-1-go-live.md`):
 
 1. Download the kubeconfig (`tofu output cluster` prints the hint), set the cluster up (Argo CD, secrets).
 2. Create the databases, roles and extensions on Layerbase **before any service starts**:

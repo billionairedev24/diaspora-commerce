@@ -4,7 +4,7 @@
   OVHcloud + Layerbase. This revision replaces the cloud choice and keeps the lean shape.
 - **Date:** 2026-10-18 (revised 2026-11-12)
 - **Deciders:** platform owner
-- **Related:** `docs/engineering/cloud-cost.md`, `docs/runbooks/ovh-production.md`, `docs/runbooks/restore-drill.md`,
+- **Related:** `docs/engineering/cloud-cost.md`, `docs/runbooks/release-1-go-live.md`, `docs/runbooks/restore-drill.md`,
   `docs/engineering/keycloak-migration.md`, `infra/tofu/envs/prod/sizing.tf`, `infra/argocd/launch-set/`
 
 ## Context
@@ -15,7 +15,7 @@ Temporal Cloud) at a USD 6,500 budget. The target is now a **launch** for a smal
 is still operable by one person, on **OVHcloud (US entity)** for compute and **Layerbase** for PostgreSQL.
 
 Nothing in this ADR has been applied to a live account. Every vendor fact is tagged UNVERIFIED in `cloud-cost.md` and
-`ovh-production.md` until someone has confirmed it with the vendor or on the first apply.
+`release-1-go-live.md` until someone has confirmed it with the vendor or on the first apply.
 
 ## Decision
 

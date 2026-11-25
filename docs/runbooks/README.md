@@ -7,7 +7,6 @@ One page per alert (below), plus operational procedures. Every alert's `runbook_
 
 | Procedure | When |
 |---|---|
-| [Production on OVH + Layerbase](ovh-production.md) | the production launch from zero: OVH US account, tofu, kubeconfig, Cloudflare Tunnel, Layerbase databases, SOPS secrets, Argo CD, first sync order, smoke test, rollback, vendor questions |
 | [Restore drill](restore-drill.md) | nightly off-vendor backups, escrow of the keys that cannot be re-created, RPO 24 h / RTO 4 h, the drill and the incident restore |
 | [Stripe webhooks](stripe-webhooks.md) | creating, verifying, rotating and troubleshooting the three Stripe webhook endpoints (payments, seller Connect, seller plan fees) for UAT and PROD |
 | [Finance: payouts, reconciliation and ledger adjustments](finance-reconciliation.md) | approving a payout, the daily Stripe reconciliation, four-eyes ledger corrections, Stripe lookups |
@@ -16,7 +15,6 @@ One page per alert (below), plus operational procedures. Every alert's `runbook_
 | [Settings in the staff console](settings.md) | where every platform setting lives, who calculates sales tax (our rules or Stripe Tax), finding a transfer in Stripe |
 | [v1 to v2 migration](v1-to-v2-migration.md) | moving production from v1 to v2 on the same Stripe account: Stripe inventory, test-mode rehearsal, freeze, webhook swap, data mapping, DNS, comms, rollback, go/no-go |
 | [Backups on Backblaze B2](backups-backblaze.md) | creating the per-environment bucket and its bucket-scoped key, retention days and the lifecycle rule, Object Lock, testing with rclone, restoring one database inside the RTO, rotating the key, the backup size and staleness alerts |
-| [Production readiness review](production-readiness.md) | what was checked, what could not be, and what blocks go-live |
 | [Cost](cost.md) | a budget alert fired; the monthly cost review |
 | [Kafka dead letters, replay and recovery](kafka-replay.md) | an event was not applied by a consumer: inspect a DLQ, replay records, reset a consumer group's offsets, re-publish outbox rows, rebuild a read model (`tools/ops/kafka-replay`) |
 | [Carrier sandboxes](carrier-sandboxes.md) | proving USPS / UPS / FedEx / DHL against their sandboxes; carrier credentials |
