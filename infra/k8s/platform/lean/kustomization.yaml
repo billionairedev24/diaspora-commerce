@@ -1,7 +1,7 @@
 # Lean (single-node) platform data plane for prod on OVH. Everything here runs in the cluster EXCEPT Postgres (Layerbase).
 #   Kafka         events and the outbox relay (sign-up codes go through it)      kafka.yaml
 #   Temporal      checkout saga, state in Layerbase (temporal, temporal_visibility)  temporal.yaml
-#   Valkey        MANAGED on Layerbase (not a pod): REDIS_URL from EXTERNAL_REDIS_URL  (data/valkey.yaml is kept, unreferenced)
+#   Valkey        MANAGED on Layerbase (not a pod): REDIS_URL from EXTERNAL_REDIS_URL
 #   Meilisearch   search index (rebuildable)                                     data/meilisearch.yaml
 #   backup        nightly pg_dump of the 18 databases to another vendor's bucket backup/
 #   alloy         Grafana Alloy + kube-state-metrics: metrics and logs to Grafana Cloud    alloy/
@@ -19,7 +19,6 @@ resources:
   - data/namespace.yaml
   - kafka.yaml
   - temporal.yaml
-  # data/valkey.yaml     # REMOVED for the OVH go-live: Valkey is a managed Layerbase service (EXTERNAL_REDIS_URL); the manifest stays for the dev box
   - data/meilisearch.yaml
   - data/clamav.yaml      # F10: malware scan of uploads, ~1.25 GiB request; remove if a hosted scanner is used (docs/runbooks/malware-scanning.md)
   - backup

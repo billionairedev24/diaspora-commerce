@@ -180,7 +180,7 @@ audience and before/after).
   `staff-console.identity-admin.spec.ts` (including the axe checks).
 - Step-up: `StepUpServiceImplTest`, `IdentityTokenCustomizerTest` (`auth_time`), `IdentityAdminIT` (proof required, wrong password,
   expiry, audit), `StepUpFreshSignInIT` (a fresh sign-in needs no proof).
-- Developers testing on the dev / OVHcloud test environment follow [identity-admin-dev-test.md](identity-admin-dev-test.md).
+- Developers testing on dev or UAT follow [identity-admin-dev-test.md](identity-admin-dev-test.md).
 
 ## Not covered yet
 

@@ -107,12 +107,12 @@ every environment. **`release-1-sync.yml`** opens the pull request that carries 
 | Workflow | On release-1 |
 |---|---|
 | `java-<service>.yml`, `go-<service>.yml`, `_java-service.yml`, `_go-service.yml` | per-service, trigger on **main and develop only**: release-1 builds the two images |
-| `backlog`, `contracts`, `deploy-guide`, `docs`, `env-urls`, `kafka-topics`, `legal-documents`, `observability-config`, `security`, `seed-guard`, `storybook`, `tofu`, `tool-kafka-replay`, `workflows` | validate release-1 pushes too (`branches: [main, release-1]`) and pull requests into it |
+| `backlog`, `contracts`, `docs`, `env-urls`, `kafka-topics`, `legal-documents`, `observability-config`, `security`, `seed-guard`, `storybook`, `tofu`, `tool-kafka-replay`, `workflows` | validate release-1 pushes too (`branches: [main, release-1]`) and pull requests into it |
 | `web-*` (generated) | preview on pull requests, dev on pushes to main **and** release-1 (one concurrency group), prod only by dispatch and only of a commit release-1 contains |
 | `mobile` | OTA preview from release-1; a production store build only of a commit release-1 contains |
 | `promote` (generated) | runs only from release-1; the tag's commit must be on release-1 (deployables) or main/release-1 (a per-service image) |
 | `_deploy` | pins of the deployables **and of every uat, trial and prod promotion** are committed to release-1 (Argo CD tracks it); a per-service dev pin stays on the GitOps branch (main) and arrives with the sync |
-| `ovh-images`, `ovh-vps`, `ovh-web`, `trial`, `carrier-sandboxes` | manual only; `ovh-images` and `ovh-vps` are the per-service single-VPS path and need images built on main |
+| `uat-unverified-image`, `carrier-sandboxes` | manual only; `uat-unverified-image` builds an unverified image for UAT only (go-live section 4.3) |
 
 Verify a published image by hand:
 

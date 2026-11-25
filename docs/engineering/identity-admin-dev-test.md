@@ -1,15 +1,15 @@
 # Identity admin console: developer test plan
 
 A step-by-step plan to test **Settings › Identity & access** (story S291, guide: [identity-admin.md](identity-admin.md)) on a deployed
-environment: the shared dev cluster or the single-server OVHcloud test environment ([ovh-vps runbook](../runbooks/ovh-vps.md)). It
+environment: the shared dev cluster or UAT ([release-1-go-live.md](../runbooks/release-1-go-live.md)). It
 takes about 45 minutes. Do the steps in order: later ones use what earlier ones create. Everything you create is prefixed
 `dev-test-` so you can tell it from the platform's own clients.
 
-Replace `<base>` with the environment's domain: `dev.afrotransact.com` for the shared dev cluster, your `OVH_DOMAIN` for the OVHcloud
-environment. The addresses are `https://admin.<base>` (staff console), `https://auth.<base>` (identity, the OIDC issuer) and
-`https://api.<base>` (gateway-bff). On the OVHcloud server the staff console is a Cloudflare Worker, not a pod: it must be deployed
-(or run locally with `API_BASE_URL` pointing at `https://api.<base>`) and signed in through `https://auth.<base>`
-([ovh-vps runbook, step 7](../runbooks/ovh-vps.md)).
+The hosts follow `infra/cloudflare/hosts.json` (`docs/engineering/environments.md`): for UAT `https://admin-uat.afrotransact.com`
+(staff console), `https://auth-uat.afrotransact.com` (identity, the OIDC issuer) and `https://api-uat.afrotransact.com` (gateway-bff); for
+dev the same with `-dev`. Below, `admin.<base>`, `auth.<base>` and `api.<base>` stand for those hosts. The staff console is a Cloudflare
+Worker, not a pod: it must be deployed (`web-staff-console`, `environment: uat`) and signed in through the auth host. On release-1 identity
+is a module of `afrotransact-core` and notifications of `afrotransact-go`.
 
 ## 0. Before you start
 
@@ -22,22 +22,22 @@ environment. The addresses are `https://admin.<base>` (staff console), `https://
 | identity's token signing key is an **RSA** key | `curl -s https://auth.<base>/oauth2/jwks \| jq '.keys[] \| {kid, kty, alg}'` | one key: `kty` `RSA`, `alg` `RS256`, `kid` = `SIGNING_KEY_ID` (for example `identity-dev-1`) |
 | `IDENTITY_DATA_KEY` is set | identity starts (without it the data-protection cipher refuses to) | pod `Running`, `/.well-known/openid-configuration` answers |
 
-**OVHcloud environment, first time only.** Earlier versions of `infra/ovh-vps/secrets.sh` generated an *EC* signing key, which identity
+**Signing key, first time only.** Earlier versions of `infra/ovh-vps/secrets.sh` generated an *EC* signing key, which identity
 cannot load: it stopped at start-up with `SIGNING_KEY_PEM must be a PKCS#8 RSA private key`. The script now generates RSA 3072 and replaces
-an EC key it finds in `/var/lib/afrotransact/identity-signing-key.pem` (the old file is kept as `identity-signing-key.pem.not-rsa.<time>`).
-Run the **`services`** action of the `ovh-vps` workflow once, then restart identity if it was crash-looping.
+an EC key it finds in `$STATE_DIR/identity-signing-key.pem` (the old file is kept as `identity-signing-key.pem.not-rsa.<time>`).
+Re-render and apply the Secrets (go-live section 6), then restart `afrotransact-core` if it was crash-looping.
 
 ### Who can sign in
 
 | Account | Where it comes from | Can do |
 |---|---|---|
-| The **bootstrap super admin** | OVHcloud: `ADMIN_EMAIL`, the generated password that `make ovh-gh-setup` showed once, `ADMIN_PHONE`. Shared dev: `BOOTSTRAP_ADMIN_*` in the `afrotransact/dev/identity` secret | Super Admin: everything, including `identity:admin` |
+| The **bootstrap super admin** | UAT: `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_PHONE` from `secrets.local.env` (go-live section 6). Shared dev: `BOOTSTRAP_ADMIN_*` in the `afrotransact/dev/identity` secret | Super Admin: everything, including `identity:admin` |
 | Another **Super Admin** | Users & roles › People › the user, assign the Super Admin role | the same |
 | A staff member **without** `identity:admin` (for step 1) | Users & roles › New staff user with the **Developer** role, or `staff.developer@afrotransact.test` where `IDENTITY_TEST_USERS=true` (password `IDENTITY_TEST_USERS_PASSWORD`) | everything the Developer role has, but no Identity & access |
 | A customer (for steps 6 and 9) | sign up on the storefront, or `customer.houston@afrotransact.test` where test users are on | storefront sign-in only |
 
-Staff **always** need a second factor. The code is a text message to the account's phone. On the OVHcloud environment without Twilio keys the
-text is only logged: read it in `sudo k3s kubectl -n afrotransact-dev logs deploy/notifications --tail=50`. Tick *Trust this browser for
+Staff **always** need a second factor. The code is a text message to the account's phone. Without Twilio keys the
+text is only logged: read it in `kubectl -n afrotransact-<env> logs deploy/afrotransact-go --tail=50 | grep -i notification`. Tick *Trust this browser for
 30 days* to skip it afterwards. Identity allows only a few codes per hour per account: do not sign the admin in and out repeatedly.
 
 ## 1. Who sees it (permission and navigation)
@@ -125,8 +125,7 @@ Be careful with the second-factor switches on a shared environment: they force e
 ## 7. Audit trail
 
 Every change in steps 2 to 6 wrote an entry to identity's append-only access log: who, what, the reason, and before/after values for edits.
-Read it in the database (`sudo k3s kubectl -n data exec -it postgres-0 -- psql -U at_admin -d identity` on the OVHcloud server in
-`DB_MODE=cluster`, the admin password is in `/var/lib/afrotransact/generated.env`):
+Read it in the database (release-1: `psql "host=<Layerbase host> dbname=core user=<admin> sslmode=require"` with `set search_path = identity;`):
 
 ```sql
 select at, actor_id, action, subject, left(detail, 140)
@@ -157,7 +156,7 @@ never sign again (that is the point of rotating). What you can do, from least to
 
 1. **Nothing needs rolling back in the normal case.** Tokens signed by the previous key keep verifying until *Retires after*. New tokens
    carry the new key. A service that complains about an unknown `kid` refetches the JWKS itself; if one keeps its cache, restart that
-   pod (`sudo k3s kubectl -n afrotransact-dev rollout restart deploy/<service>`).
+   deployable (`kubectl -n afrotransact-<env> rollout restart deploy/afrotransact-core`, or `deploy/afrotransact-go`).
 2. **Rotate again** from the console if the new key is unwanted (a new key replaces it; the unwanted key keeps verifying only until it
    retires).
 3. **Compromised key, cut the overlap now.** After rotating, end the overlap so tokens signed by the old key stop verifying at once
@@ -211,4 +210,4 @@ secrets, and `GET /v1/admin/data-protection` counts both per key.
 | identity run locally on PostgreSQL 16 and driven with curl | create client, secret shown once, token with the new client, inspector, revoke, rotate the signing key (JWKS lists both keys at once, new tokens use the new `kid`), old token still verifies until retirement, disabled client refused, enabled again, `gateway-bff` cannot be disabled, step-up refused without proof, with a wrong password and with a made-up proof, accepted with a proof |
 | Integration tests (`IdentityAdminIT`, `StepUpFreshSignInIT`, `DataProtectionIT`) | pass against PostgreSQL 16 |
 | gateway-bff conformance test of every operation against `gateway-bff-staff.yaml` | passes (identity is a fake there) |
-| **The real BFF in front of the real identity, the staff console in a browser, and the OVHcloud and shared dev environments** | **not verified before this plan: you are the first.** Report what differs |
+| **The real BFF in front of the real identity, the staff console in a browser, and UAT and the shared dev environment** | **not verified before this plan: you are the first.** Report what differs |

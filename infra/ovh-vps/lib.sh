@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Shared helpers for bootstrap.sh / secrets.sh / deploy.sh (run on the server, as root).
+# Shared helpers for secrets.sh (renders the Kubernetes Secrets on an operator machine; infra/ops/secrets/README.md).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 STATE_DIR="${STATE_DIR:-/var/lib/afrotransact}"
-# PROFILE=dev (default, the test box: dev values, all 26 services) | prod (the launch set, APP_ENV=prod, namespace afrotransact-prod).
-# prod is used by infra/ops/secrets to RENDER the production Secrets on an operator's machine; the single-server deploy.sh
-# stays a test path (docs/runbooks/ovh-vps.md) and is not how production is deployed (docs/runbooks/ovh-production.md).
+# PROFILE=dev (default: dev values, every service of services.conf, the list tools/release/parity.py also checks) |
+# prod (the launch set, APP_ENV=prod, namespace afrotransact-prod). prod and uat are used by infra/ops/secrets to RENDER the Secrets on an
+# operator's machine (docs/runbooks/release-1-go-live.md section 6).
 PROFILE="${PROFILE:-dev}"
 # PROFILE=uat (release-1, UAT on OVH): the launch set like prod, APP_ENV=uat, namespace afrotransact-uat, no OpenFGA, Stripe TEST keys.
 case "$PROFILE" in dev|prod|uat) ;; *) echo "error: PROFILE must be dev, uat or prod" >&2; exit 1 ;; esac
@@ -24,7 +24,7 @@ load_config() {
   set -a; . "$HERE/config.env"; [[ -f "$HERE/secrets.local.env" ]] && . "$HERE/secrets.local.env"; set +a
   : "${DOMAIN:?}" "${IMAGE_REGISTRY:?}" "${IMAGE_TAG:?}" "${DB_MODE:=cluster}" "${STOREFRONT_HOST:=www}"
   case "$STOREFRONT_HOST" in www|apex) ;; *) die "STOREFRONT_HOST must be www or apex" ;; esac
-  # Optional explicit web hosts (full hostnames, default seller.$DOMAIN / admin.$DOMAIN); same rules as tools/ovh/web-hosts.sh.
+  # Optional explicit web hosts (full hostnames, default seller.$DOMAIN / admin.$DOMAIN); lower-case DNS names.
   : "${SELLER_HOST:=}" "${ADMIN_HOST:=}" "${MEDIA_PUBLIC_URL:=}"
   local h re='^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$'
   for h in "$SELLER_HOST" "$ADMIN_HOST"; do

@@ -111,7 +111,7 @@ Prices and free tiers change: check the provider's pricing page.
   Thin), one endpoint per signing secret; the endpoint's *Signing secret* goes into the secret store. The complete guide
   (click paths for both dashboard layouts, verification, rotation, troubleshooting) is
   [docs/runbooks/stripe-webhooks.md](../runbooks/stripe-webhooks.md). Public URLs are on the API host
-  (`https://api.<domain>`, the OVH test environment `https://api.test.afrotransact.com`); events per endpoint, as handled by the code:
+  (`https://api.<domain>`, UAT `https://api-uat.afrotransact.com`); events per endpoint, as handled by the code:
 
   | Endpoint (URL on `https://api.<domain>`) | Listen to | Events | Variable |
   |---|---|---|---|

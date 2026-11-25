@@ -2,9 +2,8 @@
 
 THE reference for the three Stripe webhook endpoints of AfroTransact: why each exists, how to create it in the Stripe
 dashboard (both the current **Workbench** layout and the older **Developers > Webhooks** layout), which events to select,
-where the signing secret goes, how to check that it works, and what to do when it does not. It covers the OVHcloud test
-environment (`https://api.test.afrotransact.com` is the example host everywhere below), the real environments (dev, uat,
-prod) and your laptop.
+where the signing secret goes, how to check that it works, and what to do when it does not. It covers UAT
+(`https://api-uat.afrotransact.com` is the example host everywhere below), PROD (`https://api.afrotransact.com`) and your laptop.
 
 If you only want the short version, use the [checklist table](#checklist-copy-paste) and the
 [quick route check](#2-quick-route-check-no-stripe-needed).
@@ -44,13 +43,13 @@ means the service is down, a certificate error means TLS is not ready.
 ```bash
 for p in payments/v1/webhooks/stripe seller/v1/webhooks/stripe-connect seller/v1/webhooks/stripe-billing; do
   printf '%s -> ' "$p"
-  curl -s -o /dev/null -w '%{http_code}\n' -X POST "https://api.test.afrotransact.com/$p" \
+  curl -s -o /dev/null -w '%{http_code}\n' -X POST "https://api-uat.afrotransact.com/$p" \
     -H 'Content-Type: application/json' -d '{}'
 done
 # expected: three times 400
 ```
 
-`make deploy-guide ARGS=--doctor` (and phase 8 "smoke" of `make deploy-guide`) runs the same check and points back here.
+`ENV=uat tools/smoke/go-live.sh` (or `ENV=prod`) runs the same check, read-only.
 
 A `400` proves the route and the signature check only. It does **not** prove that the secret is set or right (a service
 without a secret answers `400` too). That is proven by a **Send test event** returning `2xx` (section 6).
@@ -61,7 +60,7 @@ without a secret answers `400` too). That is proven by a **Send test event** ret
 2. **Test mode vs Live mode.** The toggle is at the top right of the dashboard ("Test mode", or **Sandbox** in newer
    accounts, which behaves the same way for this purpose). Test and live have **separate API keys, separate webhook
    endpoints and separate signing secrets**. A secret made in test mode never verifies live events and the other way
-   round. Everything below is done in the mode that matches the environment: **test mode for the OVH test environment, dev
+   round. Everything below is done in the mode that matches the environment: **test mode for dev
    and uat; live mode only for prod** (payments refuses live keys outside prod).
 3. **Keys** in the same account and mode: `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`
    (Developers > API keys). See [secrets-and-configuration.md](../engineering/secrets-and-configuration.md).
@@ -90,7 +89,7 @@ Both end the same way: you get a URL, an event list and a **Signing secret**.
 
 ### 4.1 Endpoint 1: platform payments webhook (`STRIPE_WEBHOOK_SECRET`)
 
-URL: `https://api.test.afrotransact.com/payments/v1/webhooks/stripe` (real environments:
+URL: `https://api-uat.afrotransact.com/payments/v1/webhooks/stripe` (real environments:
 `https://api.<base>/payments/v1/webhooks/stripe`, for example `https://api-dev.afrotransact.com/...`).
 
 | Setting | Value |
@@ -112,7 +111,7 @@ destination**. On the destination's page, *Signing secret* > **Reveal** (or the 
 
 ### 4.2 Endpoint 2: seller Connect webhook (`STRIPE_CONNECT_WEBHOOK_SECRET`)
 
-URL: `https://api.test.afrotransact.com/seller/v1/webhooks/stripe-connect` (real: `https://api.<base>/seller/v1/webhooks/stripe-connect`).
+URL: `https://api-uat.afrotransact.com/seller/v1/webhooks/stripe-connect` (real: `https://api.<base>/seller/v1/webhooks/stripe-connect`).
 
 | Setting | Value |
 |---|---|
@@ -137,7 +136,7 @@ Create it if sellers may pay their plan by **US bank debit** (a PaymentIntent th
 test environment that uses cards only; `STRIPE_BILLING_WEBHOOK_SECRET` may then stay empty and the endpoint answers `400`
 to everything, which is harmless.
 
-URL: `https://api.test.afrotransact.com/seller/v1/webhooks/stripe-billing` (real: `https://api.<base>/seller/v1/webhooks/stripe-billing`).
+URL: `https://api-uat.afrotransact.com/seller/v1/webhooks/stripe-billing` (real: `https://api.<base>/seller/v1/webhooks/stripe-billing`).
 
 | Setting | Value |
 |---|---|
@@ -167,37 +166,28 @@ The signing secret is shown on the endpoint's page (**Reveal**). One endpoint, o
 
 ## 5. How the secret reaches the pod, and how to apply a change
 
-**OVH test environment**
+**UAT and PROD (release-1, OVH Managed Kubernetes)**
 
 ```
-Stripe dashboard (whsec_...) -> deploy wizard phase 8 (make deploy-guide) or make ovh-gh-setup
-  -> GitHub Environment "ovh-vps" secret  STRIPE_WEBHOOK_SECRET / STRIPE_CONNECT_WEBHOOK_SECRET / STRIPE_BILLING_WEBHOOK_SECRET
-  -> workflow ovh-vps (read in .github/workflows/ovh-vps.yml)
-  -> tools/ovh/render-config.sh writes secrets.local.env on the server
-  -> infra/ovh-vps/secrets.sh services builds the Kubernetes Secrets  payments-secrets / seller-secrets
-  -> pod environment variable (read once at pod start)
+Stripe dashboard (whsec_...) -> infra/ovh-vps/secrets.local.env (git-ignored; `tools/release/uat-env.sh split` writes it for UAT)
+  -> infra/ovh-vps/secrets.sh services (PROFILE=uat|prod, DB_LAYOUT=schema, SECRETS_OUT=<dir>) renders afrotransact-core-secrets
+  -> sops --encrypt, infra/ops/secrets/apply.sh (ENV=uat|prod) applies the Secret
+  -> pod environment variable of afrotransact-core (read once at pod start)
 ```
 
-To apply a new or changed secret:
+To apply a new or changed secret (the same steps as [release-1-go-live.md](release-1-go-live.md) section 6, step 3.8):
 
-1. Store it: `make deploy-guide ARGS='--set STRIPE_CONNECT_WEBHOOK_SECRET'` (or re-run `make ovh-gh-setup`).
-2. Run the workflow: **Actions > ovh-vps > Run workflow > action `services`** (approve it). This rewrites the Kubernetes
-   Secrets.
-3. **Restart the service that reads it.** A running pod keeps the value it started with, and `services` only rolls pods whose
-   image tag changed, so restart explicitly (SSH to the server, see [ovh-vps.md](ovh-vps.md) step 7):
+1. Put the `whsec_` value into `infra/ovh-vps/secrets.local.env`.
+2. `cd infra/ovh-vps && PROFILE=$ENV DB_LAYOUT=schema STATE_DIR=$HOME/.afrotransact-$ENV SECRETS_OUT=$(mktemp -d) ./secrets.sh services`,
+   copy the output into `infra/ops/secrets/$ENV/`, `sops --encrypt --in-place`, then `ENV=$ENV ./apply.sh` in `infra/ops/secrets`.
+3. **Restart the deployable that reads it.** A running pod keeps the value it started with: payments and seller are modules of
+   `afrotransact-core`, so
    ```bash
-   sudo k3s kubectl -n afrotransact-dev rollout restart deploy/payments   # STRIPE_WEBHOOK_SECRET
-   sudo k3s kubectl -n afrotransact-dev rollout restart deploy/seller     # STRIPE_CONNECT_WEBHOOK_SECRET, STRIPE_BILLING_WEBHOOK_SECRET
-   sudo k3s kubectl -n afrotransact-dev rollout status deploy/seller
+   kubectl -n afrotransact-$ENV rollout restart deploy/afrotransact-core
+   kubectl -n afrotransact-$ENV rollout status deploy/afrotransact-core
    ```
-   (The wizard's phase 8 offers to run step 2 for you; do step 3 afterwards.)
 
-**Real environments (dev, uat, prod on Kubernetes):** the secret goes into the environment's secret store with
-`scripts/secret-set.sh <cloud> ENV payments STRIPE_WEBHOOK_SECRET=-` (and `ENV seller STRIPE_CONNECT_WEBHOOK_SECRET=-
-STRIPE_BILLING_WEBHOOK_SECRET=-`); see [first-environment.md](first-environment.md). External Secrets syncs it into the pod's
-Secret; then restart the pods: uat and prod run Argo Rollouts, so `kubectl argo rollouts restart payments -n afrotransact-ENV` (and `seller`); dev
-uses plain Deployments, `kubectl -n afrotransact-dev rollout restart deploy/payments deploy/seller`. The public routes are in
-`infra/k8s/platform/edge/overlays/<env>/routes.yaml`.
+The public routes are in `infra/k8s/platform/edge/overlays/<env>/routes.yaml`.
 
 **Careful:** while `GIFT_CARD_CODE_KEY` and `REFERRAL_SIGNAL_KEY` (payments) are empty, payments derives them from
 `STRIPE_WEBHOOK_SECRET`. Changing that secret on an environment that already has gift cards or referral data changes those
@@ -213,11 +203,10 @@ HMACs. Set both keys explicitly **before** the first rotation of `STRIPE_WEBHOOK
    * Open the **Event deliveries** (older: **Attempts**) tab: the attempt must show **200**. A test event has no real
      payment or account behind it: the service stores and acknowledges it (`outcome` `ignored`, or `unknown account`), which is
      correct. `400` here means wrong secret, wrong mode or Thin payload (troubleshooting below).
-3. **Logs** (SSH to the server as in ovh-vps.md; real environments: your log tool):
+3. **Logs** (Grafana Cloud, or directly):
    ```bash
-   sudo k3s kubectl -n afrotransact-dev logs deploy/payments --tail=100 | grep -i -E "webhook|signature|stripe"
-   sudo k3s kubectl -n afrotransact-dev logs deploy/seller   --tail=100 | grep -i -E "webhook|signature|stripe"
-   sudo k3s kubectl -n afrotransact-dev logs -n ingress deploy/traefik --tail=50 2>/dev/null | grep webhooks   # request reached the edge
+   kubectl -n afrotransact-$ENV logs deploy/afrotransact-core --tail=200 | grep -i -E "webhook|signature|stripe"
+   kubectl -n ingress logs deploy/cloudflared --tail=50   # the request reached the tunnel
    ```
    A failed signature logs as `payments.invalid-signature` / `seller.invalid-signature` (HTTP 400).
 4. **A real end-to-end event** (test mode): pay for an order with card `4242 4242 4242 4242`; the order leaves "payment
@@ -237,8 +226,7 @@ directly: `localhost:8105/v1/webhooks/stripe` (payments) and `localhost:8106/v1/
 
 * Create **separate** endpoints in **Live mode** (toggle off Test mode). Same URLs pattern with the prod host
   (`https://api.<base>/...`), same events, same *Snapshot*; a **new** signing secret per endpoint.
-* Live keys (`sk_live_`, `pk_live_`) are accepted only in prod (`require-live-key`); the secrets live in prod's own secret store, never in the
-  test environment.
+* Live keys (`sk_live_`, `pk_live_`) are accepted only in prod (`require-live-key`); the secrets live in prod's own `secrets.local.env` / SOPS files, never in UAT.
 * Connect in live mode needs the platform profile and business verification of the platform account to be completed in
   the dashboard first.
 * Never reuse a test `whsec_` in prod or the other way round: the symptom is `400` on every delivery while the route check still says `400`.
@@ -263,14 +251,14 @@ Rotate after a leak (a secret pasted in chat, a log or a screenshot) immediately
 
 | Symptom (Stripe "Event deliveries" / curl) | Cause | Fix |
 |---|---|---|
-| `404` (Traefik body `404 page not found`) | The route is missing or the URL is wrong: a typo, `/v1/webhooks/stripe` without the `/payments` or `/seller` prefix, or an old server deployed before the seller routes existed | Use the URLs of the checklist. Re-run **ovh-vps** action `edge` (or `deploy`). Real environments: the edge overlay `routes.yaml` must contain the route, then sync Argo CD. Run `python3 tools/ci/check_webhook_routes.py` |
+| `404` | The route is missing or the URL is wrong: a typo, `/v1/webhooks/stripe` without the `/payments` or `/seller` prefix | Use the URLs of the checklist. The edge overlay `routes.yaml` must contain the route, then sync Argo CD (`edge-$ENV`). Run `python3 tools/ci/check_webhook_routes.py` |
 | `400` on **unsigned** curl | Expected. It is the success answer of the quick route check | nothing |
 | `400` on a **Stripe** delivery (`*.invalid-signature`) | Wrong secret (the endpoint's secret is in another variable, or an old value), wrong **mode** (test secret on a live endpoint or the reverse), the secret was changed but the pod not restarted, an empty secret, or a **Thin** payload | Reveal the endpoint's secret again and compare it with the variable of its row in section 4; section 5 step 3 (restart); check the Test/Live toggle; recreate the destination with **Snapshot** |
-| `401` / `403` | Something in front of the service demands a login: a proxy or WAF rule, or a path other than the three webhook paths (the seller service answers `401` to every other path) | Check the exact path. The api host is DNS-only (grey cloud) in the OVH test environment, so Cloudflare is not in the way; if you proxied it, add a WAF skip for these paths |
-| `502` / `503` | The service pod is down or restarting (`CrashLoopBackOff`), or (billing endpoint) `503 retry later` while a plan-fee settlement failed transiently | `kubectl -n afrotransact-dev get pods`, `logs deploy/seller`; Stripe retries automatically |
-| Timeout (no answer in time) | Service overloaded or the server is stopped (`down` action) | `status` action; scale up (`up`); Stripe retries |
-| Certificate error / "could not verify the TLS certificate" in Stripe | The api host has no valid public certificate yet (Let's Encrypt not issued), or the host is proxied through a different CA | `make deploy-guide ARGS=--doctor` (certificate check); ovh-vps.md row "Certificate stays False" |
-| "Failed to connect" / DNS error | `api.<domain>` does not resolve to the server | DNS A record (grey cloud) pointing at the server IP |
+| `401` / `403` | Something in front of the service demands a login: a proxy or WAF rule, or a path other than the three webhook paths (the seller service answers `401` to every other path) | Check the exact path. The api host is proxied through Cloudflare (Tunnel): a WAF or rate-limit rule must not match these paths (`infra/cloudflare/zone.tf`) |
+| `502` / `503` | The service pod is down or restarting (`CrashLoopBackOff`), or (billing endpoint) `503 retry later` while a plan-fee settlement failed transiently | `kubectl -n afrotransact-$ENV get pods`, `logs deploy/afrotransact-core`; Stripe retries automatically |
+| Timeout (no answer in time) | Core overloaded or scaled to 0 | `kubectl -n afrotransact-$ENV get deploy`; scale back to 1; Stripe retries |
+| Certificate error / "could not verify the TLS certificate" in Stripe | The api host is not proxied by Cloudflare or the zone SSL mode is wrong | the `api-<env>` record must be the proxied CNAME to the tunnel (go-live section 5.6); SSL mode Full (strict) |
+| "Failed to connect" / DNS error | `api-<env>.afrotransact.com` does not resolve | the tunnel CNAME made by `infra/cloudflare` (go-live section 5.6) |
 | Same event twice | Stripe retries, and endpoints 1 and 3 both receive `payment_intent.*` | Harmless: each service stores the event id once and answers `200` with `duplicate` |
 | Stripe says the endpoint is **failing** / **disabled** | Deliveries failed for days (Stripe retries with backoff, in live mode for up to 3 days, in test mode for a few hours), then emails you and may disable the endpoint | Fix the cause above, then in the endpoint page **Enable** it (and, for missed events, **Resend** them from the Events tab; they are idempotent) |
 | Payments stay "pending", sellers stay "verifying", but deliveries show `200` | The event type is not selected on the endpoint, or it belongs to the other "Listen to" scope (Connect events on a *Your account* endpoint) | Compare the endpoint's events and *Listen to* with section 4 |
@@ -278,13 +266,13 @@ Rotate after a leak (a secret pasted in chat, a log or a screenshot) immediately
 
 ## Checklist (copy-paste)
 
-Replace the host with your own (`api.test.afrotransact.com` is the OVH test environment).
+UAT shown; prod uses `api.afrotransact.com`.
 
-| Endpoint | URL | Listen to | Events | Secret variable | Needed in the test env |
+| Endpoint | URL | Listen to | Events | Secret variable | Needed |
 |---|---|---|---|---|---|
-| Payments (platform) | `https://api.test.afrotransact.com/payments/v1/webhooks/stripe` | Your account | 15 (section 4.1) | `STRIPE_WEBHOOK_SECRET` | **Required** |
-| Seller Connect | `https://api.test.afrotransact.com/seller/v1/webhooks/stripe-connect` | Connected accounts | 9 (section 4.2) | `STRIPE_CONNECT_WEBHOOK_SECRET` | **Required** for sellers |
-| Seller plan fees | `https://api.test.afrotransact.com/seller/v1/webhooks/stripe-billing` | Your account | 2 (section 4.3) | `STRIPE_BILLING_WEBHOOK_SECRET` | Optional (bank-debit plan fees only) |
+| Payments (platform) | `https://api-uat.afrotransact.com/payments/v1/webhooks/stripe` | Your account | 15 (section 4.1) | `STRIPE_WEBHOOK_SECRET` | **Required** |
+| Seller Connect | `https://api-uat.afrotransact.com/seller/v1/webhooks/stripe-connect` | Connected accounts | 9 (section 4.2) | `STRIPE_CONNECT_WEBHOOK_SECRET` | **Required** for sellers |
+| Seller plan fees | `https://api-uat.afrotransact.com/seller/v1/webhooks/stripe-billing` | Your account | 2 (section 4.3) | `STRIPE_BILLING_WEBHOOK_SECRET` | Optional (bank-debit plan fees only) |
 
 All three: **Snapshot** payload, default API version, in the mode (Test or Live) that matches the environment.
 
@@ -292,13 +280,11 @@ All three: **Snapshot** payload, default API version, in the mode (Test or Live)
 
 | What | Where |
 |---|---|
-| Public routes, OVH | `infra/ovh-vps/deploy.sh` (`route api /payments/v1/webhooks`, `/seller/v1/webhooks/stripe-connect`, `/seller/v1/webhooks/stripe-billing`) |
 | Public routes, Kubernetes | `infra/k8s/platform/edge/overlays/{dev,uat,prod}/routes.yaml` (Gateway API, prefix rewritten to `/v1/webhooks...`) |
 | Route guard | `python3 tools/ci/check_webhook_routes.py` (part of `make env-check`) |
 | Signature check | payments `StripeSignatureVerifier`; seller `StripeWebhookAdapter` (stripe-java `Webhook.constructEvent`, 5 minute timestamp tolerance (payments: `at.payments.stripe.webhook-tolerance-seconds`, default 300), HMAC-SHA256) |
 | Idempotency | both store the event id once (`stripe_webhook_event` / payments inbox); duplicates answer `200` |
 | Event handlers | payments `StripeEventHandlers.SUPPORTED`; seller `ComplianceServiceImpl` (Connect) and `StripeWebhookAdapter` (plan-fee PaymentIntents) |
 | Security | `/v1/webhooks/stripe` (payments) and `/v1/webhooks/stripe-connect`, `/stripe-billing` (seller) are the only unauthenticated `POST`s of those services besides `/v1/launch-list`; signature is the authentication |
-| Network | the chart's NetworkPolicy admits the `ingress` namespace; Cloudflare WAF/rate-limit rules in `infra/cloudflare/zone.tf` match none of these paths and the backend hosts are not proxied |
-| Wizard check | `tools/deploy/guide.sh` (`chk_webhooks`), tested in `tools/deploy/test/test-guide.sh` |
-| Secret catalogue | `tools/deploy/catalogue.conf` |
+| Network | the chart's NetworkPolicy admits the `ingress` namespace; Cloudflare WAF/rate-limit rules in `infra/cloudflare/zone.tf` match none of these paths |
+| Smoke check | `tools/smoke/go-live.sh` (unsigned POST to each URL, expects 400) |

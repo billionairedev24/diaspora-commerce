@@ -7,7 +7,7 @@ import { middleware } from '@/middleware';
 
 // Free certificate layout (docs/engineering/environments.md, "Free certificate layout (flat web hosts)"): the storefront is the
 // base domain, Seller Center and staff console are one label under the zone, NOT subdomains of the base. The apps read the
-// three origins from the environment (the ovh-web workflow writes them into the Worker vars), never derive them from a domain.
+// three origins from the environment (the Worker vars in wrangler.jsonc), never derive them from a domain.
 describe('explicit web hosts', () => {
   afterEach(() => vi.unstubAllEnvs());
 
@@ -38,7 +38,7 @@ describe('explicit web hosts', () => {
     expect(policy).not.toContain('seller-test');
     expect(policy).not.toContain('admin-test');
     expect(policy).not.toMatch(/\*\.example\.test/);
-    // Product images come from the media host the deploy sets (OVH: MEDIA_PUBLIC_URL, docs/runbooks/cloudflare-setup.md).
+    // Product images come from the media host the deploy sets (MEDIA_PUBLIC_URL in the Worker vars).
     expect(policy).toMatch(/img-src[^;]*https:\/\/media\.test\.example\.test/);
   });
 

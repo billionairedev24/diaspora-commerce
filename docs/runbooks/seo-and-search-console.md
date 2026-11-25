@@ -39,11 +39,10 @@ Do **not** add a "Disallow" for anything to hide it from Google: use `noindex`. 
 - [ ] `https://afrotransact.com/sitemap.xml` answers 200 and lists the child sitemaps; open one: product URLs, `<image:image>` entries, no cart / checkout / account / `?q=` / `?sort=` URL.
 - [ ] A product URL from the sitemap returns 200, has exactly one `<link rel="canonical">` (itself), a title and description unique to the product, `og:image`, and `Product` JSON-LD in "view source" (not only in the inspected DOM).
 - [ ] `https://www.afrotransact.com/` is not a host we serve; if a DNS record for it exists it 301s to the apex.
-- [ ] Every non-prod host: `python3 tools/ci/seo_probe.py --strict` prints `OK` (robots `Disallow: /`, no sitemap, `noindex`). **Especially `test.afrotransact.com` (the trial).**
+- [ ] Every non-prod host: `python3 tools/ci/seo_probe.py --strict` prints `OK` (robots `Disallow: /`, no sitemap, `noindex`). **Especially `uat.afrotransact.com`.**
 - [ ] `APP_ENV` is `prod` only in the `prod` block of `web/apps/storefront/wrangler.jsonc`; `web/apps/storefront/test/seo-env-safety.test.ts` is green on `main`.
 - [ ] Rich Results Test (<https://search.google.com/test/rich-results>) on one product, the home page and one category: Product / Breadcrumb / Organization detected with no errors (warnings for optional fields such as `itemCondition`, `shippingDetails`, `hasMerchantReturnPolicy` are expected: we only emit facts the catalog really has).
 - [ ] Search Console property verified, sitemap index submitted, Bing imported.
-- [ ] The `ovh-web` / trial workflows do not set `APP_ENV=prod` (they do not today: the OVH Workers are noindex by default).
 
 ## After launch: checks and monitoring
 

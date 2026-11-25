@@ -2,7 +2,7 @@
 
 **Owner decision:** the nightly database backups go to **Backblaze B2**, through its S3-compatible API, with `rclone`. **Cloudflare R2 is not
 used for backups**: the backups must survive a problem with the Cloudflare account. One **private bucket per environment**
-(`afrotransact-test-backups` for the one-server test box, **`afrotransact-trial-backups`** for the 8-day OVH trial, `afrotransact-prod-backups`), one **application key per bucket**, restricted to that bucket, Read and Write.
+(`afrotransact-uat-backups`, `afrotransact-prod-backups`), one **application key per bucket**, restricted to that bucket, Read and Write.
 The files are age-encrypted before they leave the cluster, so Backblaze only ever holds ciphertext (the private age key is offline:
 `restore-drill.md`).
 
@@ -15,20 +15,20 @@ The files are age-encrypted before they leave the cluster, so Backblaze only eve
 > can do) is written from memory and has not been checked against Backblaze's current documentation or a live account. The repository's
 > scripts were run only against a local rclone remote. The first real run (section 5) is the check; correct this page with what you see.
 
-| Item | Test (OVH server) | Trial and production (OVH node + Layerbase) |
-|---|---|---|
-| Bucket | `afrotransact-test-backups` | trial `afrotransact-trial-backups`, production `afrotransact-prod-backups` (set `BACKUP_B2_BUCKET`; the metric label `env` follows `GRAFANA_ENV`) |
-| What runs | `infra/ovh-vps/backup.sh` (cron on the server, also dumps the generated secrets, passphrase-encrypted) | CronJob `pg-backup` in namespace `ops`, 03:15 UTC (`infra/k8s/platform/lean/backup`, age-encrypted) |
-| Where the key lives | GitHub Environment `ovh-vps`: secrets `B2_KEY_ID`, `B2_APPLICATION_KEY`, variables `B2_BUCKET`, `B2_ENDPOINT` | SOPS Secret `ops/pg-backup` (`infra/ovh-vps/secrets.sh` writes it from `secrets.local.env`) |
+| Item | UAT and PROD (OVH node + Layerbase) |
+|---|---|
+| Bucket | `afrotransact-uat-backups`, `afrotransact-prod-backups` (set `BACKUP_B2_BUCKET`; the metric label `env` follows `GRAFANA_ENV`) |
+| What runs | CronJob `pg-backup` in namespace `ops`, 03:15 UTC (`infra/k8s/platform/lean/backup`, age-encrypted) |
+| Where the key lives | SOPS Secret `ops/pg-backup` (`infra/ovh-vps/secrets.sh` writes it from `secrets.local.env`) |
 
 ## 1. Names and settings
 
 | Name | Where | Meaning |
 |---|---|---|
-| `B2_KEY_ID`, `B2_APPLICATION_KEY` | Secret `pg-backup` (prod) / GitHub secrets (test) | the bucket-scoped application key (the key id is the "keyID", the secret is the "applicationKey") |
+| `B2_KEY_ID`, `B2_APPLICATION_KEY` | Secret `pg-backup` | the bucket-scoped application key (the key id is the "keyID", the secret is the "applicationKey") |
 | `B2_BUCKET` | same | the bucket name |
 | `B2_ENDPOINT` | same | the bucket's S3 endpoint from the console, `s3.<region>.backblazeb2.com`. **No region is hard-coded anywhere**; the rclone region is the `<region>` part of this value (or `B2_REGION` if you set it) |
-| `RETENTION_DAYS` | `BACKUP_RETENTION_DAYS` in `secrets.local.env` / `RETENTION_DAYS` in the test `config.env` | days of backups kept, default **14**, accepted 3 to 365; the owner may set **7** |
+| `RETENTION_DAYS` | `BACKUP_RETENTION_DAYS` in `secrets.local.env` | days of backups kept, default **14**, accepted 3 to 365; the owner may set **7** |
 | `RETENTION_MODE` | `BACKUP_RETENTION_MODE` | `sweep` (default, the job deletes old objects), `lifecycle` (the bucket rule does it), `off` |
 | `PUSHGATEWAY_URL` | `BACKUP_PUSHGATEWAY_URL` | optional; the size metrics are pushed there as well as logged |
 
@@ -72,10 +72,10 @@ Screen names are from memory (UNVERIFIED); the idea is what matters.
 ### The application key, scoped to the bucket
 
 1. **Application Keys > Add a New Application Key.**
-2. Name: `afrotransact-prod-backups-rw` (or `-test-`). **Allow access to Bucket(s): select only that bucket.** **Type of Access: Read and Write.**
+2. Name: `afrotransact-prod-backups-rw` (or `-uat-`). **Allow access to Bucket(s): select only that bucket.** **Type of Access: Read and Write.**
    Leave "Allow List All Bucket Names" off (rclone is told not to check the bucket) and the file-name prefix and duration empty.
 3. **Create New Key.** Copy the **keyID** and the **applicationKey** immediately: the secret is shown once. Put them in the password manager and
-   into the SOPS file (`BACKUP_B2_KEY_ID`, `BACKUP_B2_APPLICATION_KEY`) or the GitHub Environment (`gh secret set B2_APPLICATION_KEY --env ovh-vps`).
+   into the SOPS file (`BACKUP_B2_KEY_ID`, `BACKUP_B2_APPLICATION_KEY`).
 4. A "Read and Write" key is assumed to include deleting file versions, which the retention sweep needs (UNVERIFIED: if the sweep logs
    `retention sweep failed` with an access error, the key lacks `deleteFiles`; recreate it with the delete capability).
 
@@ -102,7 +102,6 @@ Safety built into the job: a sweep never runs after a night with a failed databa
 below 3 or above 365 aborts the run; one sweep deletes at most `RETENTION_MAX_DELETE` (default 400) objects; only the `postgres/` prefix is touched.
 Lowering 14 to 7 hides about 7 days of objects (19 databases plus globals, about 140 objects; Release 1: 4 databases plus globals, about 40) in the next run, within the cap.
 The job also runs `rclone cleanup` once (best effort) to drop abandoned multipart uploads (UNVERIFIED whether B2 supports it through S3).
-The test server's `backup.sh` follows the same rules for its prefixes `postgres/` and `secrets/`; for it set the rule's prefix to empty.
 
 ## 4. Object Lock (only if the owner enables it)
 
@@ -130,10 +129,10 @@ rclone cat "$B/_test/hello.txt" --s3-no-check-bucket        # read
 rclone delete "$B/_test" --s3-no-check-bucket               # delete (hides it; the lifecycle rule removes it a day later)
 ```
 
-Also prove the scoping: with the production key, `rclone lsf backup:afrotransact-test-backups --s3-no-check-bucket` must be **refused**.
+Also prove the scoping: with the production key, `rclone lsf backup:afrotransact-uat-backups --s3-no-check-bucket` must be **refused**.
 Then run the real job once: `kubectl -n ops create job --from=cronjob/pg-backup first-backup && kubectl -n ops logs -f job/first-backup`. Expected:
 `backed up <db>` for each database, one `backup_metrics ... run_bytes=... bucket_bytes=...` line and `backup complete: 19 databases`.
-In the B2 console the bucket shows the objects under `postgres/<db>/<stamp>.dump.age`. (Test box: `sudo bash infra/ovh-vps/backup.sh run`.)
+In the B2 console the bucket shows the objects under `postgres/<db>/<stamp>.dump.age`.
 
 ## 6. Restore one database inside the 4-hour RTO
 
@@ -159,15 +158,13 @@ Targets: RPO 24 h (nightly), **RTO 4 h** for the production data. Do this from a
    not needed for one incident; the 19 databases in parallel are possible but `identity`, `orders`, `payments` first.
 7. Roles are not in the dump with passwords: `pg-restore.sh globals latest | psql` only if roles are missing, then reset passwords and update the Secrets.
 
-Test server: `sudo bash infra/ovh-vps/backup.sh list` and `backup.sh restore <db> <object>` (passphrase-encrypted).
-
 ## 7. Rotate the key
 
 Rotate when someone who had it leaves, when it may have leaked, and at least once a year. B2 keys do not expire unless a duration was set (UNVERIFIED).
 
 1. B2 console > Application Keys > **Add a New Application Key** for the **same** bucket, Read and Write, the same settings as in section 2. Copy keyID and applicationKey.
 2. Replace `BACKUP_B2_KEY_ID` and `BACKUP_B2_APPLICATION_KEY` in `secrets.local.env`, re-encrypt with SOPS, commit the encrypted file, then
-   `infra/ops/secrets/apply.sh` (production). Test box: `gh secret set B2_KEY_ID --env ovh-vps`, `gh secret set B2_APPLICATION_KEY --env ovh-vps`, then run the `backup` action.
+   `infra/ops/secrets/apply.sh` (`ENV=uat|prod`).
 3. Run one backup now (`kubectl -n ops create job --from=cronjob/pg-backup rotate-check`) and confirm `backup complete` and the new `backup_metrics` line.
 4. **Only then delete the old key** in the B2 console (Application Keys > Delete). If anything fails, the old key still works: fix and retry.
 5. Write the date in the result log of `restore-drill.md`. The B2 key is not part of the offline escrow (it can always be re-created); the **age private key** is, and it
@@ -176,7 +173,7 @@ Rotate when someone who had it leaves, when it may have leaked, and at least onc
 ## Alerts
 
 Backup alerts reach `hello@afrotransact.com` and `so.oluwfemi@gmail.com` (owner: confirm the second spelling) through the routing in
-`observability-grafana-cloud.md` section 8; `page` backup alerts are mailed from the trial too.
+`observability-grafana-cloud.md` section 8.
 
 Rules: `infra/observability/rules/backup.yaml` (Prometheus rules, loaded as PrometheusRule CRs by `make rules`) and, for the log path without a Pushgateway,
 `infra/observability/loki-rules/backup.yaml` (LogQL, UNVERIFIED). Each run logs exactly one line:

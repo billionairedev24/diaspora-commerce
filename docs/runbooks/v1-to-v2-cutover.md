@@ -308,7 +308,7 @@ endpoint) goes to the owner before section 2.
 Test mode has its own keys, webhook endpoints and connected accounts, so it never touches v1's live data. It proves v2's
 Stripe wiring; the data copy is rehearsed separately (data runbook Parts 2 to 5).
 
-1. Deploy v2 to the production cluster's **test twin** (or the OVH test environment, `ovh-vps.md`) with test keys:
+1. Deploy v2 to **UAT** (`release-1-go-live.md`, the dry run) with test keys:
    `STRIPE_SECRET_KEY` (`sk_test_`), `STRIPE_PUBLISHABLE_KEY`, and three new test webhook secrets.
 2. Create the three test-mode endpoints (Workbench steps in [stripe-webhooks.md](stripe-webhooks.md) section 4), or with the CLI:
 
@@ -468,7 +468,7 @@ If any step fails, go to section 11 (rollback) rather than fixing live.
 
 ## 9. DNS switch
 
-Hostnames, provider and TTLs are open question 4. The shape, following [cloudflare-setup.md](cloudflare-setup.md) and the
+Hostnames, provider and TTLs are open question 4. The shape, following `infra/cloudflare` ([release-1-go-live.md](release-1-go-live.md) section 5.6) and the
 "Storefront host rule" in the readiness checklist:
 
 - Before the window: v2's Workers routes (`afrotransact.com/*` for the storefront, seller and admin hosts) exist but are

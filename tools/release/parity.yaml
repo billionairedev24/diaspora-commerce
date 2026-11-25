@@ -39,7 +39,6 @@ workflows:
   backlog.yml:               {line: release-1, reason: "backlog.csv stays importable"}
   carrier-sandboxes.yml:     {line: manual, reason: "carrier sandbox run against carrier-gateway, on demand"}
   contracts.yml:             {line: release-1, reason: "OpenAPI/AsyncAPI lint and breaking-change diff"}
-  deploy-guide.yml:          {line: release-1, reason: "deploy guide script tests"}
   docs.yml:                  {line: release-1, reason: "developer portal build and deploy"}
   env-urls.yml:              {line: release-1, reason: "environment host consistency"}
   go-authz-sync.yml:         {line: per-service-only, reason: "per-service build of a Go module"}
@@ -73,9 +72,6 @@ workflows:
   mobile.yml:                {line: release-1, reason: "OTA preview from release-1; production store builds only from a commit release-1 contains"}
   observability-config.yml:  {line: release-1, reason: "rules, dashboards and Alloy config"}
   backup-tools-image.yml:    {line: manual, reason: "tools image of the backup CronJobs (pg client, rclone, age, curl; non-root), built on demand when infra/ops/backup-tools changes"}
-  ovh-images.yml:            {line: manual, reason: "per-service images for the single-VPS test box (ovh-vps), on demand; release-1 images come from core.yml and afrotransact-go.yml"}
-  ovh-vps.yml:               {line: manual, reason: "single-VPS test environment (per-service k3s path), billed by the hour, never automatic"}
-  ovh-web.yml:               {line: manual, reason: "web apps on Cloudflare Workers for the OVH environment"}
   promote.yml:               {line: manual, reason: "promotes a signed image to uat, trial or prod (runs only from release-1)"}
   release-1-guard.yml:       {line: release-1, reason: "release-1 contains main"}
   release-1-parity.yml:      {line: release-1, reason: "parity of main's changes in the monolith, and the offline delivery checks"}
