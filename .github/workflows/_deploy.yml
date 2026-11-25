@@ -7,7 +7,7 @@
 #      nothing is mirrored: the image that was verified in step 1 IS the deployed image.
 #   4. GitOps bump: image.tag AND image.digest (the sha256 of the signed manifest verified in step 1) in
 #      <service>/deploy/helm/values-<env>.yaml, committed to the gitops branch; the chart renders repo:tag@digest, so the
-#      kubelet pulls by digest and a moved or re-pushed tag cannot change what runs (F8, docs/runbooks/image-signing.md);
+#      kubelet pulls by digest and a moved or re-pushed tag cannot change what runs (F8, docs/runbooks/ovh-production.md section 7, "Image trust in production");
 #      Argo CD syncs the service's Application, Argo Rollouts runs the canary (uat/prod)
 # The job runs in the GitHub environment named `inputs.environment`: dev/uat need no approval, `prod` has
 # required reviewers (Settings -> Environments), so production waits for a human.
