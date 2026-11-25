@@ -7,8 +7,7 @@ Sizing: [cloud-cost.md](../engineering/cloud-cost.md). Restore: [restore-drill.m
 
 What this deploys: 21 services (14 Java, 7 Go), Kafka, Temporal, Valkey, Meilisearch, an OTLP collector, cloudflared + Envoy on **one**
 `b3-16` node; Postgres on Layerbase; web apps on Cloudflare Workers. It deploys the **prod** profile (`APP_ENV=prod`,
-`SPRING_PROFILES_ACTIVE=prod`) from each chart's `values-prod.yaml`. `infra/ovh-vps` is a different thing: a one-server **test** box on
-the dev profile; do not use it for production.
+`SPRING_PROFILES_ACTIVE=prod`) from each chart's `values-prod.yaml`. `infra/ovh-vps` holds only the secrets renderer (`secrets.sh`, step 6).
 
 ## 0. Tools on your machine
 
@@ -81,6 +80,10 @@ Stripe webhook paths) and **auth** only. **There is no `mcp.` route and no `graf
 mcp-server is private by owner decision: cluster-internal (`ClusterIP`), no public hostname, OAuth bearer tokens on every call
 (`AT_SECURITY_ENABLED=true`); see `docs/runbooks/ai-spend-and-mcp-access.md`. Grafana lives in Grafana Cloud. There is no load balancer, so no origin certificate and
 no Authenticated Origin Pulls: nothing in the cluster is reachable except through the tunnel.
+**Dashboard steps tofu does not do** (once per account/zone): two-factor sign-in on the Cloudflare account; the **Account ID** is on *Workers & Pages*;
+zone *Rules > Settings > Managed Transforms* > **Add visitor location headers** ON (the home page reads `CF-IPCity`, `CF-IPPostalCode`, `docs/engineering/delivery-location.md`;
+not in `infra/cloudflare` yet); if a `web-*` deploy fails with "Script startup/size limit exceeded" upgrade to **Workers Paid** (about USD 5/month). Error 10000 = the token
+lacks a permission or the zone; "a DNS record already exists" = delete the old record on that host (tofu owns the records).
 The web apps (Workers) are deployed by `.github/workflows/trial.yml` (trial) or the per-app pipelines (dev, uat, prod); `tools/ci/env_hosts.py check` proves every file agrees with the map.
 
 ## 5. Layerbase PostgreSQL

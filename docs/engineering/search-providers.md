@@ -18,7 +18,6 @@ index from Kafka events, so after changing `SEARCH_PROVIDER` (on search *and* in
 
 ```bash
 make reindex-search                     # local stack; add ARGS="--dry-run" to only count
-# OVH server: GitHub Actions "ovh-vps" with action reindex-search (or deploy.sh reindex-search on the server)
 # any Kubernetes: kubectl -n <ns> create job indexer-reindex-$(date +%s) --from=cronjob/indexer-reindex
 ```
 
@@ -70,7 +69,7 @@ three or more words, both through ai-gateway (OpenRouter, `openai/text-embedding
 
 | Environment | State |
 |---|---|
-| dev, uat, prod (and the OVH test server, which runs the `dev` profile) | **on** in `go/services/{indexer,search}/config/<env>.yaml` (`embeddings.enabled: true`, `aiGatewayUrl: http://ai-gateway:8080`). What is needed is a running ai-gateway in the same namespace with `OPENROUTER_API_KEY` set. |
+| dev, uat, prod | **on** in `go/services/{indexer,search}/config/<env>.yaml` (`embeddings.enabled: true`, `aiGatewayUrl: http://ai-gateway:8080`). What is needed is a running ai-gateway in the same namespace with `OPENROUTER_API_KEY` set. |
 | local | off. Set `OPENROUTER_API_KEY` in `.local/secrets.env`, then `EMBEDDINGS_ENABLED=true AI_GATEWAY_URL=http://localhost:8113` for the indexer and `AI_GATEWAY_URL=http://localhost:8113` for search, and restart both. |
 
 Without the key the calls fail: indexing never blocks (the backfill fills missing vectors every 15 minutes once the key

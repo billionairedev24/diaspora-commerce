@@ -64,7 +64,7 @@ specifics, a restore drill.
 - [ ] **blocker** `ENGINEERING · Open` OVH production path exists and is rehearsed in the 8-day trial: Managed Kubernetes cluster, the Cloudflare **Tunnel**
   (cloudflared + Envoy Gateway; there is **no load balancer and no ingress certificate**, Cloudflare terminates TLS), Argo CD with manual sync, SOPS/age secret
   delivery, and the Helm values for the launch stack (21 services, FGA off, no native-app services). The path is [ovh-production.md](ovh-production.md)
-  (its "Trial" section for the 8-day run); `ovh-vps.md` is a one-server **test** box on the dev profile, not production.
+  (its "Trial" section for the 8-day run).
 - [ ] **blocker** `ENGINEERING · Open` Services that are off at launch are confirmed off and not routed: FGA (`FGA_ENABLED=false`
   explicitly set on catalog, offers, orders, payments and the others that read it), authz-sync not deployed or idle, native-app
   push, WhatsApp. With FGA off, access control is RBAC plus organisation checks; run the cross-organisation access tests once

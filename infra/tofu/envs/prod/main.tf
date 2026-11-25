@@ -65,7 +65,7 @@ locals {
   # The cluster must sit next to the external database server (latency, and cross-region traffic is billed). Layerbase
   # Dedicated runs in US East (Virginia) and US West (Oregon) only.
   # OVH: the OVH US entity (endpoint ovh-us, a separate account from the EU/CA entities) has Vint Hill, Virginia as
-  # US-EAST-VA-1, the same metro as Layerbase Virginia (infra/ovh-vps/terraform/locations.json). It replaces the earlier
+  # US-EAST-VA-1, the same metro as Layerbase Virginia. It replaces the earlier
   # BHS5 (Quebec) mapping, which put the cluster tens of milliseconds away from the database.
   layerbase_regions = {
     virginia = { aws = "us-east-1", gcp = "us-east4", azure = "eastus", ovh = "US-EAST-VA-1" }

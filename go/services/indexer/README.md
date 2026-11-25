@@ -54,7 +54,6 @@ configuration and environment (`SEARCH_PROVIDER`, `MEILISEARCH_URL`/`MEILISEARCH
 make reindex-search                      # local stack (builds the command, uses .local/secrets.env); ARGS="--dry-run" counts only
 indexer reindex --dry-run                # the same binary and image as the consumer; no arguments = the Kafka consumer
 kubectl -n <ns> create job indexer-reindex-$(date +%s) --from=cronjob/indexer-reindex   # chart value reindex.enabled=true
-infra/ovh-vps/deploy.sh reindex-search [flags]                                           # OVH server / workflow action
 ```
 
 Flags: `--market` (default the configured `MARKET`; comma separated), `--batch` (100), `--concurrency` (4), `--dry-run`,
