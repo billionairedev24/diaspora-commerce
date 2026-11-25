@@ -37,7 +37,7 @@ Every environment root creates one monthly budget for its cloud spend (`monthly_
 
 The amounts cover the cloud account only (compute, databases, cache, storage, network, registry). Elastic Cloud,
 Confluent Cloud, Temporal Cloud, Cloudflare, Grafana Cloud, OpenRouter and messaging vendors are budgeted in their own
-consoles (set a monthly spend alert in each when the account is created; first-environment runbook step 4).
+consoles (set a monthly spend alert in each when the account is created).
 
 Recipients: `budget_notification_emails` in `terraform.tfvars`, plus
 

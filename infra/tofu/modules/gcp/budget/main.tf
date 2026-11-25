@@ -2,7 +2,7 @@
 # FORECASTED_SPEND threshold rules. Alerts go to billing account admins and to one Cloud Monitoring email channel per
 # notification_emails entry. Needs the Cloud Billing Budget API (billingbudgets.googleapis.com) on the project and
 # `roles/billing.costsManager` on the billing account for the identity that applies (the `apply` GitHub identity or
-# an admin; the first apply of an environment is done by an admin, see docs/runbooks/first-environment.md).
+# an admin; the first apply of an environment is done by an admin).
 terraform {
   required_version = ">= 1.8"
   required_providers {

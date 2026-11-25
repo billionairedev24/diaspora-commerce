@@ -135,5 +135,5 @@ OVH has no arm64 and no spot market (the "spot" pool is tainted, hourly and scal
 ## 7. Other clouds (alternatives)
 
 AWS, GCP and Azure keep working with the same interface (`cloud = aws|gcp|azure`, their `bootstrap/` roots, OIDC deploy roles from
-`modules/<cloud>/github-oidc`, ECR/Artifact Registry/ACR mirrors by `.github/workflows/_deploy.yml`). The first apply of each is described
-in `docs/runbooks/first-environment.md`. They are not the launch path and are not rehearsed against the OVH decision.
+`modules/<cloud>/github-oidc`, ECR/Artifact Registry/ACR mirrors by `.github/workflows/_deploy.yml`). Their first-apply runbook was removed with the
+multi-cloud docs (see git history). They are not the launch path and are not rehearsed against the OVH decision.
