@@ -7,7 +7,6 @@ One page per alert (below), plus operational procedures. Every alert's `runbook_
 
 | Procedure | When |
 |---|---|
-| [First environment](first-environment.md) | bootstrapping dev / uat / prod on AWS, Google Cloud or Azure (state, OIDC, secrets, apply, Argo CD, Temporal, Pages, smoke) |
 | [Production on OVH + Layerbase](ovh-production.md) | the production launch from zero: OVH US account, tofu, kubeconfig, Cloudflare Tunnel, Layerbase databases, SOPS secrets, Argo CD, first sync order, smoke test, rollback, vendor questions |
 | [Restore drill](restore-drill.md) | nightly off-vendor backups, escrow of the keys that cannot be re-created, RPO 24 h / RTO 4 h, the drill and the incident restore |
 | [Stripe webhooks](stripe-webhooks.md) | creating, verifying, rotating and troubleshooting the three Stripe webhook endpoints (payments, seller Connect, seller plan fees) for UAT and PROD |

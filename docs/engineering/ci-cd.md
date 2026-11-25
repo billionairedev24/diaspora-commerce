@@ -155,8 +155,8 @@ requests included) before anything is pushed; see change request 5 for the remai
 
 **Repository variables**: `TF_TARGETS` (below), `GITOPS_BRANCH` (default `main`), `VERCEL_FALLBACK`
 (`true` to always deploy web to Vercel too), `DEV_BASE_DOMAIN` (ZAP and carrier smoke target), `DOCS_PAGES_PROJECT`.
-The whole first-time setup in order (state, OIDC, variables, every secret, apply, Argo CD, Temporal, Pages, smoke):
-[docs/runbooks/first-environment.md](../runbooks/first-environment.md).
+The whole first-time setup of the launch path (OVH, UAT then PROD), in order:
+[docs/runbooks/release-1-go-live.md](../runbooks/release-1-go-live.md). The AWS/GCP/Azure variables above are for the alternative clouds only (`infra/tofu/README.md` section 7).
 
 **Secrets**: `CLOUDFLARE_API_TOKEN` (Workers, Pages: docs + Storybook), `CLOUDFLARE_ACCOUNT_ID`, `EC_API_KEY`, `CONFLUENT_CLOUD_API_KEY`,
 `CONFLUENT_CLOUD_API_SECRET`, `TEMPORAL_CLOUD_API_KEY` (OpenTofu: Temporal Cloud namespaces), `EXPO_TOKEN`,
@@ -296,7 +296,7 @@ must define those three profiles with matching channels.
    per-environment HTTPRoutes for `api.` / `auth.` (prod) and dev/uat `grafana.`; mcp-server has no public route (`infra/k8s/platform/edge`); Kyverno with
    the `verifyImages` policy for the keyless identity
    `https://github.com/billionairedev24/diaspora-commerce/.github/workflows/_(java|go)-service.yml@refs/heads/main`
-   (`infra/k8s/platform/policies`; Kyverno needs registry read access on the cloud, see the first-environment runbook).
+   (`infra/k8s/platform/policies`; Kyverno needs registry read access on the cloud; not part of the lean OVH platform).
 4. **Argo CD**: Applications should track `GITOPS_BRANCH` and read `values-<env>.yaml` (where `_deploy.yml`
    writes `image.tag`) plus a platform-values file with `cloud`, `image.registry` (= the environment's
    `REGISTRY_URL`; the chart appends `/<service>`) and `workloadIdentity`.

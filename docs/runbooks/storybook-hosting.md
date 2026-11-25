@@ -20,7 +20,7 @@ pnpm --filter @afrotransact/ui build-storybook     # -> web/packages/ui/storyboo
 
 `storybook.yml` deploys `storybook-static` to the Pages project `afrotransact-storybook` with `wrangler pages deploy`:
 a preview URL per PR branch (commented on the PR) and production from `main`. The project is created by
-`infra/cloudflare/pages.tf` (first-environment runbook, section 8). Needs `CLOUDFLARE_API_TOKEN` and
+`infra/cloudflare/pages.tf` (the run with `pages_projects_owner = true`, `infra/cloudflare/README.md`). Needs `CLOUDFLARE_API_TOKEN` and
 `CLOUDFLARE_ACCOUNT_ID` as repository secrets; without them the deploy step is skipped with a notice.
 
 ### 2. Cloudflare Workers static assets (config in the repo)
