@@ -1,5 +1,5 @@
 # Elasticsearch exporter (prometheus-community 7.4.0) for the ECK cluster "search" (namespace elastic).
-# Feeds the Elasticsearch dashboard and ElasticsearchCluster* alerts (S177).
+# Feeds the Elasticsearch dashboard (S177). No alert rules: Elasticsearch is not run on the launch path (Meilisearch).
 es:
   uri: https://search-es-http.elastic:9200
   all: true

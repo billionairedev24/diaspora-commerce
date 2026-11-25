@@ -26,9 +26,6 @@ inhibit_rules:
   - source_matchers: [severity="page"]
     target_matchers: [severity="ticket"]
     equal: [slo]
-  # Cluster red suppresses yellow.
-  - source_matchers: [alertname="ElasticsearchClusterRed"]
-    target_matchers: [alertname="ElasticsearchClusterYellow"]
 
 receivers:
   - name: blackhole
