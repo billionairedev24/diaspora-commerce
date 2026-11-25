@@ -1,6 +1,7 @@
 # ADR 0001 — Relationship-based authorisation with OpenFGA
 
 - **Status:** Accepted (S022). Piloted in offers-service; rollout per service and per environment.
+- **Overridden at launch by [ADR 0010](0010-no-openfga-at-launch.md):** OpenFGA is not deployed in uat or prod (`FGA_ENABLED=false`); access control at launch is RBAC plus organisation checks. This ADR describes the model for when it is turned on.
 - **Date:** 2026-10-10
 - **Deciders:** platform / identity owners
 - **Related:** `contracts/openfga/model.fga`, `java/libs/platform-security`, `go/services/authz-sync`,
