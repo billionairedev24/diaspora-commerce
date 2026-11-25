@@ -14,9 +14,12 @@ Sellers and providers get onboarding, back offices and storefronts, and AfroTran
 | Go services (Go 1.27.4) | `go/services/*` |
 | API contracts | `contracts/` (OpenAPI 3.1 + AsyncAPI) |
 | Developer portal | `docs/portal` (Docusaurus, with Redoc + Scalar references) |
-| Infrastructure | `infra/` (docker compose, Helm, Argo CD, OpenTofu for AWS/GCP/Azure, Cloudflare, observability) |
+| Infrastructure | `infra/` (docker compose, Helm, Argo CD, OpenTofu for OVH Managed Kubernetes (AWS/GCP/Azure modules kept as alternatives, not the launch path), Cloudflare, observability, the secrets renderer in `infra/ovh-vps`) |
 | Backlog | `docs/backlog/backlog.csv` (Jira import) |
 | Design source | `design/` (Claude Design prototypes and chat transcripts) |
+
+Production runs from the `release-1` branch (two deployables); on `develop` and `main` every service is its own deployable. Production
+procedure on this line: [docs/runbooks/ovh-production.md](docs/runbooks/ovh-production.md); all runbooks: [docs/runbooks/README.md](docs/runbooks/README.md).
 
 Read **[CLAUDE.md](CLAUDE.md)** for the engineering rules (interfaces + implementations, no wildcard or inline
 imports, hexagonal layering) and **[infra/local/PORTS.md](infra/local/PORTS.md)** for the service catalogue.
@@ -24,7 +27,7 @@ imports, hexagonal layering) and **[infra/local/PORTS.md](infra/local/PORTS.md)*
 ## Quick start
 
 ```bash
-make up                # local stack: Postgres, Kafka, Elasticsearch, Redis, Temporal, observability
+make up                # local stack: Postgres, Kafka, Valkey, search (Meilisearch; Elasticsearch optional), Temporal, observability
 make java-verify       # all Java services: checkstyle + unit + Testcontainers integration tests
 make go-verify         # all Go services: vet + lint + tests
 make web-dev           # storefront on http://localhost:3000
