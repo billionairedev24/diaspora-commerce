@@ -160,7 +160,7 @@ infra/observability/scripts/grafana-cloud-load.sh all          # rules + dashboa
   alerts in `infra/observability/loki-rules/backup.yaml` (they read the `backup_metrics` line the job logs; the stream carries `app="pg-backup"`, `namespace="ops"` and `env` from Alloy) load with
   `grafana-cloud-load.sh lokirules` (needs `LOKI_ADDRESS` = Hosted logs URL without `/loki/api/v1/push` and `LOKI_TENANT_ID` = the logs user id; UNVERIFIED against Grafana Cloud).
   `mimirtool rules sync` makes the ruler equal to these files, so do not hand-create rules in this stack. Not loaded yet: `slo-*.yaml` (their
-  metrics are in the metrics contract but not in the code, section 9), `elasticsearch.yaml`, `postgres.yaml` (no exporters in the lean platform).
+  metrics are in the metrics contract but not in the code, section 9), `postgres.yaml` (no exporter in the lean platform).
   Check in Grafana: **Alerting > Alert rules**, data-source managed rules.
 - **Dashboards** loaded into the folder **AfroTransact**: `launch-platform` (node, pods, PVCs, Valkey, Meilisearch, Temporal, tunnel, backup age, Alloy),
   `launch-payments` (checkout and payments funnel), `platform-overview` (RED per service), `jvm` (JVM and Hikari), `kafka-consumer-lag`.

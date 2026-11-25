@@ -7,7 +7,6 @@ resources:
   - prometheus-rules/catalog-review-queue.yaml
   - prometheus-rules/catalog-tax-gate.yaml
   - prometheus-rules/checkout-tax-estimate.yaml
-  - prometheus-rules/elasticsearch.yaml
   - prometheus-rules/inventory.yaml
   - prometheus-rules/kafka.yaml
   - prometheus-rules/launch.yaml

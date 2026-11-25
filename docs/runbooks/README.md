@@ -31,10 +31,6 @@ One page per alert (below), plus operational procedures. Every alert's `runbook_
 | [CatalogReviewQueue](CatalogReviewQueue.md) | ticket |
 | [CheckoutSuccessBudgetBurn](CheckoutSuccessBudgetBurn.md) | page / ticket |
 | [DatabasePoolSaturation](DatabasePoolSaturation.md) | ticket |
-| [ElasticsearchClusterRed](ElasticsearchClusterRed.md) | page |
-| [ElasticsearchClusterYellow](ElasticsearchClusterYellow.md) | ticket |
-| [ElasticsearchDiskLow](ElasticsearchDiskLow.md) | ticket |
-| [ElasticsearchHeapPressure](ElasticsearchHeapPressure.md) | ticket |
 | [HighErrorRate](HighErrorRate.md) | page |
 | [HighLatency](HighLatency.md) | ticket |
 | [IndexerLagHigh](IndexerLagHigh.md) | page |
