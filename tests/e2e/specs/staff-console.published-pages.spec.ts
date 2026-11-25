@@ -135,10 +135,10 @@ test.describe('staff console · published pages', () => {
   });
 });
 
-/* Design notes: the preview and edit screens at desktop and phone width (docs/design-notes/admin-content/). */
+/* Review shots: the preview and edit screens at desktop and phone width, written to tests/e2e/test-results/design-shots (gitignored, never committed). */
 test.describe('staff console · published pages screenshots', () => {
-  test.skip(!process.env.E2E_DESIGN_SHOTS, 'set E2E_DESIGN_SHOTS=1 to refresh docs/design-notes/admin-content');
-  const dir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'docs', 'design-notes', 'admin-content');
+  test.skip(!process.env.E2E_DESIGN_SHOTS, 'set E2E_DESIGN_SHOTS=1 to write review shots to tests/e2e/test-results/design-shots');
+  const dir = join(dirname(fileURLToPath(import.meta.url)), '..', 'test-results', 'design-shots');
 
   for (const [name, width, height] of [['1440', 1440, 900], ['390', 390, 844]] as const) {
     test(`screens at ${name}px`, async ({ page }) => {
