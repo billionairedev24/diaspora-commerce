@@ -300,7 +300,7 @@ func markDeliveryUnavailable(sum *domain.CheckoutSummary) {
 }
 
 // selfShippingCharges is the flat per-order charge of each seller in the cart that ships itself, read from orders. It is empty
-// (so nothing is offered) unless the staff switch is on, which it is not by default (docs/engineering/seller-self-shipping-options.md),
+// (so nothing is offered) unless the staff switch is on, which it is not by default (docs/engineering/delivery-fulfilment.md),
 // and when orders cannot answer: the option is never guessed.
 func (s *checkoutPaymentServiceImpl) selfShippingCharges(ctx context.Context, sum *domain.CheckoutSummary) map[string]int64 {
 	settings, ok := s.shippingSettings()

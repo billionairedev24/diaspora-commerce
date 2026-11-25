@@ -5,7 +5,7 @@ import java.util.List;
 
 /**
  * A seller's own shipping charge (behind the staff switch, off by default). The minimum rule is one flat charge per order
- * package of the seller, set once here (docs/engineering/seller-self-shipping-options.md). Every write is refused while the
+ * package of the seller, set once here (docs/engineering/delivery-fulfilment.md). Every write is refused while the
  * switch is off (409 {@code orders.self-shipping-disabled}) and every read says the option is not available, so no screen or
  * checkout can offer it by accident.
  */

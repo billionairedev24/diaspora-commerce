@@ -3,7 +3,7 @@
 > **Correction (ADR 0013, 2026-11-17).** Fulfilled by AfroTransact (FBA) means AfroTransact **collects the product from the seller's location and
 > delivers it**; it keeps no seller stock and charges the seller **nothing** (no per-unit FBA fee, no seller delivery fee: retired, never applied to a new
 > payment). Wherever this page speaks of stock in a fulfilment centre, per-unit FBA fees or a seller pickup-delivery fee, read it as history or as AfroTransact
-> Retail's own stock. Seller self-shipping is back only behind a staff switch that is off by default (`seller-self-shipping-options.md`). Customers see
+> Retail's own stock. Seller self-shipping is back only behind a staff switch that is off by default (section "Seller self-shipping" below). Customers see
 > "Pick up" and "Delivered by AfroTransact".
 
 
@@ -131,6 +131,33 @@ Rules enforced by the state machine (`DefaultShipmentTransitionPolicy`):
   (from picked up, in transit or delivery failed), delivered (from out for delivery), delivery failed. No cancel or return.
 - Honest wording: the storefront, customer app and emails say AfroTransact delivers only when it truly does, and never name a carrier. The seller
   package heading is "Sold by {seller}".
+
+## Seller self-shipping (built, switched off)
+
+(From the former `seller-self-shipping-options.md`.) Only the switch and the minimum rule (one flat fee per seller per order, "option A") are
+built, and the switch is **OFF** in dev, uat and prod. It must stay off at launch (`ovh-production.md`, "Seller self-shipping switch must be off at launch").
+
+- Staff switch `sellerSelfShippingEnabled` in orders' shipping settings (Staff console > Fees > Flat delivery fee). Default **off**, off in dev,
+  uat and prod (column default false, orders `V15`). Version, who and why are logged like every change to that record.
+- With the switch **on**: a seller sets **one flat shipping charge per order package** in Settings > Shipping (never per product). Checkout shows
+  "Shipped by the seller" at that charge for that seller's package; the seller moves the order (shipped with tracking or details, delivered).
+- With the switch **off**: no screen shows the field or the option, the BFF answers `SELF_SHIPPING_DISABLED` (409) to a change, checkout answers
+  `SELF_SHIPPING_UNAVAILABLE` (422) to the option, orders refuses both, and a product never carries a shipping charge of its own
+  (`offers.invalid`: field `shippingMinor`).
+- Money: the charge is the **seller's revenue**. Payments books it to the seller (`Fulfilment.SELF`), AfroTransact takes **no commission** on shipping
+  (commission is on items only, existing rule, pinned by `FulfilledByAfroTransactMoneyTest`), no membership plan waives it. The card processing fee is
+  still shared by gross as for every line (existing rule, unchanged). Tax on the charge follows the existing shipping-tax rules.
+- Existing `SELLER_SHIPS` and `CARRIER` shipments stay read-only history (`legacy_seller_shipped`); new ones use `SELLER_SELF_SHIPS` so the two are never confused.
+
+**Switching it off (or keeping it off).** `select seller_self_shipping_enabled from shipping_settings;` on orders must return `false`. Staff change it
+only in Staff console > Fees > Flat delivery fee, with a reason (logged); no deploy. Turning it off again hides the field and the checkout option at once;
+existing seller-shipped shipments stay readable.
+
+**Why it is off, and what the owner still decides.** A cart can hold several items from one seller, each with a different shipping fee; adding them up
+charges a price nobody chose, and any per-product fee invites hidden margin. Options weighed: A one flat fee per seller per order (built), B shipping
+profiles by weight or price band, C free over a threshold and flat below, D highest item fee plus an add-on (not recommended: brings back a per-product fee),
+E carrier-calculated rates. Recommendation: A now, then C when sellers ask. Owner decisions: (1) A, C or something else; (2) a ceiling on the seller
+charge (today $100); (3) when to turn the switch on in uat and prod; (4) whether a lost seller-shipped order is covered by buyer protection.
 
 ## Money (Fulfilled by AfroTransact)
 

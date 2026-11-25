@@ -8,7 +8,7 @@ import java.util.Objects;
  * The staff-set shipping charge (listing rules D16): one flat fee for Delivery by AfroTransact and for AfroTransact
  * collecting from a seller's store, an optional free-above threshold on the package's items, and the switch for
  * seller-shipped carrier options (retired, ignored) and the self-shipping switch (off by default, and off in uat and prod
- * until the multi-product shipping-fee problem is solved: docs/engineering/seller-self-shipping-options.md). The single source of the fee: the shopper estimate (gateway-bff) and
+ * until the multi-product shipping-fee problem is solved: docs/engineering/delivery-fulfilment.md). The single source of the fee: the shopper estimate (gateway-bff) and
  * the amount orders charges both come from this record, and {@link #deliveryFee(long)} is the one formula.
  *
  * @param flatFeeMinor                 0 to {@value #MAX_FEE_MINOR} minor units

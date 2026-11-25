@@ -17,7 +17,7 @@ One page per alert (below), plus operational procedures. Every alert's `runbook_
 | [v1 to v2 migration](v1-to-v2-migration.md) | moving production from v1 to v2 on the same Stripe account: Stripe inventory, test-mode rehearsal, freeze, webhook swap, data mapping, DNS, comms, rollback, go/no-go |
 | [Backups on Backblaze B2](backups-backblaze.md) | creating the per-environment bucket and its bucket-scoped key, retention days and the lifecycle rule, Object Lock, testing with rclone, restoring one database inside the RTO, rotating the key, the backup size and staleness alerts |
 | [Production readiness review](production-readiness.md) | what was checked, what could not be, and what blocks go-live |
-| [Cost](cost.md) | a budget alert fired; the monthly cost review |
+| [Cloud cost](../engineering/cloud-cost.md) | a budget alert fired; the monthly cost review; AI model costs |
 | [Kafka dead letters, replay and recovery](kafka-replay.md) | an event was not applied by a consumer: inspect a DLQ, replay records, reset a consumer group's offsets, re-publish outbox rows, rebuild a read model (`tools/ops/kafka-replay`) |
 | [Carrier sandboxes](carrier-sandboxes.md) | proving USPS / UPS / FedEx / DHL against their sandboxes; carrier credentials |
 | [CSP violations spike](csp-violations-spike.md) | many `csp.violation` log lines, or blocked images / payment forms / sign-in after a release; rollback to Report-Only |

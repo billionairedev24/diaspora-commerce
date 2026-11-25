@@ -4,7 +4,7 @@ Source of truth: `design/AfroTransact Pre-Order v2.dc.html` (storefront + back o
 `design/at-preorder.js` (shared store, location model, attribution), `design/AfroTransact Shop.dc.html`
 (ribbon, "send to family" banner, `/pre-orders` page) and `design/AfroTransact Backoffice.dc.html` +
 `design/backoffice-config.js` (the **Pre-orders** module, permission matrix). Where this spec and the earlier
-spike (`preorder-delivery-runs.md`) disagree, **the design wins**:
+spike (E34, its economics and card-hold design kept in section 8 below) disagree, **the design wins**:
 
 | Topic | Spike (E34) | Design (implemented) |
 |---|---|---|
@@ -222,3 +222,139 @@ search and saved addresses).
 9. **Post-delivery review + re-order**: "Order again in the next Lubbock pre-order" saved cart.
 10. **Margin guardrail**: show the run economics (route cost vs. delivery fees + take) on the detail page so ops sees
     when a window loses money (no minimum, but visible).
+
+## 8. From the E34 spike: run economics and the card-hold design
+
+(Kept from the former `docs/spikes/preorder-delivery-runs.md`, sections 9 and 7. Where they disagree with this spec, **the design wins**:
+pre-orders are charged at checkout, with no minimum and no extension. The economics still size a run; `tools/spikes/run_economics.py`
+reproduces the tables. The card-hold design is still the reference for authorisation expiry of manual capture, `docs/engineering/inventory-rules.md`.)
+
+### A. Run economics model (Bastrop)
+
+#### Model
+This is the **same model as `delivery-runs`** (`DefaultRunEconomicsCalculator` **[code]**), so the staff console and this spike agree:
+
+```
+cost(n)   = fixed + n × perOrder
+fixed     = (driveMin × 2 + collectionMin [+ pickupPointMin]) / 60 × driver$/h + roadMiles × 2 × vehicle$/mi
+perOrder  = (doorstep stop min | handover min) / 60 × driver$/h
+```
+
+There are two break-even lenses:
+- **Delivery lens:** the run fee alone covers the run. This is what S265 shows.
+- **Contribution lens:** each order also brings the **seller pickup fee** ($2/package, seed tariff **[code]**) and AfroTransact's **take on the basket** (commission or Retail margin, net of basket card fees). The run fee loses about 2.9% to card fees.
+
+#### Assumptions (all CLI flags)
+
+| Assumption | Value | Basis |
+|---|---|---|
+| Origin | Downtown Austin (30.2672, −97.7431) | `delivery-runs` default origin **[code]**. **Q12:** confirm the real hub. |
+| Road miles one way | **32** | Austin to Bastrop is about 30–31 mi via TX-71, 37 via US-290 ([mapsof.net](https://www.mapsof.net/distance/austin-to-bastrop-tx)). In production this comes from geo. |
+| Drive minutes one way | **50** | 38–40 off-peak, about 50+ at peak. The PO says "about 1 hour". 60 is run as a sensitivity. |
+| Round trip | yes | Matches service default |
+| Driver cost | **$25/h** loaded | Service default `DRIVER_COST_PER_HOUR_MINOR=2500` **[assumption]** |
+| Vehicle cost | **$0.70/mi** | Service default, about the IRS 2025 standard mileage rate **[check the 2026 rate]** |
+| Collection (FC + seller sweep) | **45 min** fixed | Service default. Use `--sellers N` for extra stops. |
+| Doorstep stop | **6 min** incl. local driving | Service default |
+| Pickup point | 30 min stop + 1 min/order | Service default |
+| Avg basket (excl. fees) | **$45** | **[assumption]**. Replace with actual AOV. |
+| Take rate on basket | **10%** net of card fees | **[assumption]**. Bookings' fallback commission is 10% **[code]**. Retail margin is likely higher. |
+| Seller pickup fee | **$2.00**/order (1 package) | Seed tariff **[code]** |
+
+#### Today, one Bastrop order
+`cost(1) = $105.22 + $2.50 = $107.72` against a $7.99 fee, a **loss of about $99.73**, or about $93 after the basket's contribution.
+
+#### Calculator output (defaults: doorstep, 32 mi, 50 min)
+
+`python3 tools/spikes/run_economics.py`
+
+```
+## Cost model
+- fixed: 145 min + 64 mi = $105.22 per run
+- per order: $2.50
+
+## Break-even orders per run
+| run fee | delivery lens | contribution lens | contribution / order |
+|--------:|--------------:|------------------:|---------------------:|
+|   $5.99 |            31 |                11 |               $12.32 |
+|   $7.99 |            20 |                 9 |               $14.26 |
+|   $9.99 |            15 |                 8 |               $16.20 |
+|  $12.99 |            11 |                 7 |               $19.11 |
+
+## Run P&L, delivery lens (run fees - estimated cost)
+| orders |    cost | cost / order | fee $5.99 | fee $7.99 | fee $9.99 | fee $12.99 | fee to break even |
+|-------:|--------:|-------------:|----------:|----------:|----------:|-----------:|------------------:|
+|      5 | $117.72 |       $23.54 |   -$87.77 |   -$77.77 |   -$67.77 |    -$52.77 |            $23.55 |
+|     10 | $130.22 |       $13.02 |   -$70.32 |   -$50.32 |   -$30.32 |     -$0.32 |            $13.03 |
+|     15 | $142.72 |        $9.51 |   -$52.87 |   -$22.87 |     $7.13 |     $52.13 |             $9.52 |
+|     20 | $155.22 |        $7.76 |   -$35.42 |     $4.58 |    $44.58 |    $104.58 |             $7.77 |
+|     25 | $167.72 |        $6.71 |   -$17.97 |    $32.03 |    $82.03 |    $157.03 |             $6.71 |
+|     30 | $180.22 |        $6.01 |    -$0.52 |    $59.48 |   $119.48 |    $209.48 |             $6.01 |
+|     40 | $205.22 |        $5.13 |    $34.38 |   $114.38 |   $194.38 |    $314.38 |             $5.14 |
+
+## Run P&L, contribution lens (fees net of card + seller fees + take on baskets - cost)
+| orders | fee $5.99 | fee $7.99 | fee $9.99 | fee $12.99 |
+|-------:|----------:|----------:|----------:|-----------:|
+|      5 |   -$56.14 |   -$46.43 |   -$36.72 |    -$22.15 |
+|     10 |    -$7.06 |    $12.36 |    $31.78 |     $60.91 |
+|     15 |    $42.02 |    $71.15 |   $100.28 |    $143.98 |
+|     20 |    $91.11 |   $129.95 |   $168.79 |    $227.05 |
+|     25 |   $140.19 |   $188.74 |   $237.29 |    $310.11 |
+|     30 |   $189.27 |   $247.53 |   $305.79 |    $393.18 |
+|     40 |   $287.43 |   $365.11 |   $442.79 |    $559.31 |
+```
+
+#### Sensitivities (break-even orders at $5.99 / $7.99 / $9.99 / $12.99)
+
+| Scenario | Fixed cost | Per order | Delivery lens | Contribution lens |
+|---|---|---|---|---|
+| Base (32 mi, 50 min, doorstep) | $105.22 | $2.50 | 31 / **20** / 15 / 11 | 11 / **9** / 8 / 7 |
+| Peak or "1 hour" drive (37 mi, 60 min): `--road-miles 37 --drive-minutes 60` | $120.55 | $2.50 | 35 / **22** / 17 / 12 | 13 / **11** / 9 / 8 |
+| Pickup point: `--drop-mode pickup-point` | $117.72 | $0.42 | 22 / **16** / 13 / 10 | 10 / **9** / 8 / 7 |
+| 4 extra seller stops, 12 min each: `--sellers 4` | $125.22 | $2.50 | 36 / **23** / 17 / 12 | 13 / **11** / 10 / 8 |
+
+#### Reading it
+- At **$7.99** the run pays its own delivery cost from **about 20 doorstep orders** (16 at a pickup point). With the basket counted, it is **contribution-positive from about 9–11 orders**.
+- **$5.99** needs 30+ orders to fund delivery and only makes sense as a pickup-point promo.
+- **$9.99–12.99** roughly halves the delivery break-even. That's worth testing once a town has a habit. Communicate it as "town run" pricing, not a price rise.
+- **Recommended Bastrop terms (Phase 0/1):** fee **$7.99**, **minimum 10 orders** (contribution break-even plus 1), **capacity 30 orders / 45 packages** (about 5.5 h of driver time doorstep), `CutoffPolicy.EXTEND` once by 7 days. Treat runs between 10 and 20 orders as acquisition spend (≤ $50 delivery loss per run, already contribution-positive).
+- The service already shows the delivery lens. **S265 follow-up:** add the contribution lens (seller fees and commission share from payments) to `RunEconomics`. `atOrders` already accepts a `commissionShareMinor`.
+
+### B. Card holds for long lead times (the spike's payment design)
+
+#### Facts
+- An online card authorisation is valid for about **7 days** for most networks. Stripe says to rely on each payment's **`capture_before`** field ([Stripe: place a hold](https://docs.stripe.com/payments/place-a-hold-on-a-payment-method), [capture later](https://docs.stripe.com/payments/capture-later)) **[doc]**.
+- **Extended authorisation** (up to about 30 days) is offered to **IC+ pricing** users only. For Visa outside lodging, rental and cruise, *"the extended window doesn't apply to transactions with merchants in US or JP"*. Amex and Discover limit it to travel and lodging categories. Mastercard allows all categories (not Maestro or Cirrus) ([Stripe: extended authorization](https://docs.stripe.com/payments/extended-authorization)) **[doc]**. For a US grocery marketplace that is **not a general solution**.
+- A failed off-session confirmation returns **402**, and the intent sits in `requires_payment_method`. Stripe's guidance is to bring the customer back on-session to authenticate or choose another method ([save and reuse](https://docs.stripe.com/docs/payments/save-and-reuse), [Stripe support: manual confirmation for SCA](https://support.stripe.com/questions/manual-confirmation-for-off-session-payments-requiring-strong-customer-authentication-sca)) **[doc]**. Our gateway already surfaces this as `authentication_required` or `REQUIRES_ACTION` **[code]**. In the US, 3-D Secure challenges are uncommon, so **declines** (funds, expired card) are the bigger risk **[unverified]**.
+- **Refunds don't return Stripe's processing fee** ([Stripe support](https://support.stripe.com/questions/understanding-fees-for-refunded-payments)) **[doc]**. Cancelling an **uncaptured** intent involves no capture, so prefer cancel over refund wherever possible. Whether any fee applies to uncaptured authorisations depends on our Stripe pricing plan **[unverified]**.
+
+#### Options
+
+| | A. Authorise at order, capture at confirmation | B. Extended authorisation | C. SetupIntent at order, off-session charge at cutoff | **D. Hybrid (recommended)** |
+|---|---|---|---|---|
+| Customer effort | One confirmation | One | One (card saved, $0) | One (authorise + save together) |
+| Funds checked at order | Yes | Yes | **No** (card validity only) | Yes |
+| Works for 1–14-day cutoffs | **No**: holds lapse after about 7 days | Mostly no (US Visa non-travel ineligible, IC+ only) | Yes | **Yes** |
+| Failure at charge time | Expired hold, so capture fails | Same, for ineligible cards | Declines and SCA for **every** order at cutoff | Only for **long-lead** orders (placed more than about 5 days before cutoff) |
+| Visible "pending" on customer's card | Yes, until capture or cancel | Yes, for longer | No | Yes, until capture or cancel (one hold only) |
+| Run cancelled | Cancel the hold (free) | Same | Nothing to do | Cancel the hold (free) |
+| Build cost | Already exists | Stripe plan change + contracts | New flow | **Existing pieces**: `saveForOffSession`, `capture`, `release`, `OffSessionChargeService`, the bookings `authorisation-window` pattern |
+
+#### Decision: D, hybrid
+1. **At order:** create the PaymentIntent with `capture_method=manual` and `setup_future_usage=off_session` (`CreateIntent.saveForOffSession=true` **[code]**). Store `capture_before` on the payment, read from the latest charge's `payment_method_details.card.capture_before`.
+2. **At run confirmation** (`run.confirmed`): for each order, if `now + safetyBuffer(12 h) < capture_before`, **capture the whole order** (all lines plus the run fee) and treat later shortages as **per-line refunds**. Otherwise **release** the expired or expiring hold and run an **off-session charge** for the same lines. This reuses `OffSessionChargeService`, which creates a new manual-capture payment on the order, and then captures it.
+3. **If the off-session charge fails:** send `payments.intent.action_required` to notifications (email, push and WhatsApp utility) with a confirm link valid until **sellerPickupAt minus 6 h**. Retry declines once after 6 h, matching bookings' `max-attempts` and `retry-delay`. If the order is still unpaid at the deadline, the order is **removed from the run** (slot released, stock released, customer told).
+4. **Why capture at confirmation, not at delivery:** the hold can lapse between cutoff and delivery, and sellers start packing at confirmation. If ops prefer capturing at pickup (no refunds for shorts), keep that as a per-location option once data shows short-pick rates.
+5. **Cancellations:** before cutoff, the shopper cancels and the intent is cancelled (free). After confirmation, the order is **not cancellable by the shopper**, since sellers have committed (support can still override). A run cancelled before capture cancels the intents. A run cancelled after capture refunds in full, or offers a move to the next run with an optional goodwill credit.
+6. **Card-on-file disclosure:** at checkout, say *"We'll hold $X now and charge when the run is confirmed. If the hold expires we'll charge your saved card."* That covers the consent for the off-session merchant-initiated charge **[legal wording to review]**.
+
+#### Refund matrix
+
+| Event | Run fee | Goods | Mechanism |
+|---|---|---|---|
+| Shopper cancels before cutoff | n/a | n/a | Cancel intent |
+| Run cancelled before confirmation | n/a | n/a | Cancel intents |
+| Run cancelled after capture | Refund | Refund (or move to next run) | `refund` all lines |
+| Seller short or damaged at pickup | Keep | Refund line | `refund` line (existing) |
+| Doorstep failed, customer fault | Keep | Redeliver next run, or refund less restocking (perishables: no restock) | Policy question Q9 |
+| Not delivered, our fault | Refund | Refund or redeliver | `refund` |

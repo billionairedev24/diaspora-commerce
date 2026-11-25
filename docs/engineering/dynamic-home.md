@@ -1,8 +1,87 @@
 # Dynamic home: what shoppers see, and how it is decided
 
-Status: backend built (S415 to S426, S430; see section 9 for what is done and what is not); storefront and staff console built (Part 3). Design background:
-[dynamic-home-spike.md](dynamic-home-spike.md). Related: [home-page-content.md](home-page-content.md), [seo.md](seo.md),
+Status: backend built (S415 to S426, S430; see section 9 for what is done and what is not); storefront and staff console built (Part 3). Design rationale: Part 0 below. Related: [home-page-content.md](home-page-content.md), [seo.md](seo.md),
 [search-providers.md](search-providers.md).
+
+## Part 0. Why it was built this way (design rationale)
+
+(From the 2026-11-12 spike, formerly `dynamic-home-spike.md`; the audit, API sketch and prototype notes it held are superseded by Parts 2 and 3.)
+
+**Owner feedback.** The home shows fixed "Shop by community" and "More kitchens to discover" modules (Nigerian, Ghanaian, Ethiopian, Jamaican,
+Indian, Senegalese, Kenyan, Caribbean). Those communities may have no products on day 1 in production. Amazon assembles its home from what exists and
+what is relevant; services, groceries and every department must stay reachable.
+
+**Short answer.** The gateway already does most of the hard part (every rule product is in stock with a real photo, rails drop when thin, the community
+spotlight picks from live facets). The rigidity comes from four things: fixed content that bypasses those rules (community tiles, heroes), fixed lists
+in the storefront and staff console (department bar, footer, tile-rule departments), no shared "what exists" signal, and no way for staff to see why a
+module is hidden. The recommendation is to keep the current composition and add a signals snapshot plus an eligibility pass in front of it
+, then layer taxonomy-generated departments, an optional data-driven communities facet, a first-class Services module and personalisation.
+
+### Options considered
+
+All options keep the current invariants: only products live with a stored RESOLVED tax decision, in stock, with a real photo; one product once per page;
+paid modules labelled; no carrier names; no claim that AfroTransact collects or delivers; five locales.
+
+| Option | What it is |
+|---|---|
+| **A. Module registry with eligibility** | Every module (hero, deals, continue shopping, recently viewed, department tiles, groceries rail, services, communities, new arrivals, top sellers, pre-order, Plus) is a registry entry with rules: minimum in-stock products with real photos, minimum distinct sellers, freshness, signal needed. A signals snapshot (counts by department / community / seller / services) is read once; modules that fail are never fetched or rendered; ordering is by weight with fallbacks |
+| **B. Staff-curated slots over automatic ones** | Staff pin, schedule and preview modules and campaigns (content placements, mostly built); automatic modules fill the gaps. Add: schedule windows and "preview as of date / ZIP / signed-in" for every module, not only heroes |
+| **C. Personalisation and relevance** | Recently viewed, continue shopping, orders, location, language, wishlist (if it exists), seasonality (holiday calendar), with cold-start defaults for guests (regional popularity, new arrivals) |
+| **D. Coverage rules from the live taxonomy** | Nav, "Shop by department" and category tiles generated from catalog departments and live counts; Services first-class; communities an optional facet over the product attribute, shown above a threshold, image from a real top product, empty ones hidden from nav, footer, sitemap and routes |
+| **E. Client-side composition** (rejected baseline) | The page is a shell; the browser fetches modules and decides what to render |
+
+Combined variants compared:
+
+| Criterion | 1. Harden current (gate fixed cells, delete seed, fix lists) | 2. A + D (registry, taxonomy coverage, communities facet) | **3. A + D + B + C phased (recommended)** | 4. E client composition |
+|---|---|---|---|---|
+| Day-1 viability | Good: stops the worst empty states | Excellent: page is always built from what exists | Excellent | Good, but layout jumps |
+| Cost to build | Low (about 1 sprint) | Medium (about 3 sprints) | Medium-high, phased; each phase ships alone | Medium, then permanent complexity |
+| Complexity | Low; thresholds stay scattered constants | Medium; one rule table, one snapshot | Medium-high; settings, preview, signals, calendar | High; two renderers, hydration cost |
+| SEO | Neutral | Good: guest home SSR with real modules; sitemap and nav share the same counts | Good, same as 2 (personal modules are islands, not in the guest HTML) | Poor: modules absent from first HTML, CLS |
+| Caching | None (per visitor) | Shared composition cacheable as data (60 to 300 s) | Same, plus visitor islands | Cacheable shell, but waterfalls |
+| Observability | Logs only | Eligibility metrics and reasons | Plus module-level analytics and A/B | Browser-only, consent-gated |
+| A/B-ability | None | Per-module thresholds and order | Per-module variant keys, assigned at the edge | Easy, at SEO cost |
+| Staff explainability | None | Preview shows shown/hidden with reason | Same, plus schedule preview | None |
+
+Why not 1 alone: it fixes the screenshot but leaves every future module with its own copy of the thresholds and no way for staff to see why something is
+missing. Why not 4: the home is the SEO landing page, the LCP element must be in the first HTML, and `seo.md` decision 6 already rejects edge-caching
+HTML because of per-visitor data.
+
+### Recommendation taken
+
+**Option 3, built in this order: A (eligibility, shadow mode first) with D (taxonomy and communities), then B (schedule and preview), then C
+(personalisation and seasons).** Principles:
+
+- **One signals snapshot, many consumers.** The home, department nav, footer, sitemap and `/communities/<slug>` all read the same eligible-only counts
+  (department, community, seller count, service providers). "Hidden from the home" and "hidden from nav and sitemap" can never disagree.
+- **Decide first, fetch second.** The eligibility pass runs before any module resolves; hidden modules cost nothing.
+- **Staff own thresholds, not code.** Rules are settings rows with defaults, audit-logged and versioned.
+- **Explain every decision.** Each module yields shown / hidden, a reason code and a sentence in staff words (module names, never ids).
+- **Keep what works.** Placements, priorities, ads rules, de-duplication and `eligibleCard` stay; the registry wraps them.
+
+### Notes by concern
+
+- **Cost.** Option 3's runtime cost is lower than today's: the snapshot is one query and hidden modules are not resolved.
+- **Search / indexer.** The index must carry a boolean `photo_ok` (real photo, computed at index time from the same rule as `eligibleCard`) so facet counts equal
+  what the home can show; today counts include photo-less products. Seller distinct counts need a `seller_id` facet or a cardinality aggregation
+  (Meilisearch and Elasticsearch differ; see search-providers.md).
+- **SEO.** The guest home HTML contains the same shared modules every time within the TTL; hidden communities leave no nav, footer or sitemap trace and 404
+  instead of thin pages; internal links point only to pages with products.
+- **Observability and A/B.** Variant assignment at the Worker (cookie) so the cache key includes the variant; keep experiments to threshold, weight and order.
+
+### Risks and their mitigations
+
+| Risk | Mitigation |
+|---|---|
+| Thresholds too strict leave a bare page | Floor of 3 modules where possible; New arrivals and department tiles have low minimums; shadow mode and the simulator before launch |
+| Facet counts overstate (photo-less, sponsored duplicates) | `photo_ok` index field; story gates everything else on it |
+| Spelling variants split communities | Community registry with aliases; case-insensitive keys; staff merge tool later |
+| Modules flap at a boundary | Hysteresis of 2 products and a 60 s snapshot |
+| Cache shows one visitor's data to another | Shared composition contains no visitor fields by construction; contract test that `scope: shared` blocks carry no personal data |
+| Personalisation without consent | Server-side history only for signed-in shoppers with consent; browser history stays local |
+| Services card claims | Copy says what the provider offers and where; no claim that AfroTransact performs the service |
+| Seasonal copy promises stock | Season boosts ordering only; copy comes from staff and is shown only with eligible products |
+| Production seed content already live | Seed-content cleanup migration; verify prod content before release |
 
 ## Part 1. For the owner (plain language)
 

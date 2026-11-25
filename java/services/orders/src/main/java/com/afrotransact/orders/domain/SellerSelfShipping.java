@@ -6,7 +6,7 @@ import java.util.Objects;
 
 /**
  * A seller's own shipping charge, used only while the staff switch {@link ShippingSettings#sellerSelfShippingEnabled()} is
- * on. The minimum rule (docs/engineering/seller-self-shipping-options.md, option A): <b>one flat charge per order package of
+ * on. The minimum rule (docs/engineering/delivery-fulfilment.md, option A): <b>one flat charge per order package of
  * the seller</b>, set once here and never per product, so several items from one seller never add up to a fee nobody
  * chose. The seller sets it, keeps it and is responsible for it being fair; AfroTransact takes no commission on it.
  *
