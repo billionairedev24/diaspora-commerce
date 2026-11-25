@@ -35,9 +35,9 @@ repository). Lose `IDENTITY_DATA_KEY` and a perfect database restore leaves iden
    `backup complete: 19 databases`. Any `FAILED` line makes the job exit 1.
 5. `escrow.sh create` and store the bundle; test with `escrow.sh restore` into a temp directory.
 
-## The drill (do it in the trial, before launch, then monthly)
+## The drill (do it in UAT, before launch, then monthly)
 
-Use a **scratch** server: a second Layerbase database/server (a trial plan is enough), or a local `postgres:17` with PostGIS
+Use a **scratch** server: a second Layerbase database/server (a small plan is enough), or a local `postgres:17` with PostGIS
 (`postgis/postgis:17-3.5`). Never restore over production to "test".
 
 ```bash

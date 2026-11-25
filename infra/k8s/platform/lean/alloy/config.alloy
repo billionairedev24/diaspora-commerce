@@ -3,7 +3,7 @@
 //   logs     tail pod logs -> drop probe noise -> redact -> push  (Grafana Cloud hosted Loki)
 // Traces go through the OTel collector (infra/k8s/platform/envs/prod/opentelemetry-collector-gateway.yaml), not through here.
 // Everything environment specific comes from the Secret "grafana-cloud-alloy" (namespace observability), never from this file:
-//   CLUSTER_ENV (trial | prod: external label `env` on every series and log line), GRAFANA_PROM_URL, GRAFANA_PROM_USER,
+//   CLUSTER_ENV (uat | prod: external label `env` on every series and log line), GRAFANA_PROM_URL, GRAFANA_PROM_USER,
 //   GRAFANA_LOKI_URL, GRAFANA_LOKI_USER, GRAFANA_TOKEN, VALKEY_PASSWORD, MEILI_MASTER_KEY.
 // Syntax check: `alloy validate` (or `alloy fmt`) on this file; see docs/runbooks/observability-grafana-cloud.md.
 

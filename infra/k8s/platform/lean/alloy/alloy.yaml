@@ -4,7 +4,7 @@
 # it as a DaemonSet or turn on Alloy clustering, otherwise every node would be scraped twice (docs/runbooks/observability-grafana-cloud.md).
 # Strategy Recreate: two pods at once would send every series and log line twice.
 # Secret "grafana-cloud-alloy" (namespace observability; infra/ops/secrets, rendered by infra/ovh-vps/secrets.sh): CLUSTER_ENV
-# (trial | prod), GRAFANA_PROM_URL, GRAFANA_PROM_USER, GRAFANA_LOKI_URL, GRAFANA_LOKI_USER, GRAFANA_TOKEN, VALKEY_PASSWORD,
+# (uat | prod), GRAFANA_PROM_URL, GRAFANA_PROM_USER, GRAFANA_LOKI_URL, GRAFANA_LOKI_USER, GRAFANA_TOKEN, VALKEY_PASSWORD,
 # MEILI_MASTER_KEY. Memory: request 96 Mi, limit 256 Mi (UNMEASURED, see docs/engineering/cloud-cost.md).
 apiVersion: v1
 kind: ServiceAccount

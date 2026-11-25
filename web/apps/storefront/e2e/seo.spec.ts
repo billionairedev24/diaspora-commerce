@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
-/* SEO drift checks against the production build. This server runs WITHOUT APP_ENV=prod (like uat, dev, previews and the 8-day
-   trial), so it must behave as a non-indexable environment on every surface a crawler can see. Prod behaviour (robots allow
+/* SEO drift checks against the production build. This server runs WITHOUT APP_ENV=prod (like uat, dev and
+   previews), so it must behave as a non-indexable environment on every surface a crawler can see. Prod behaviour (robots allow
    rules, sitemap) is covered by test/seo-env-safety.test.ts and test/seo-sitemap.test.ts; tools/ci/seo_probe.py checks the
    deployed hosts. No browser is needed for most of this: plain HTTP requests, as a crawler would send them. */
 

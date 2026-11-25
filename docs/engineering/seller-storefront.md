@@ -48,7 +48,6 @@ fails (422 `STORE_ACCENT_LOW_CONTRAST`) using the same palette numbers (`presetC
 | Environment | Media host (`MEDIA_PUBLIC_URL`) | Set in |
 |---|---|---|
 | local | `http://localhost:9000/media/` | `go/services/media/config/local.yaml` (what uploads return) and gateway-bff `config/local.yaml` |
-| trial | `https://media-test.afrotransact.com` | `global.mediaHost`, `infra/argocd/envs/trial/platform-values.yaml` |
 | dev / uat | `https://media-dev.afrotransact.com`, `https://media-uat.afrotransact.com` | `global.mediaHost` of the environment |
 | prod | `https://media.afrotransact.com` | `global.mediaHost`, `infra/argocd/envs/prod/platform-values.yaml` |
 

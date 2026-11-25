@@ -35,17 +35,17 @@ locals {
   # Instance keys for provider/module for_each (OpenTofu >= 1.9). Non-selected clouds get ZERO provider
   # instances, so their providers are never configured and need no credentials.
   on = {
-    aws       = local.is_aws ? toset(["aws"]) : toset([])
-    gcp       = local.is_gcp ? toset(["gcp"]) : toset([])
-    azure     = local.is_azure ? toset(["azure"]) : toset([])
-    ovh       = local.is_ovh ? toset(["ovh"]) : toset([])
+    aws   = local.is_aws ? toset(["aws"]) : toset([])
+    gcp   = local.is_gcp ? toset(["gcp"]) : toset([])
+    azure = local.is_azure ? toset(["azure"]) : toset([])
+    ovh   = local.is_ovh ? toset(["ovh"]) : toset([])
     # OVH extras that the launch profile leaves OFF: OKMS (Secret Manager) and the Harbor registry (GHCR is the registry of
     # record, secrets are SOPS/age). Turn on with ovh_okms / ovh_harbor.
     ovh_okms   = local.is_ovh && var.ovh_okms ? toset(["ovh"]) : toset([])
     ovh_harbor = local.is_ovh && var.ovh_harbor ? toset(["ovh"]) : toset([])
-    ec        = var.enable_elastic ? toset(["ec"]) : toset([])
-    confluent = var.enable_confluent ? toset(["confluent"]) : toset([])
-    temporal  = var.enable_temporal ? toset(["temporal"]) : toset([])
+    ec         = var.enable_elastic ? toset(["ec"]) : toset([])
+    confluent  = var.enable_confluent ? toset(["confluent"]) : toset([])
+    temporal   = var.enable_temporal ? toset(["temporal"]) : toset([])
   }
 
   # sizing.tf as written, except `disposable` (a trial or test run, variables.tf) which removes everything that would make
@@ -732,12 +732,12 @@ locals {
   egress_ips = one([for m in concat(values(module.aws_network), values(module.gcp_network), values(module.azure_network), values(module.ovh_network)) : m.network.egress_ips])
 
   p = {
-    network   = one(concat(values(module.aws_network), values(module.gcp_network), values(module.azure_network), values(module.ovh_network))).network
-    cluster   = one(concat(values(module.aws_cluster), values(module.gcp_cluster), values(module.azure_cluster), values(module.ovh_cluster)))
-    postgres  = one(concat(values(module.aws_postgres), values(module.gcp_postgres), values(module.azure_postgres), values(module.ovh_postgres)))
-    cache     = one(concat(values(module.aws_cache), values(module.gcp_cache), values(module.azure_cache), values(module.ovh_cache)))
+    network  = one(concat(values(module.aws_network), values(module.gcp_network), values(module.azure_network), values(module.ovh_network))).network
+    cluster  = one(concat(values(module.aws_cluster), values(module.gcp_cluster), values(module.azure_cluster), values(module.ovh_cluster)))
+    postgres = one(concat(values(module.aws_postgres), values(module.gcp_postgres), values(module.azure_postgres), values(module.ovh_postgres)))
+    cache    = one(concat(values(module.aws_cache), values(module.gcp_cache), values(module.azure_cache), values(module.ovh_cache)))
     # null on OVH: no OVH buckets (media + KYC on Cloudflare R2, backups on Backblaze B2)
-    bucket    = one(concat(values(module.aws_bucket), values(module.gcp_bucket), values(module.azure_bucket)))
+    bucket = one(concat(values(module.aws_bucket), values(module.gcp_bucket), values(module.azure_bucket)))
     # secrets and registry are null on OVH unless ovh_okms / ovh_harbor (the outputs below use try()).
     secrets   = one(concat(values(module.aws_secrets), values(module.gcp_secrets), values(module.azure_secrets), values(module.ovh_secrets)))
     registry  = one(concat(values(module.aws_registry), values(module.gcp_registry), values(module.azure_registry), values(module.ovh_registry)))

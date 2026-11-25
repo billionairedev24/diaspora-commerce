@@ -11,7 +11,7 @@ environment supplies its own values. `tools/ci/check_env_urls.py` enforces this.
 certificate covers the zone apex and **one** label below it (`*.afrotransact.com`); nested names such as `api.uat.afrotransact.com` need the paid Advanced Certificate Manager and are **not used**. The rule:
 
 - **prod**: the storefront is the apex `afrotransact.com`; every other host is `<role>.afrotransact.com`.
-- **any other environment E** (`dev`, `uat`, `test` for the 8-day trial): the storefront is `E.afrotransact.com` and every other host is `<role>-E.afrotransact.com`.
+- **any other environment E** (`dev`, `uat`): the storefront is `E.afrotransact.com` and every other host is `<role>-E.afrotransact.com`.
 - There is **no `www.` host and no apex redirect**; mail is sent from the bare domain (`no-reply@afrotransact.com`, Resend verified it), no `mail.` host.
 
 | env | storefront | seller | admin | api | auth | media | developers |
@@ -19,7 +19,6 @@ certificate covers the zone apex and **one** label below it (`*.afrotransact.com
 | prod | afrotransact.com | seller.afrotransact.com | admin.afrotransact.com | api.afrotransact.com | auth.afrotransact.com | media.afrotransact.com | developers.afrotransact.com |
 | uat | uat.afrotransact.com | seller-uat.afrotransact.com | admin-uat.afrotransact.com | api-uat.afrotransact.com | auth-uat.afrotransact.com | media-uat.afrotransact.com | developers-uat.afrotransact.com |
 | dev | dev.afrotransact.com | seller-dev.afrotransact.com | admin-dev.afrotransact.com | api-dev.afrotransact.com | auth-dev.afrotransact.com | media-dev.afrotransact.com | developers-dev.afrotransact.com |
-| trial | test.afrotransact.com | seller-test.afrotransact.com | admin-test.afrotransact.com | api-test.afrotransact.com | auth-test.afrotransact.com | media-test.afrotransact.com | developers-test.afrotransact.com |
 
 | Purpose | local | host of the table above |
 |---|---|---|
@@ -29,16 +28,15 @@ certificate covers the zone apex and **one** label below it (`*.afrotransact.com
 | Public API, gateway-bff (`API_BASE_URL`) | `http://localhost:8200` | `api` |
 | Identity / OIDC issuer (`AUTH_ISSUER_URL`) | `http://localhost:8100` | `auth` |
 | Public media CDN (`MEDIA_PUBLIC_URL`) | `http://localhost:9000/media` (MinIO) | `media` |
-| MCP server (`MCP_PUBLIC_URL`; private, ClusterIP, **no public host**) | `http://localhost:8114` | `http://mcp-server.afrotransact-<env>.svc.cluster.local` (trial and prod: namespace `afrotransact-prod`) |
-| Developer portal | `http://localhost:3100` | `developers` (not attached to the trial) |
-| Grafana | `http://localhost:3200` | dev and uat only, `grafana-dev` / `grafana-uat` (an origin host like `api`); prod and the trial use Grafana Cloud, no public Grafana |
+| MCP server (`MCP_PUBLIC_URL`; private, ClusterIP, **no public host**) | `http://localhost:8114` | `http://mcp-server.afrotransact-<env>.svc.cluster.local` (prod: namespace `afrotransact-prod`) |
+| Developer portal | `http://localhost:3100` | `developers` |
+| Grafana | `http://localhost:3200` | dev and uat only, `grafana-dev` / `grafana-uat` (an origin host like `api`); prod uses Grafana Cloud, no public Grafana |
 | Email sending domain | Mailpit | the bare zone, `afrotransact.com`, in every environment |
 
 The staff console is `admin` (the Worker route and the WAF admin rule cover `admin.` and `admin-*`). `staff.`, `sell.`, `provider.`, `identity.` and `www.` hosts do not exist; Provider Hub is served
 by the Seller Center app. `api` and `auth` are origin hosts (Cloudflare Tunnel or AOP ingress -> the edge Gateway -> HTTPRoutes in `infra/k8s/platform/edge/overlays/<env>`); mcp-server has no public
 host (private, cluster-internal, bearer tokens required); `developers` is the docs portal on Cloudflare Pages (`infra/cloudflare/pages.tf`).
 `PLATFORM_DOMAIN` is the **zone** in every environment (`afrotransact.com`), which is also the WebAuthn relying-party id: it must be a suffix of every web origin, and the zone is.
-A different trial zone is possible (`python3 tools/ci/env_hosts.py set-trial-zone <zone>`): the host rule, not the zone, is what the guard enforces.
 
 Public API paths on `api` (edge HTTPRoute `api`, prefix stripped before the service sees it): `/bff` gateway-bff,
 `/identity`, `/bookings`, `/fulfilment`, `/media`, `/notifications`, `/carrier-gateway`, and `/payments/v1/webhooks`
@@ -171,7 +169,7 @@ Renamed in this change (old names are no longer read): `AUTH_ISSUER_URI` and ide
 ## Host rule, cookies, passkeys and sessions
 
 - **Why flat:** see "Hosts per environment". A host is one label below the zone or it has no free certificate; the guard below fails CI otherwise.
-- **Storefront = the apex in prod, `E.<zone>` elsewhere:** `PUBLIC_WEB_URL` is `https://afrotransact.com` (prod), `https://uat.afrotransact.com`, `https://dev.afrotransact.com`, `https://test.afrotransact.com` (trial).
+- **Storefront = the apex in prod, `E.<zone>` elsewhere:** `PUBLIC_WEB_URL` is `https://afrotransact.com` (prod), `https://uat.afrotransact.com`, `https://dev.afrotransact.com`.
   It is the only storefront origin of gateway-bff CORS/CSRF, the OIDC callback and identity's redirect URIs; every other app has its own origin and its own callback.
 - **Cookies:** the BFF session cookie `at_session` is host-only (no `Domain`: `cookieDomain: ""`, `SESSION_COOKIE_DOMAIN` unset), `Secure`, `HttpOnly`, `SameSite=Lax`, set on the app's own origin
   (each web app proxies `/api/bff`); identity's own session cookie is host-only on the `auth` host. Flat hosts therefore need no cookie-domain setting and no host shares a cookie with another.
@@ -181,7 +179,7 @@ Renamed in this change (old names are no longer read): `AUTH_ISSUER_URI` and ide
 - **Mobile:** universal links and associated domains use the storefront host (`afrotransact.com` in prod, `<suffix>.afrotransact.com` in the others); `apple-app-site-association` and
   `assetlinks.json` are served on it. (Native apps are not part of the launch.)
 - **Edge:** HSTS (1 y, subdomains; preload only once `hsts_preload` is set) is zone-wide; the baseline Referrer-Policy rule lists every host of the environments in `edge_response_header_environments`.
-  Each environment's run creates its own DNS records and Workers routes; the prod run (`manage_zone`) owns the zone-wide objects. The trial never touches the apex.
+  Each environment's run creates its own DNS records and Workers routes; the prod run (`manage_zone`) owns the zone-wide objects.
 
 ## The guard
 
@@ -189,7 +187,7 @@ Renamed in this change (old names are no longer read): `AUTH_ISSUER_URI` and ide
 
 - a shared default or non-test source file (`application.yml`, `application-local.yml`, Go `config/local.yaml`,
   Helm `values.yaml`, `.java`/`.go`/`.ts`/`.sql`/...) names any AfroTransact host;
-- a dev, uat or trial file (`application-<env>.yml`, `config/<env>.yaml`, `values-<env>.yaml`,
+- a dev or uat file (`application-<env>.yml`, `config/<env>.yaml`, `values-<env>.yaml`,
   `infra/argocd/envs/<env>/`, `infra/k8s/platform/envs/<env>/`) names another environment's host, prod included;
 - a prod file names a non-prod host;
 - any host is **more than one label below the zone** (`api.uat.afrotransact.com`): Cloudflare's free certificate does not cover it;

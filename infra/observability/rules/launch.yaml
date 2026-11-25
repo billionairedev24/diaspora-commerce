@@ -1,8 +1,8 @@
 # Launch alerts for the single-node OVH production cluster (metrics shipped by Grafana Alloy to Grafana Cloud).
 # Loaded together with services.yaml, kafka.yaml, inventory.yaml and payments-transfer-recovery.yaml by
 # infra/observability/scripts/grafana-cloud-load.sh (the list is in that script and in docs/runbooks/observability-grafana-cloud.md).
-# Every alert keeps the `env` label (external label set by Alloy: trial | prod). Notification routing sends env="prod" to the
-# contact point and env="trial" nowhere (docs/runbooks/observability-grafana-cloud.md, "Contact points and routing").
+# Every alert keeps the `env` label (external label set by Alloy: uat | prod). Notification routing sends env="prod" to the
+# contact point and env="uat" nowhere (docs/runbooks/observability-grafana-cloud.md, "Contact points and routing").
 #
 # METRIC STATUS (grep of the code on this branch; nothing here has run against live data):
 #   CONFIRMED in code   payments_webhooks_total{type,outcome}, payments_transfers_total{outcome}, payments_reconciliation_drift_minor,

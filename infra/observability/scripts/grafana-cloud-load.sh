@@ -62,11 +62,10 @@ assert "__ALERT" not in text and "example.invalid" not in text.lower(), "placeho
 doc = yaml.safe_load(text)
 rcv = {r["name"]: r for r in doc["receivers"]}
 assert rcv["ops-email"]["email_configs"][0]["to"] == ",".join(addrs)
-assert not rcv["trial-quiet"].get("email_configs"), "trial-quiet must stay silent"
+assert not rcv["uat-quiet"].get("email_configs"), "uat-quiet must stay silent"
 order = [(r["receiver"], tuple(r["matchers"])) for r in doc["route"]["routes"]]
 assert ("ops-email", ('env="prod"',)) in order, "prod must route to email"
-assert ("ops-email", ('env="trial"', 'severity="page"')) in order, "trial page must route to email"
-assert order.index(("ops-email", ('env="trial"', 'severity="page"'))) < order.index(("trial-quiet", ('env="trial"',))), "trial routes out of order"
+assert ("uat-quiet", ('env="uat"',)) in order, "uat must route to uat-quiet"
 pathlib.Path(out).write_text(text)
 print(f"alertmanager routing ok: {len(addrs)} recipients", file=sys.stderr)
 PY
@@ -142,7 +141,7 @@ dashboards() {
       -d "{\"uid\":\"$folder_uid\",\"title\":\"AfroTransact\"}" || true
   fi
   for d in "${DASHBOARDS[@]}"; do
-    # Point the data-source uids at this stack, make `env` start on DEFAULT_ENV (trial noise never shows by default), wrap for the API.
+    # Point the data-source uids at this stack, make `env` start on DEFAULT_ENV (uat noise never shows by default), wrap for the API.
     payload="$(python3 - "$obs/grafana/dashboards/$d" "$PROM_DS_UID" "$LOKI_DS_UID" "$DEFAULT_ENV" "$folder_uid" <<'PY'
 import json, sys
 path, prom, loki, env, folder = sys.argv[1:6]

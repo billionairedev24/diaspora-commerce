@@ -4,7 +4,7 @@
   python3 tools/ci/seo_probe.py                      check every environment that answers
   python3 tools/ci/seo_probe.py --strict             an environment that does not answer is a failure
   python3 tools/ci/seo_probe.py --min-urls 500       prod sitemap must list at least 500 URLs (alert on a drop)
-  python3 tools/ci/seo_probe.py --env trial          one environment only
+  python3 tools/ci/seo_probe.py --env uat            one environment only
 
 What it proves:
   non-prod storefronts   robots.txt is "Disallow: /" with no Sitemap, /sitemap.xml is 404, pages carry X-Robots-Tag: noindex

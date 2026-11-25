@@ -1,8 +1,8 @@
 # Production on OVH Managed Kubernetes + Layerbase: from zero to a smoke-tested launch
 
-Status: **written, never run; the 8-day trial (section "Trial" below) is its first run.** There is no OVH or Layerbase account behind these steps yet; everything marked **UNVERIFIED** is a
-vendor fact to confirm on first use. Do the whole procedure once in a **disposable trial** (separate OVH project, `disposable = true`,
-hourly node, a Layerbase trial) and only then repeat it for the real project. Decision: [ADR 0004](../adr/0004-lean-single-node-production.md).
+Status: **written, never run.** There is no OVH or Layerbase account behind these steps yet; everything marked **UNVERIFIED** is a
+vendor fact to confirm on first use. Do the whole procedure once in a **disposable UAT project** (separate OVH project, `disposable = true`,
+hourly node, its own Layerbase server) and only then repeat it for the real project. Decision: [ADR 0004](../adr/0004-lean-single-node-production.md).
 Sizing: [cloud-cost.md](../engineering/cloud-cost.md). Restore: [restore-drill.md](restore-drill.md).
 
 What this deploys: 21 services (14 Java, 7 Go), Kafka, Temporal, Valkey, Meilisearch, an OTLP collector, cloudflared + Envoy on **one**
@@ -25,7 +25,7 @@ python3 infra/argocd/scripts/render_apps.py --env prod --no-crd-schemas   # rend
 
 1. Create the account at `us.ovhcloud.com`. **The US entity is a separate account from the EU/CA ones** (different API endpoint
    `ovh-us`, different console, different credentials). Add a payment method; ask OVH about startup credits (UNVERIFIED programme).
-2. Create a Public Cloud **project** (one for the trial, another for production). Check the quotas (instances, Kubernetes, block
+2. Create a Public Cloud **project** (one for UAT, another for production). Check the quotas (instances, Kubernetes, block
    storage). Ask OVH, in writing: is MKS **free plan** available in `US-EAST-VA-1`, its limits and SLA; the monthly price of `b3-16` and
    whether monthly billing can be cancelled; block storage class/price and CSI snapshots; Object Storage price and **S3 object lock**
    support in the US; whether OKMS exists in the US (only matters if you choose the optional OKMS path). All **UNVERIFIED** today.
@@ -49,7 +49,7 @@ tofu apply plan.out
 
 Expected: one MKS cluster (free plan) with one `b3-16` node, a private network, consumption alerts. **No OVH Object Storage buckets and no per-service S3 users**: media and KYC evidence are in Cloudflare R2, backups in Backblaze B2. **No load balancer, no gateway, no database.** The plan fails
 on purpose if `admin_cidrs` is empty, if a `US-*` region is paired with a non-US endpoint, or if the region is not the Layerbase one.
-For the trial use a different project and `disposable = true` (hourly node, no deletion protection, KYC retention 1 day).
+For UAT use a different project and `disposable = true` (hourly node, no deletion protection, KYC retention 1 day).
 These modules were never applied: expect to fix first-run provider errors (the OVH provider schema moves).
 
 ## 3. Kubeconfig and cluster checks
@@ -72,9 +72,8 @@ from ONE map, `infra/cloudflare/hosts.json`, and is **at most one label below th
 | prod | afrotransact.com | seller.afrotransact.com | admin.afrotransact.com | api.afrotransact.com | auth.afrotransact.com | media.afrotransact.com | developers.afrotransact.com |
 | uat | uat.afrotransact.com | seller-uat.afrotransact.com | admin-uat.afrotransact.com | api-uat.afrotransact.com | auth-uat.afrotransact.com | media-uat.afrotransact.com | developers-uat.afrotransact.com |
 | dev | dev.afrotransact.com | seller-dev.afrotransact.com | admin-dev.afrotransact.com | api-dev.afrotransact.com | auth-dev.afrotransact.com | media-dev.afrotransact.com | developers-dev.afrotransact.com |
-| trial | test.afrotransact.com | seller-test.afrotransact.com | admin-test.afrotransact.com | api-test.afrotransact.com | auth-test.afrotransact.com | media-test.afrotransact.com | developers-test.afrotransact.com |
 
-(`developers` is the docs portal on Cloudflare Pages; the trial does not attach it.) Take the tunnel token: `cloudflared tunnel token <tunnel id>` into `CLOUDFLARED_TUNNEL_TOKEN`
+(`developers` is the docs portal on Cloudflare Pages.) Take the tunnel token: `cloudflared tunnel token <tunnel id>` into `CLOUDFLARED_TUNNEL_TOKEN`
 (step 6). The edge routes (`infra/k8s/platform/edge/overlays/<env>/routes.yaml`) expose **api** (BFF, identity, bookings, fulfilment, media, notifications and the three
 Stripe webhook paths) and **auth** only. **There is no `mcp.` route and no `grafana.` route**, and neither name is in `infra/cloudflare` (`origin_apps` is `api`, `auth`).
 mcp-server is private by owner decision: cluster-internal (`ClusterIP`), no public hostname, OAuth bearer tokens on every call
@@ -84,7 +83,7 @@ no Authenticated Origin Pulls: nothing in the cluster is reachable except throug
 zone *Rules > Settings > Managed Transforms* > **Add visitor location headers** ON (the home page reads `CF-IPCity`, `CF-IPPostalCode`, `docs/engineering/delivery-location.md`;
 not in `infra/cloudflare` yet); if a `web-*` deploy fails with "Script startup/size limit exceeded" upgrade to **Workers Paid** (about USD 5/month). Error 10000 = the token
 lacks a permission or the zone; "a DNS record already exists" = delete the old record on that host (tofu owns the records).
-The web apps (Workers) are deployed by `.github/workflows/trial.yml` (trial) or the per-app pipelines (dev, uat, prod); `tools/ci/env_hosts.py check` proves every file agrees with the map.
+The web apps (Workers) are deployed by the per-app pipelines (dev, uat, prod); `tools/ci/env_hosts.py check` proves every file agrees with the map.
 
 ## 5. Layerbase PostgreSQL
 
@@ -104,18 +103,18 @@ The web apps (Workers) are deployed by `.github/workflows/trial.yml` (trial) or 
 
 ## 6. Secrets (SOPS + age)
 
-Follow `infra/ops/secrets/README.md` (the trial starts from `infra/ovh-vps/config.trial.env.example` and `secrets.trial.env.example`): render with `PROFILE=prod ... infra/ovh-vps/secrets.sh platform|services` into a temp directory
+Follow `infra/ops/secrets/README.md`: render with `PROFILE=prod ... infra/ovh-vps/secrets.sh platform|services` into a temp directory
 (`SECRETS_OUT`), encrypt with SOPS, apply with `infra/ops/secrets/apply.sh`. Prerequisites in `secrets.local.env`: Stripe **LIVE** keys and
 the three webhook secrets (`docs/runbooks/stripe-webhooks.md`), `STRIPE_PUBLISHABLE_KEY` (gateway-bff refuses to start without it),
 `RESEND_API_KEY` and `RESEND_WEBHOOK_SECRET` (`docs/runbooks/resend-email.md`; no Resend = no sign-up codes and no staff email MFA; notifications refuses to start in prod without both), `OPENROUTER_API_KEY` (**and a credit limit on that key in the OpenRouter
 dashboard**: the code-enforced USD 2 per UTC day gateway cap (initial default `AI_GLOBAL_DAILY_COST_USD` in `ai-gateway`'s `values-prod.yaml`; staff with `ai:cap.manage` can change it in the console, never above `AI_GLOBAL_DAILY_COST_MAX_USD`, USD 20) is the first guard, the key limit the second), geo and tax data keys, the
-Cloudflare R2 account id and the two bucket tokens for media (`docs/runbooks/r2-buckets.md`; media refuses to start in prod without them), the tunnel token, Grafana Cloud credentials (OTLP traces, plus the Alloy metrics/logs endpoints, user ids and a token with `metrics:write` + `logs:write` only: `docs/runbooks/observability-grafana-cloud.md` sections 3-4; one stack, `GRAFANA_ENV=prod`), the Backblaze B2 bucket (`afrotransact-prod-backups`, trial `afrotransact-trial-backups`), its bucket-scoped application key and endpoint, `BACKUP_RETENTION_DAYS` (default 14; click by click in `docs/runbooks/backups-backblaze.md`; **never Cloudflare R2 for backups**) and the **age public key** of the backup, `GHCR_USER` /
+Cloudflare R2 account id and the two bucket tokens for media (`docs/runbooks/r2-buckets.md`; media refuses to start in prod without them), the tunnel token, Grafana Cloud credentials (OTLP traces, plus the Alloy metrics/logs endpoints, user ids and a token with `metrics:write` + `logs:write` only: `docs/runbooks/observability-grafana-cloud.md` sections 3-4; one stack, `GRAFANA_ENV=prod`), the Backblaze B2 bucket (`afrotransact-prod-backups`, uat `afrotransact-uat-backups`), its bucket-scoped application key and endpoint, `BACKUP_RETENTION_DAYS` (default 14; click by click in `docs/runbooks/backups-backblaze.md`; **never Cloudflare R2 for backups**) and the **age public key** of the backup, `GHCR_USER` /
 `GHCR_TOKEN` (read-only `read:packages`; creates the pull secret `ghcr`) and `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_PHONE` (become identity's `BOOTSTRAP_ADMIN_*`): all in `secrets.local.env`, next to the other
 third-party keys (they are no longer in `config.env`). **Geo and tax data keys: none is mandatory for the launch set** (read from `go/services/geo` and `java/services/tax-returns`): geo starts with no key
 (autocomplete and reverse geocoding fall back to OpenStreetMap Nominatim, a public service with a 1 request per second policy; routing falls back to a geodesic estimate), and `GOOGLE_MAPS_API_KEY`
 (Places + Routes; recommended, set an API restriction and a quota) is optional locally but required in uat and prod (geo refuses to start without a Google key: Google Maps is the only address validator); tax-returns runs `TAX_PROVIDER=RULES` (our own rate table, no vendor
 key; the Stripe Tax and Avalara keys are for the later cut-over in `tax-provider-cutover.md`). What IS mandatory is tax **data**: `ORDERS_TAX_FALLBACK_TO_TABLE=false` means the tax-returns profiles must be `ACTIVE` or checkout fails (smoke test).
-Generate **everything fresh** (never reuse trial or dev values: `STATE_DIR` must be a new directory).
+Generate **everything fresh** (never reuse uat or dev values: `STATE_DIR` must be a new directory).
 
 Then **immediately** run `infra/ops/secrets/escrow.sh create` and store the result offline, separately from the database backups. The
 two values that cannot be recovered are `IDENTITY_DATA_KEY` (personal data encryption) and the JWT signing key (`SIGNING_KEY_PEM`).
@@ -126,14 +125,12 @@ The optional OKMS + External Secrets path (not verified against a live account):
 
 ## 7. Pin the images
 
-**Trial and prod have separate pin files.** Every launch-set chart pins `image.tag` (a full commit sha of a green `main` build) **and `image.digest`** (the `sha256:` of the signed manifest, written by the promote workflow after `cosign verify`; the chart renders `repo:tag@sha256:...`, so the kubelet pulls by digest) in its values file (the base value `dev` does not
-exist in GHCR) in **its own file per environment**: production in `values-prod.yaml`, the trial in `values-trial.yaml` (the trial Applications read `values.yaml`, `values-prod.yaml`,
-`values-trial.yaml`, then the trial platform values, so the trial pin wins and promoting to the trial never edits the production pin). Use the **promote** workflow once per service
-(`environment: trial` or `prod`, `tag: <sha>`; prod waits for the `prod` environment reviewers, the trial uses its own GitHub environment `trial`; it refuses services outside the launch set).
+Every launch-set chart pins `image.tag` (a full commit sha of a green `main` build) **and `image.digest`** (the `sha256:` of the signed manifest, written by the promote workflow after `cosign verify`; the chart renders `repo:tag@sha256:...`, so the kubelet pulls by digest) in its values file (the base value `dev` does not
+exist in GHCR) in **its own file per environment** (`values-uat.yaml`, `values-prod.yaml`). Use the **promote** workflow once per service
+(`environment: uat` or `prod`, `tag: <sha>`; prod waits for the `prod` environment reviewers; it refuses services outside the launch set).
 Repository variables of each GitHub environment: `CLOUD=ovh`, `REGISTRY_URL=ghcr.io/<owner>/<repo>` (GHCR: nothing is mirrored; the signature is verified in the job). Then the gate:
 
 ```bash
-python3 infra/argocd/scripts/check_launch_set.py --env trial --require-tags    # every launch-set service pinned in values-trial.yaml
 python3 infra/argocd/scripts/check_launch_set.py --env prod --require-tags     # every launch-set service pinned in values-prod.yaml
 ```
 
@@ -157,9 +154,9 @@ kubectl -n argocd scale deploy argocd-dex-server argocd-notifications-controller
 ```
 
 **Argo CD version: nothing in the repository pins or installs it except this command** (the platform charts pin Envoy Gateway v1.9.2 and the OTel collector chart 0.175.1, not Argo CD).
-Choose the latest stable **3.x** tag from the Argo CD releases page on the day, write it on this line and in your trial notes, and install exactly that tag in the trial and later in
+Choose the latest stable **3.x** tag from the Argo CD releases page on the day, write it on this line and in your notes, and install exactly that tag in UAT and later in
 production. **UNVERIFIED:** I could not reach GitHub from the session that wrote this, so no exact tag is confirmed here; the manifests rely on `goTemplate`, multi-source Applications and
-`ApplicationSet` matrix generators, so any current 3.x is expected to work (the first `argocd app sync root-trial` is the proof).
+`ApplicationSet` matrix generators, so any current 3.x is expected to work (the first `argocd app sync root-prod` is the proof).
 
 Keep `argocd-server`, `argocd-repo-server`, `argocd-redis`, `argocd-applicationset-controller` and `argocd-application-controller` (the
 ApplicationSets need the controller). Check `kubectl -n argocd top pods` after a few syncs: the budget is ~1 GiB. If the repository is
@@ -167,8 +164,8 @@ private add its credential out of band (`argocd repo add ... --username ... --pa
 `infra/argocd/projects/repositories.yaml`). Then:
 
 ```bash
-kubectl apply -n argocd -f infra/argocd/bootstrap/root-prod.yaml      # app of apps: AppProjects + the three ApplicationSets (manual sync); the trial: root-trial.yaml
-argocd app sync root-prod                                             # creates the ApplicationSets and, from them, the Applications (trial: root-trial)
+kubectl apply -n argocd -f infra/argocd/bootstrap/root-prod.yaml      # app of apps: AppProjects + the three ApplicationSets (manual sync)
+argocd app sync root-prod                                             # creates the ApplicationSets and, from them, the Applications
 argocd app list                                                       # expect 26 Applications, all OutOfSync, none syncing by themselves
 ```
 
@@ -206,7 +203,7 @@ Memory/CPU check after each wave: `kubectl top pods -A`, `kubectl describe node 
 - Catalog and search: create a product in a seller account, approve it in trust-ops, see it in search (reindex if needed).
 - Home page with promise absent: the storefront renders; the "get it by" rail is missing and delivery dates are estimates (gateway-bff runs with
   `PROMISE_DISABLED` in prod; `TestHomeDegradesWhenThePromiseServiceIsNotDeployed` also proves the failing-upstream path).
-- Checkout (Temporal saga): **Stripe test-mode first in the trial**; in production one real small payment, one refund, one payout test
+- Checkout (Temporal saga): **Stripe test-mode first in UAT**; in production one real small payment, one refund, one payout test
   (`docs/runbooks/production-readiness.md` section 5). `ORDERS_TAX_FALLBACK_TO_TABLE=false` means tax-returns profiles must be `ACTIVE`
   (`docs/runbooks/tax-provider-cutover.md`) or checkout fails.
 - AI: one Lola message works and `select * from ai_usage_daily where usage_day = current_date and scope = 'GLOBAL'` (in the `ai` database) shows a cost below USD 2.
@@ -226,59 +223,7 @@ Memory/CPU check after each wave: `kubectl top pods -A`, `kubectl describe node 
   Target RTO 4 hours for the database, 2 to 4 for the cluster (**not proven**: the drill measures it).
 - **Maintenance mode:** `docs/runbooks/maintenance-mode.md`.
 
-## Trial: the 8-day OVH run (before production)
-
-The trial is **a values overlay of prod**, not a new profile: the same 21 launch-set charts, the same lean platform, the **prod profile** (`APP_ENV=prod`, `SPRING_PROFILES_ACTIVE=prod`, so the
-seed guard still refuses demo data and `SEED_ALLOW_REMOTE` must not exist), on its **own** OVH project and cluster (one `b3-16`, `us-east-va`), Layerbase, Cloudflare Workers and a Tunnel. Argo CD
-environment `trial` (`infra/argocd/envs/trial`, root `bootstrap/root-trial.yaml`) reads each chart's `values-prod.yaml` and then `values-trial.yaml`.
-
-**What differs from production, exactly**
-
-| | Trial | Production |
-|---|---|---|
-| Hosts (zone `afrotransact.com`) | `test.`, `seller-test.`, `admin-test.`, `api-test.`, `auth-test.`, `media-test.afrotransact.com` | `afrotransact.com`, `seller.`, `admin.`, `api.`, `auth.`, `media.` |
-| Argo CD | Applications `<component>-trial`, projects `afrotransact-trial` / `platform-trial`, manual sync | `-prod` |
-| Kubernetes namespace | `afrotransact-prod` (same as prod: the cluster is dedicated, so the secret script, the MCP private URL and every `kubectl` line apply unchanged) | `afrotransact-prod` |
-| Image pins | `values-trial.yaml` of each chart (promote, `environment: trial`) | `values-prod.yaml` |
-| Stripe | **TEST mode** keys and three test-mode webhook endpoints at `api-test.afrotransact.com` | live keys, live endpoints |
-| R2 | `afrotransact-trial-media`, `afrotransact-trial-kyc-evidence`, tokens with a 10-day TTL | `afrotransact-prod-*`, no expiry |
-| Backups | Backblaze B2 `afrotransact-trial-backups`, retention 14 days | `afrotransact-prod-backups` |
-| Observability | `GRAFANA_ENV=trial` (Alloy label `env`, backup metric label), OTel `deployment.environment=trial`, token `afrotransact-alloy-trial` | `env=prod`, token `afrotransact-alloy-prod`; **`env=prod` alerts (all severities) mail the owner list, trial mails page-level only** |
-| AI | the same code-enforced USD 2 per UTC day and USD 0.50 per caller | same |
-| Cloudflare | `tofu apply -var-file=envs/trial.tfvars`, `manage_zone = false` (the prod run owns the zone-wide WAF), `developers_enabled = false` | `envs/prod.tfvars` |
-| Resend | the same verified domain `afrotransact.com`, sender `no-reply@afrotransact.com`, webhook at the trial API host | same domain |
-| Layerbase | the plan must allow **19 databases** (17 services + `temporal` + `temporal_visibility`) | same |
-| Not in either | OpenFGA, GCP/Azure/AWS, cert-manager, a load balancer, an `mcp.` or `grafana.` host | same |
-
-**Hosts, cookies and origins (checked in code, nothing to configure by hand)**
-
-1. Helm derives every URL from `global.domain` (the **zone**, so `PLATFORM_DOMAIN=afrotransact.com`) and the explicit hosts `global.webHost / sellerHost / adminHost / apiHost / authHost / mediaHost`, which
-   are *generated* from `infra/cloudflare/hosts.json` (`python3 tools/ci/env_hosts.py sync`). The exact origins (never a wildcard) feed identity's redirect and post-logout URIs and CORS origins, gateway-bff's
-   CORS/CSRF origins and OIDC callback, notification links and `MEDIA_PUBLIC_URL`.
-2. **Cookies:** the BFF session cookie `at_session` is host-only (no `Domain`: `cookieDomain: ""`), `Secure`, `HttpOnly`, `SameSite=Lax`, set on the app's own origin because each web app proxies `/api/bff`; identity's own
-   session cookie is host-only on `auth-test`. Flat hosts need **no** cookie-domain setting, and `SESSION_COOKIE_DOMAIN` must stay unset. All hosts share the registrable domain `afrotransact.com`, so they are same-site.
-3. **WebAuthn:** relying-party id = `PLATFORM_DOMAIN` = `afrotransact.com`, a suffix of every host (a rp id of `test.afrotransact.com` would not be). Passkeys made in the trial are bound to the same rp id as production
-   will use: delete the trial users before launch, never reuse them.
-4. **Stripe return URLs** are built in the browser from the page origin (`window.location`), nothing server-side to set. **Resend webhook** and the three **Stripe webhook** URLs are `https://api-test.afrotransact.com/...`.
-5. Shared zone: when the trial uses the prod zone, the staff-console WAF challenge (`admin.` and `admin-` hosts) already covers `admin-test.afrotransact.com`; the HSTS and response-header rules cover it too.
-
-**Order of work (each step is in the section above)**
-
-1. Accounts and tokens (sections 1, 5, 6; the Resend, R2, Backblaze, Grafana, Stripe-test runbooks). Layerbase plan with 19 databases and the written questions of section 14.
-2. `tofu` for OVH (section 2, a **separate project**, `disposable = true`), kubeconfig (3).
-3. Deploy the three Workers: Actions > **trial** (input `zone` empty = `afrotransact.com`), then `tofu apply -var-file=envs/trial.tfvars` in `infra/cloudflare` (buckets, DNS, routes, Tunnel); CORS and R2 tokens: `r2-buckets.md`.
-4. Secrets (6): `infra/ovh-vps/config.trial.env.example` and `secrets.trial.env.example`, `PROFILE=prod`, a new `STATE_DIR`, SOPS, `apply.sh`; `escrow.sh create`.
-5. Pins (7): promote every launch-set service with `environment: trial`; Argo CD (8) with `root-trial.yaml`; sync order (9); smoke test (10) with `api-test`, Stripe **test** cards.
-6. Measure (12), run the restore drill, then tear down (below).
-
-**Turnstile test keys.** No service reads a Turnstile key yet (`infra/cloudflare` creates the three widgets and prints their keys; nothing in `java/`, `go/`, `web/` or `mobile/` uses them), so the trial needs none. If a
-widget is wired before the trial ends, use Cloudflare's documented **dummy keys** instead of the real widgets so automated checks pass: site key `1x00000000000000000000AA` with secret `1x0000000000000000000000000000000AA`
-(always passes; `2x...` variants always block). UNVERIFIED: confirm the values on Cloudflare's Turnstile testing page before use; never put them in a production secret.
-
-**Teardown.** Delete the OVH project (or `tofu destroy` with `disposable = true`), `tofu destroy -var-file=envs/trial.tfvars`, empty and delete both R2 buckets and revoke both tokens, delete the B2 trial bucket and key, the
-`afrotransact-alloy-trial` token, the Stripe test endpoints, the trial Resend key and webhook, and the trial `STATE_DIR` and SOPS files. Keep nothing of the trial for production.
-
-## 12. Measure in the trial (decision data)
+## 12. Measure on the first deploy (decision data)
 
 `kubectl top pods` RSS per JVM at idle and under a k6 run (`tools/perf`, 50 concurrent shoppers) against the requests in cloud-cost.md; node
 requests vs allocatable; CPU during a 3-service sync; downtime of a rolling update and of a node reboot (time to all-Ready, PVCs reattach, Kafka/
@@ -294,7 +239,7 @@ Kafka disk growth per day; Grafana Cloud series and log volume against the free 
   node memory above 85 %, OOMKilled/CrashLoop, PVC above 80 %, **missed backup** (alert `BackupStale`, 26 hours, and the dead-man's-switch), backup size (`BackupSizeHigh` above 600 MB per night, `BackupBucketSizeHigh` above 8 GB; `infra/observability/rules/backup.yaml`), Layerbase storage near the limit.
 - **Optional: a dead-man's switch (heartbeat).** A nightly `pg-backup` that never starts raises no alert by itself, and an alert path that is down stays silent. Add ONE external heartbeat:
   either a Grafana Cloud Synthetic Monitoring check on the storefront and `/bff/healthz`, or a heartbeat URL of a ping service ("healthchecks"-style) that the backup job calls
-  (`BACKUP_HEALTHCHECK_URL` in `secrets.local.env`; the job pings it after a successful run and the service alerts you when the ping is missing). No vendor is chosen here and none is required for the trial;
+  (`BACKUP_HEALTHCHECK_URL` in `secrets.local.env`; the job pings it after a successful run and the service alerts you when the ping is missing). No vendor is chosen here and none is required for UAT;
   the in-cluster `BackupStale` alert (26 hours) covers the common case.
 - Pre-orders, community, retail and delivery-runs are **not launched**: hide their navigation in the storefront (delivery-runs is not deployed).
 

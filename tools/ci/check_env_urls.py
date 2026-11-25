@@ -51,7 +51,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 ZONE = "afrotransact.com"
-ENVS = ("dev", "uat", "trial", "prod")
+ENVS = ("dev", "uat", "prod")
 SKIP_DIRS = {
     "node_modules", ".git", "design", "target", ".next", ".next-e2e", ".open-next", "dist", "build", "coverage",
     ".turbo", ".gradle", ".idea", ".vscode", "vendor", ".expo", ".wrangler", "storybook-static",
@@ -148,8 +148,8 @@ def classify(rel: str) -> str | None:
     m = re.fullmatch(r"values-(\w+)\.ya?ml", name)
     if m:
         return m.group(1) if m.group(1) in ENVS else None
-    m = re.match(r"infra/argocd/envs/(dev|uat|trial|prod)/", rel) or \
-        re.match(r"infra/k8s/platform/(?:envs|[\w-]+/overlays)/(dev|uat|trial|prod)/", rel)
+    m = re.match(r"infra/argocd/envs/(dev|uat|prod)/", rel) or \
+        re.match(r"infra/k8s/platform/(?:envs|[\w-]+/overlays)/(dev|uat|prod)/", rel)
     if m and rel.endswith((".yaml", ".yml")):
         return m.group(1)
     if rel.startswith("infra/k8s/platform/values/") and rel.endswith((".yaml", ".yml")):

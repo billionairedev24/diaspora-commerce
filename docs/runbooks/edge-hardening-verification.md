@@ -1,7 +1,7 @@
 # Edge hardening: post-deploy verification (security audit F2, F3, F4, F5, F14)
 
 The code, tests and config for these fixes are in the repo. **Live behaviour through Cloudflare, the Tunnel, Envoy and the Workers is UNVERIFIED** until
-the checks below pass on the trial (`*-test.afrotransact.com`), then uat, then prod. Run them from a machine outside the cluster. Replace `<api>`,
+the checks below pass on uat (`*-uat.afrotransact.com`), then prod. Run them from a machine outside the cluster. Replace `<api>`,
 `<web>`, `<auth>`, `<admin>` with the environment's hosts (`infra/cloudflare/hosts.json`). Nothing here needs a secret.
 
 ## What changed (one paragraph each)
@@ -18,7 +18,7 @@ the checks below pass on the trial (`*-test.afrotransact.com`), then uat, then p
   and Prometheus), Go serves `/metrics` (and probes) there and drops `/metrics` from the public listener; in uat/prod a Go service without a management
   address serves no `/metrics` at all. On the public Java listener `/actuator/prometheus` now needs a token. Alloy scrapes the pod annotation, which now
   names port 9090; the NetworkPolicy admits `observability` on 9090 only. No Gateway route or Service port 80 reaches it.
-- **F4 CSP.** `CSP_MODE=enforce` for uat, trial and prod on storefront, seller-center and staff-console; dev/preview stay `report-only`. The report endpoint
+- **F4 CSP.** `CSP_MODE=enforce` for uat and prod on storefront, seller-center and staff-console; dev/preview stay `report-only`. The report endpoint
   `/api/csp-report` stays on.
 - **F5 fail-closed.** Java `SecurityEnabledGuard` (platform-security) refuses to start when `at.security.enabled=false` and any active profile or `APP_ENV`
   is not `local`, `test` or `it`. Go services with `AUTH_ENABLED` (cart, geo, search, promise, carrier-gateway, notifications, media) refuse to start when
@@ -56,7 +56,7 @@ curl -si "https://<auth>/oauth2/token" -X POST | head -3
 **What to look at in the Workers/BFF logs:** a request from your own IP shows your public address as the client IP in the BFF (not a Cloudflare or Worker
 address). If **every** web user shares one address in the BFF (all show a Cloudflare/Worker IP), `CF-Connecting-IP` is not the visitor on Worker
 subrequests: set the shared secret `GATEWAY_PROXY_TOKEN` (BFF, Secret) and `BFF_PROXY_TOKEN` (the three Workers) to the same value; the proxy then
-also sends `x-at-client-ip` and the BFF believes it only with a matching `x-at-proxy-token`. Do this on the trial before prod.
+also sends `x-at-client-ip` and the BFF believes it only with a matching `x-at-proxy-token`. Do this on uat before prod.
 
 Identity: sign in with a wrong password from two different networks; `sign_in_attempt.ip` (and the sign-in activity page) must show each visitor's address,
 not the Envoy pod's 10.x address.
@@ -109,7 +109,7 @@ cd go/pkg && go test ./config -run RequireAuthOutsideLocal
 python3 tools/ci/check_security_off.py
 ```
 
-Live: in the trial, `kubectl set env deploy/<svc> AT_SECURITY_ENABLED=false` must send the pod to CrashLoopBackOff with `Refusing to start:` in its log
+Live: in uat, `kubectl set env deploy/<svc> AT_SECURITY_ENABLED=false` must send the pod to CrashLoopBackOff with `Refusing to start:` in its log
 (then revert it). Do not do this in prod.
 
 ## F14 / F16
