@@ -145,7 +145,7 @@ Every location offers one or both of: **Fulfilled by AfroTransact** (AfroTransac
 and delivers them; the customer pays the delivery fee, it is AfroTransact's and you pay nothing for it) and **Seller pickup**
 (the customer collects from you, with no delivery fee). New locations are Fulfilled by AfroTransact by default when you give
 pickup hours and the address is located inside our delivery area. Customers can only buy from a location that offers at least
-one: Settings > Shipping and delivery tells you what to turn on. See [delivery and fulfilment modes](../../../engineering/delivery-fulfilment.md).
+one: Settings > Shipping and delivery tells you what to turn on. See [delivery and fulfilment modes](../engineering/guides/delivery-fulfilment.md).
 
 ## 4. Returns, disputes and account health
 

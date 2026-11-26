@@ -27,7 +27,7 @@ Open an order. Each shipment says who fulfils it, and **Set status** offers only
 - **Override status**: only people with the special override permission see it. It corrects a shipment Fulfilled by AfroTransact (normally you use the delivery steps) or an old seller-shipped one, only moves forward and always needs a reason. Pickup orders have none.
 
 If a step is greyed, the reason is beside it: "You need the delivery permission", "Old seller-shipped order: use Override status", "Not available for pickup orders" or "Finish earlier steps first".
-**Delivery dispatch** and **Delivery quotes** are marked "Not in use" while AfroTransact does not use drivers. See [delivery and fulfilment modes](../../../engineering/delivery-fulfilment.md).
+**Delivery dispatch** and **Delivery quotes** are marked "Not in use" while AfroTransact does not use drivers. See [delivery and fulfilment modes](../engineering/guides/delivery-fulfilment.md).
 
 ## Review a seller application
 
