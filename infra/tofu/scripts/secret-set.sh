@@ -13,7 +13,7 @@
 # Names follow modules/<cloud>/secrets: AWS Secrets Manager "afrotransact/<env>/<service>"; GCP Secret Manager and
 # Azure Key Vault "afrotransact-<env>-<service>" (Azure: the vault name comes from AZURE_KEY_VAULT or
 # `tofu output -json` in infra/tofu/envs/<env>). The full list of keys per service is in
-# each chart's values.yaml ("Secret keys expected"); docs/runbooks/release-1-config-inventory.md lists the names. Requires jq and the cloud CLI, logged in as an operator.
+# each chart's values.yaml ("Secret keys expected"); infra/ovh-vps/secrets.sh renders them on the OVH path. Requires jq and the cloud CLI, logged in as an operator.
 set -euo pipefail
 
 usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }

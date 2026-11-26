@@ -216,6 +216,5 @@ fixtures, generated clients, contracts and the docs portal are not scanned. File
 | `resources.requests.cpu/memory` and `limits.memory`; no `image.tag: latest` | | yes | yes | yes |
 | Stripe (S282): gateway-bff `stripe.publishableKey` empty in config (`STRIPE_PUBLISHABLE_KEY` only, listed in its chart's secrets); payments `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` without defaults, `require-live-key` | defaults allowed | test keys | test keys | live keys |
 
-Secrets are never in these files: each service's `values.yaml` lists the keys it expects; on the launch path (UAT, PROD) they are rendered by
-`infra/ovh-vps/secrets.sh` and applied from SOPS (`docs/runbooks/release-1-go-live.md` section 6), and
-`docs/runbooks/release-1-config-inventory.md` lists every name. Local runs use the docker compose defaults (`infra/local`, local-only credentials).
+Secrets are never in these files: each service's `values.yaml` lists the keys it expects; on the launch path (OVH) they are rendered by
+`infra/ovh-vps/secrets.sh` and applied from SOPS (`docs/runbooks/ovh-production.md` section 6); each chart's `values.yaml` lists its key names. Local runs use the docker compose defaults (`infra/local`, local-only credentials).
