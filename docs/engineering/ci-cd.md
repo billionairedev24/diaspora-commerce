@@ -155,8 +155,8 @@ requests included) before anything is pushed; see change request 5 for the remai
 
 **Repository variables**: `TF_TARGETS` (below), `GITOPS_BRANCH` (default `main`), `VERCEL_FALLBACK`
 (`true` to always deploy web to Vercel too), `DEV_BASE_DOMAIN` (ZAP and carrier smoke target), `DOCS_PAGES_PROJECT`.
-The whole first-time setup of the launch path (OVH, UAT then PROD), in order:
-[docs/runbooks/release-1-go-live.md](../runbooks/release-1-go-live.md). The AWS/GCP/Azure variables above are for the alternative clouds only (`infra/tofu/README.md` section 7).
+The whole first-time setup of the launch path (OVH), in order:
+[docs/runbooks/ovh-production.md](../runbooks/ovh-production.md). The AWS/GCP/Azure variables above are for the alternative clouds only (`infra/tofu/README.md` section 7).
 
 **Secrets**: `CLOUDFLARE_API_TOKEN` (Workers, Pages: docs + Storybook), `CLOUDFLARE_ACCOUNT_ID`, `EC_API_KEY`, `CONFLUENT_CLOUD_API_KEY`,
 `CONFLUENT_CLOUD_API_SECRET`, `TEMPORAL_CLOUD_API_KEY` (OpenTofu: Temporal Cloud namespaces), `EXPO_TOKEN`,
