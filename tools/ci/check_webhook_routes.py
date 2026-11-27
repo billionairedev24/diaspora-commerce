@@ -2,12 +2,12 @@
 """Guard: every Stripe webhook the platform expects has a public route on api.<domain>.
 
 Stripe can only reach a service through the edge. The Gateway API overlays (infra/k8s/platform/edge/overlays/<env>/routes.yaml)
-must each route the three webhooks to the
-right service, with the prefix rewritten to the service's own path, and must expose nothing else of seller:
+must each route the two webhooks to the
+right service, with the prefix rewritten to the service's own path, and must expose nothing else of seller (there is
+no plan-fee "stripe-billing" webhook: plan fees are card-only and read back from the PaymentIntent):
 
     /payments/v1/webhooks              -> payments /v1/webhooks            (STRIPE_WEBHOOK_SECRET)
     /seller/v1/webhooks/stripe-connect -> seller   /v1/webhooks/stripe-connect  (STRIPE_CONNECT_WEBHOOK_SECRET)
-    /seller/v1/webhooks/stripe-billing -> seller   /v1/webhooks/stripe-billing  (STRIPE_BILLING_WEBHOOK_SECRET)
 
     python3 tools/ci/check_webhook_routes.py          # exit 0 clean, 1 on a missing or too-wide route
 """
@@ -20,7 +20,6 @@ ROOT = Path(__file__).resolve().parents[2]
 EXPECTED = {
     "/payments/v1/webhooks": ("payments", "/v1/webhooks"),
     "/seller/v1/webhooks/stripe-connect": ("seller", "/v1/webhooks/stripe-connect"),
-    "/seller/v1/webhooks/stripe-billing": ("seller", "/v1/webhooks/stripe-billing"),
 }
 
 
@@ -30,7 +29,7 @@ def check(label, found, errors):
             errors.append(f"{label}: {path} should route to {want}, found {found.get(path)}")
     for path in found:
         if path.startswith("/seller") and path not in EXPECTED:
-            errors.append(f"{label}: {path} exposes more of the seller service than its two webhooks")
+            errors.append(f"{label}: {path} exposes more of the seller service than its Connect webhook")
 
 
 def main():
