@@ -432,7 +432,6 @@ access uses OIDC federation: no cloud keys in GitHub.
 | `STRIPE_PUBLISHABLE_KEY` | Stripe | gateway-bff | public id | **required** | Stripe.js Payment Element / Express Checkout in the storefront, PaymentSheet in the app (served by the BFF). Without: the storefront shows its labelled dev-only test card form instead of Stripe Elements |
 | `STRIPE_WEBHOOK_SECRET` | Stripe | payments | secret | **required** | verifies Stripe's webhooks (payment succeeded, refunds, disputes) at POST :8105/v1/webhooks/stripe. Without: webhooks are rejected: orders never see the payment succeed |
 | `STRIPE_CONNECT_WEBHOOK_SECRET` | Stripe | seller | secret | optional | Connect account updates (verification, payouts enabled) at POST :8106/v1/webhooks/stripe-connect. Without: Connect events are rejected: Account health does not update |
-| `STRIPE_BILLING_WEBHOOK_SECRET` | Stripe | seller | secret | optional | plan-fee PaymentIntent results (bank debits that settle later) at POST :8106/v1/webhooks/stripe-billing. Without: plan-fee events are rejected: a bank-debit plan fee stays processing (card-paid ones are unaffected) |
 | `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe | mobile-customer | public id | optional | PaymentSheet in the customer app (inlined by Metro at bundle time). Without: local.sh copies STRIPE_PUBLISHABLE_KEY; without either the app uses pk_test_mock (mock sheet) |
 | `EXPO_PUBLIC_STRIPE_MERCHANT_ID` | Stripe | mobile-customer | config | optional | Apple Pay merchant identifier for PaymentSheet. Without: default merchant.com.afrotransact (Apple Pay on device only) |
 | `TWILIO_ACCOUNT_SID` | Twilio | notifications | public id | optional | SMS: sign-in and enrolment codes, order and delivery texts. Without: texts are only logged (identity's one-time codes go to Mailpit) |
@@ -587,7 +586,7 @@ Plus the OpenTofu-seeded values (`DB_*`, Kafka, `ES_URLS`). Web and mobile apps:
 | payments | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | `DB_PASSWORD`, `DB_URL`, `FGA_API_TOKEN`, `PAYMENTS_CLIENT_SECRET` |
 | retail | - | `DB_PASSWORD`, `DB_URL`, `EDI_AS2_KEYSTORE_PATH`, `EDI_SFTP_PRIVATE_KEY_PATH`, `RETAIL_CLIENT_SECRET` |
 | search | - | `ADS_TOKEN_KEY`, `ES_API_KEY`, `ES_PASSWORD`, `SEARCH_CLIENT_SECRET` |
-| seller | `STRIPE_BILLING_WEBHOOK_SECRET`, `STRIPE_CONNECT_WEBHOOK_SECRET`, `STRIPE_SECRET_KEY` | `DB_PASSWORD`, `DB_URL`, `FIELD_ENCRYPTION_KEY`, `MEDIA_SERVICE_TOKEN`, `SELLER_SERVICE_CLIENT_SECRET` |
+| seller | `STRIPE_CONNECT_WEBHOOK_SECRET`, `STRIPE_SECRET_KEY` | `DB_PASSWORD`, `DB_URL`, `FIELD_ENCRYPTION_KEY`, `MEDIA_SERVICE_TOKEN`, `SELLER_SERVICE_CLIENT_SECRET` |
 | tax-returns | `STRIPE_SECRET_KEY` | `DB_PASSWORD`, `DB_URL`, `TAX_RETURNS_CLIENT_SECRET` |
 | tools/seed | `PEXELS_API_KEY`, `STRIPE_SECRET_KEY`, `UNSPLASH_ACCESS_KEY` | `BFF_CLIENT_SECRET`, `GATEWAY_BFF_CLIENT_SECRET`, `SEED_CLIENT_SECRET`, `SEED_TEST_USERS_PASSWORD`, `SEED_TOKEN` |
 | trust-ops | - | `DB_PASSWORD`, `DB_URL`, `TRUSTOPS_CLIENT_SECRET` |
