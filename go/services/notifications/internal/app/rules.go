@@ -322,6 +322,11 @@ var DefaultEventRules = map[string][]EventRule{
 			Recipient: RecipientOrgOwners, IDField: "orgId", When: fieldIs("source", "MANUAL"), Enrich: enrichGrant},
 	},
 
+	// A plan charge needs 3-D Secure (off-session): the owners confirm it in Plan & billing before confirmBy.
+	"seller.billing.payment_action_required": {{Topic: TopicSellerSubscription,
+		Template: "seller.billing.payment_action_required", Channels: chEmailPush, Recipient: RecipientOrgOwners,
+		IDField: "orgId", Enrich: enrichPlanPaymentAction}},
+
 	// ---- payouts (at.payout.events) ----
 	"payments.payout.paid": {{Topic: TopicPayouts, Template: "payout.paid", Channels: chEmailPush,
 		Recipient: RecipientOrgOwners, IDField: "orgId", Enrich: enrichPayout}},
@@ -674,6 +679,18 @@ func enrichMembership(d map[string]any, l Links) {
 	} else {
 		d["actionUrl"] = join(l.Storefront, "/account/payments")
 	}
+}
+
+// enrichPlanPaymentAction formats the plan charge and its deadline and points the button at Plan & billing, where
+// Confirm payment opens the bank's 3-D Secure check.
+func enrichPlanPaymentAction(d map[string]any, l Links) {
+	d["amount"] = moneyField(d, "amountCents")
+	setDefault(d, "invoiceNumber", "your plan invoice")
+	d["confirmByLine"] = ""
+	if f := friendlyDate(str(d, "confirmBy")); f != "" {
+		d["confirmByLine"] = "Please confirm it by " + f + ", or the payment counts as failed."
+	}
+	d["actionUrl"] = join(l.SellerCenter, "/billing")
 }
 
 func enrichPayout(d map[string]any, l Links) {

@@ -107,6 +107,10 @@ func SampleEvents(l Links) map[string][]map[string]any {
 		"seller.payouts.resumed":   {sampleEnforcement("CLEARED"), sampleEnforcement("REINSTATED")},
 		"seller.listings.hidden":   {sampleEnforcement("CHARGES_DISABLED"), sampleEnforcement("SUSPENDED")},
 		"seller.listings.restored": {sampleEnforcement("CLEARED"), sampleEnforcement("REINSTATED")},
+		"seller.billing.payment_action_required": {
+			{"orgId": "org_1", "invoiceId": "inv_1", "invoiceNumber": "AT-INV-1003", "amountCents": 3900,
+				"currency": "USD", "confirmBy": "2026-10-13T10:00:00Z", "occurredAt": "2026-10-10T10:00:00Z"},
+		},
 		"seller.billing.grant_applied": {
 			{"orgId": "org_1", "grantId": "7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", "source": "RULE", "type": "FREE_DAYS",
 				"summary": "1 month free", "reason": "$1,000 in sales in your first 60 days", "creditCents": nil,
