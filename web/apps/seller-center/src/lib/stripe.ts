@@ -80,14 +80,13 @@ export interface StripePaymentElements {
   submit(): Promise<{ error?: { message?: string } }>;
 }
 
-/** A payment method created from the Payment Element: a card or a US bank account. */
+/** A payment method created from the Payment Element (plan fees: cards only). */
 export interface ElementsPaymentMethodResult {
   error?: { message?: string };
   paymentMethod?: {
     id: string;
     type: string;
     card?: { brand?: string; last4?: string; exp_month?: number; exp_year?: number };
-    us_bank_account?: { bank_name?: string; last4?: string; account_type?: string };
   };
 }
 
@@ -102,6 +101,7 @@ export interface StripePaymentInstance {
     mode: 'setup';
     currency: string;
     paymentMethodCreation: 'manual';
+    paymentMethodTypes?: readonly string[];
     appearance?: { variables: Record<string, string> };
   }): StripePaymentElements;
   createPaymentMethod(options: { elements: StripePaymentElements }): Promise<ElementsPaymentMethodResult>;
