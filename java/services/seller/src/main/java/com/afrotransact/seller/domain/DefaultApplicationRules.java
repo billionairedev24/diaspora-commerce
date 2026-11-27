@@ -252,9 +252,9 @@ public class DefaultApplicationRules implements ApplicationRules {
                 e.required(in.cardExpMonth() == null || in.cardExpYear() == null, "cardExpiry");
             }
         }
-        if (in.paymentMethodKind() == PaymentMethodKind.US_BANK_ACCOUNT) {
-            // Plan fees are paid by card or from earnings; a bank debit (ACH) is not offered.
-            e.put("paymentMethodKind", "Plan fees are paid by card");
+        if (in.paymentMethodKind() == PaymentMethodKind.US_BANK_ACCOUNT && complete
+                && (data.payouts() == null || !data.payouts().externalAccountLinked())) {
+            e.put("paymentMethodKind", "Add your payout bank account in Stripe verification first");
         }
         if (in.stripePaymentMethodId() != null && !in.stripePaymentMethodId().startsWith("pm_")) {
             e.put("stripePaymentMethodId", "Expected a Stripe payment method id (pm_…)");

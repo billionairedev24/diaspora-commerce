@@ -41,11 +41,28 @@ final class StripeStub {
         wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/payment_intents"))
                 .willReturn(json("{\"id\":\"pi_" + RANDOM + "\",\"object\":\"payment_intent\",\"status\":"
                         + "\"succeeded\"}")));
-        // A card charge Stripe leaves processing (rare): the payment method id says so; reading it back succeeds.
+        // Bank debits settle later (processing): the payment method id says so. Their outcome arrives as a plan-fee event.
         wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/payment_intents"))
-                .withRequestBody(WireMock.containing("payment_method=pm_processing")).atPriority(1)
-                .willReturn(json("{\"id\":\"pi_processing_" + RANDOM + "\",\"object\":\"payment_intent\","
+                .withRequestBody(WireMock.containing("payment_method=pm_ach")).atPriority(1)
+                .willReturn(json("{\"id\":\"pi_ach_" + RANDOM + "\",\"object\":\"payment_intent\","
                         + "\"status\":\"processing\"}")));
+        // 3-D Secure off-session (test card 4000002500003155): Stripe declines with authentication_required.
+        wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/payment_intents"))
+                .withRequestBody(WireMock.containing("payment_method=pm_3ds")).atPriority(1)
+                .willReturn(WireMock.aResponse().withStatus(402).withHeader("Content-Type", "application/json")
+                        .withBody("{\"error\":{\"type\":\"card_error\",\"code\":\"authentication_required\","
+                                + "\"decline_code\":\"authentication_required\",\"message\":\"Authenticate.\","
+                                + "\"payment_intent\":{\"id\":\"pi_3ds_1\",\"object\":\"payment_intent\"}}}")));
+        wm.stubFor(WireMock.get(WireMock.urlPathEqualTo("/v1/payment_intents/pi_3ds_1")).atPriority(1)
+                .willReturn(json("{\"id\":\"pi_3ds_1\",\"object\":\"payment_intent\",\"status\":"
+                        + "\"requires_payment_method\",\"client_secret\":\"pi_3ds_1_secret_test\","
+                        + "\"last_payment_error\":{\"type\":\"card_error\",\"code\":\"authentication_required\","
+                        + "\"payment_method\":{\"id\":\"pm_3ds_1\",\"object\":\"payment_method\"}}}")));
+        wm.stubFor(WireMock.get(WireMock.urlPathMatching("/v1/setup_intents/seti_[A-Za-z0-9_]+"))
+                .willReturn(json("{\"id\":\"{{request.pathSegments.[2]}}\",\"object\":\"setup_intent\","
+                        + "\"status\":\"succeeded\",\"payment_method\":\"pm_ach_1\",\"mandate\":\"mandate_ach_1\"}")));
+        wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/refunds"))
+                .willReturn(json("{\"id\":\"re_" + RANDOM + "\",\"object\":\"refund\",\"status\":\"succeeded\"}")));
         wm.stubFor(WireMock.get(WireMock.urlPathMatching("/v1/payment_intents/pi_[A-Za-z0-9_]+"))
                 .willReturn(json("{\"id\":\"{{request.pathSegments.[2]}}\",\"object\":\"payment_intent\","
                         + "\"status\":\"succeeded\"}")));

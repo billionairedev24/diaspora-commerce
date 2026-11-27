@@ -23,6 +23,11 @@ public class LocalTestPlanPayments implements PlanPaymentsGateway {
     }
 
     @Override
+    public SetupResult setupIntent(String setupIntentId) {
+        return new SetupResult("succeeded", null, null);
+    }
+
+    @Override
     public void attachPaymentMethod(String customerId, String paymentMethodId) {
         // nothing to attach locally
     }
@@ -44,6 +49,12 @@ public class LocalTestPlanPayments implements PlanPaymentsGateway {
 
     @Override
     public Charge paymentStatus(String paymentIntentId) {
-        return new Charge(Status.SUCCEEDED, paymentIntentId, null, null);
+        return new Charge(Status.SUCCEEDED, paymentIntentId, null, null, paymentIntentId + "_secret_local", null);
+    }
+
+    @Override
+    public RefundResult refund(String paymentIntentId, long amountCents, String reason, String idempotencyKey) {
+        return new RefundResult("re_local_" + UUID.nameUUIDFromBytes(idempotencyKey.getBytes(StandardCharsets.UTF_8)),
+                "succeeded", amountCents);
     }
 }
