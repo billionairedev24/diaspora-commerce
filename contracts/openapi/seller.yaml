@@ -1787,7 +1787,7 @@ paths:
     post:
       tags:
       - Plans & billing
-      summary: Add a card or bank account (owner)
+      summary: Add a card (owner); plan fees are paid by card, a bank account is refused (422)
       operationId: addPaymentMethod
       parameters:
       - name: orgId
@@ -2102,7 +2102,7 @@ paths:
     post:
       tags:
       - Plans & billing
-      summary: 'Start adding a card or bank account (owner): Stripe SetupIntent'
+      summary: 'Start adding a card (owner): Stripe SetupIntent, card only'
       description: Confirm the clientSecret with Stripe.js (Payment Element) or the mobile PaymentSheet, then register the
         resulting pm_… with POST /billing/payment-methods.
       operationId: createSetupIntent
@@ -3334,38 +3334,6 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ShipFromAddress'
-  /v1/webhooks/stripe-billing:
-    post:
-      tags:
-      - Stripe webhooks
-      summary: 'Plan-fee PaymentIntent results: payment_intent.succeeded / payment_intent.payment_failed (metadata purpose=plan_fee)'
-      description: 'Stripe Billing is removed (our own invoices, PaymentIntent collection). This endpoint remains only for plan-fee PaymentIntents that were still processing when charged (a bank debit settles days later, S298): it settles the invoice with the outcome. Any other event type, and a PaymentIntent without purpose=plan_fee, is acknowledged and ignored. Secret STRIPE_BILLING_WEBHOOK_SECRET; see docs/runbooks/stripe-webhooks.md.'
-      operationId: stripeBillingWebhook
-      parameters:
-      - name: Stripe-Signature
-        in: header
-        required: false
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: string
-        required: true
-      responses:
-        '200':
-          description: Applied (or a duplicate)
-          content:
-            '*/*':
-              schema:
-                $ref: '#/components/schemas/WebhookResult'
-        '503':
-          description: 'Retry later: paying the invoice from sales is still pending'
-          content:
-            '*/*':
-              schema:
-                $ref: '#/components/schemas/WebhookResult'
   /v1/webhooks/stripe-connect:
     post:
       tags:
@@ -4491,8 +4459,7 @@ components:
             $ref: '#/components/schemas/Owner'
     PlanStep:
       type: object
-      description: Step 'plan'. Cards are tokenised client-side (pm_…); only brand, last 4 and expiry are stored. US_BANK_ACCOUNT
-        charges the payout bank by ACH.
+      description: 'Step ''plan''. Cards are tokenised client-side (pm_…); only brand, last 4 and expiry are stored. Plan fees are paid by card: US_BANK_ACCOUNT is refused (422).'
       properties:
         planCode:
           type: string
@@ -5427,7 +5394,7 @@ components:
           $ref: '#/components/schemas/Billing'
     AddPaymentMethodRequest:
       type: object
-      description: Tokenised client-side by Stripe.js (card) or Financial Connections (bank); only display fields are stored
+      description: 'A card tokenised client-side by Stripe.js; only display fields are stored. Plan fees are paid by card: US_BANK_ACCOUNT is refused (422).'
       properties:
         stripePaymentMethodId:
           type: string

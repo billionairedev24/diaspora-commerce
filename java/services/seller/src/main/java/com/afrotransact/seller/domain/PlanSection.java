@@ -2,7 +2,7 @@ package com.afrotransact.seller.domain;
 
 /**
  * Step "plan": plan, cadence and the payment method choice. Cards are tokenised by Stripe.js; only brand, last 4 and
- * expiry are stored. {@code US_BANK_ACCOUNT} charges the payout bank by ACH debit.
+ * expiry are stored. Plan fees are paid by card (or from earnings): {@code US_BANK_ACCOUNT} is refused by the rules.
  *
  * @param promoCode         a trial campaign's promo code (S295), redeemed when the subscription starts
  * @param planFeeCollection how the plan will be paid (S298); null keeps the platform default

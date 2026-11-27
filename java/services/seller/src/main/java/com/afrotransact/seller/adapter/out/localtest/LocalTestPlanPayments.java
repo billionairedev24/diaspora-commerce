@@ -41,4 +41,9 @@ public class LocalTestPlanPayments implements PlanPaymentsGateway {
         }
         return new Charge(Status.SUCCEEDED, ref, null, null);
     }
+
+    @Override
+    public Charge paymentStatus(String paymentIntentId) {
+        return new Charge(Status.SUCCEEDED, paymentIntentId, null, null);
+    }
 }

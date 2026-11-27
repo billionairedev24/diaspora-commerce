@@ -24,23 +24,23 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * The two public Stripe webhooks of docs/runbooks/stripe-webhooks.md, without a database or Docker: the real signature
- * check (stripe-java, 5-minute tolerance, one secret per endpoint) behind the real controller and error advice. Unsigned
- * and badly signed requests answer 400 (never 404: that is the runbook's route check), a correctly signed event is
- * acknowledged. Inbox and handlers are covered by ComplianceWebhookIT and BillingIT.
+ * The seller module's only Stripe webhook (Connect, docs/runbooks/stripe-webhooks.md), without a database or Docker: the
+ * real signature check (stripe-java, 5-minute tolerance) behind the real controller and error advice. Unsigned and badly
+ * signed requests answer 400 (never 404: that is the runbook's route check), a correctly signed event is acknowledged.
+ * The plan-fee ("stripe-billing") webhook is gone: plan fees are card-only and read back from the PaymentIntent. Inbox
+ * and handlers are covered by ComplianceWebhookIT.
  */
 class WebhookControllerTest {
 
     private static final String CONNECT_SECRET = "whsec_connect_test";
-    private static final String BILLING_SECRET = "whsec_billing_test";
     private static final String CONNECT_URL = "/v1/webhooks/stripe-connect";
-    private static final String BILLING_URL = "/v1/webhooks/stripe-billing";
+    private static final String REMOVED_BILLING_URL = "/v1/webhooks/stripe-billing";
 
     private MockMvc mvc;
 
     @BeforeEach
     void setUp() {
-        StripeWebhookParser parser = new StripeWebhookAdapter(CONNECT_SECRET, BILLING_SECRET, JsonMapper.builder().build());
+        StripeWebhookParser parser = new StripeWebhookAdapter(CONNECT_SECRET, JsonMapper.builder().build());
         StripeWebhookService service = (endpoint, payload, signature) -> {
             StripeEvent e = parser.parse(endpoint, payload, signature);
             return new WebhookResult(e.id(), e.type(), false, "applied");
@@ -50,11 +50,15 @@ class WebhookControllerTest {
     }
 
     @Test
-    void unsignedRequestsAreRejectedWith400OnBothEndpoints() throws Exception {
-        for (String url : new String[] {CONNECT_URL, BILLING_URL}) {
-            send(url, event("evt_1", "account.updated"), null).andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.code", is("seller.invalid-signature")));
-        }
+    void unsignedRequestsAreRejectedWith400() throws Exception {
+        send(CONNECT_URL, event("evt_1", "account.updated"), null).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code", is("seller.invalid-signature")));
+    }
+
+    @Test
+    void thereIsNoPlanFeeBillingWebhook() throws Exception {
+        String body = event("evt_6", "payment_intent.succeeded");
+        send(REMOVED_BILLING_URL, body, header(body, CONNECT_SECRET, now())).andExpect(status().isNotFound());
     }
 
     @Test
@@ -63,8 +67,6 @@ class WebhookControllerTest {
         send(CONNECT_URL, body, header(body, "whsec_other", now())).andExpect(status().isBadRequest());
         send(CONNECT_URL, body + " ", header(body, CONNECT_SECRET, now())).andExpect(status().isBadRequest());
         send(CONNECT_URL, body, header(body, CONNECT_SECRET, now() - 600)).andExpect(status().isBadRequest());
-        // each endpoint has its own secret: the Connect secret does not open the billing endpoint
-        send(BILLING_URL, body, header(body, CONNECT_SECRET, now())).andExpect(status().isBadRequest());
         send(CONNECT_URL, body, "garbage").andExpect(status().isBadRequest());
     }
 
@@ -73,14 +75,11 @@ class WebhookControllerTest {
         String connect = event("evt_3", "account.updated");
         send(CONNECT_URL, connect, header(connect, CONNECT_SECRET, now())).andExpect(status().isOk())
                 .andExpect(jsonPath("$.eventId", is("evt_3"))).andExpect(jsonPath("$.type", is("account.updated")));
-        String billing = event("evt_4", "payment_intent.succeeded");
-        send(BILLING_URL, billing, header(billing, BILLING_SECRET, now())).andExpect(status().isOk())
-                .andExpect(jsonPath("$.eventId", is("evt_4")));
     }
 
     @Test
     void anEndpointWithoutASecretRejectsEverything() throws Exception {
-        StripeWebhookParser unset = new StripeWebhookAdapter("", "", JsonMapper.builder().build());
+        StripeWebhookParser unset = new StripeWebhookAdapter("", JsonMapper.builder().build());
         MockMvc bare = MockMvcBuilders.standaloneSetup(new WebhookController((ep, p, s) -> {
             unset.parse(ep, p, s);
             return new WebhookResult("x", "x", false, "x");

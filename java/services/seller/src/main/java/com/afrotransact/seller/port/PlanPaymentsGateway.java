@@ -1,8 +1,8 @@
 package com.afrotransact.seller.port;
 
 /**
- * Plain Stripe Payments for plan fees: a customer per organisation, SetupIntents to save a card or US bank account, and
- * off-session PaymentIntents for what credits, coupons and (if the seller chose it) earnings did not cover. No Stripe
+ * Plain Stripe Payments for plan fees: a customer per organisation, SetupIntents to save a card (card only: plan fees are
+ * never debited from a bank account), and off-session card PaymentIntents for what credits, coupons and (if the seller chose it) earnings did not cover. No Stripe
  * Billing objects (subscriptions, invoices, prices, meters) are used: periods, invoices and dunning are ours.
  */
 public interface PlanPaymentsGateway {
@@ -10,7 +10,7 @@ public interface PlanPaymentsGateway {
     /** The Stripe customer that owns the organisation's saved payment methods; idempotent per organisation. */
     String ensureCustomer(String orgId, String name, String email);
 
-    /** A SetupIntent for saving a card or bank account for off-session plan charges (client confirms it). */
+    /** A SetupIntent for saving a card for off-session plan charges (client confirms it); card is its only type. */
     SetupIntentSecret createSetupIntent(String customerId, String idempotencyKey);
 
     /**
@@ -34,7 +34,13 @@ public interface PlanPaymentsGateway {
     record SetupIntentSecret(String id, String clientSecret) {
     }
 
-    /** SUCCEEDED, PROCESSING (bank debits settle later; a webhook reports the end), REQUIRES_ACTION or FAILED. */
+    /**
+     * Where a plan-fee PaymentIntent stands now (retrieved from Stripe): how a charge that was {@link Status#PROCESSING}
+     * ended. There is no plan-fee webhook; the collection job asks again on its next pass.
+     */
+    Charge paymentStatus(String paymentIntentId);
+
+    /** SUCCEEDED, PROCESSING (rare for cards; asked again later with paymentStatus), REQUIRES_ACTION or FAILED. */
     enum Status { SUCCEEDED, PROCESSING, REQUIRES_ACTION, FAILED }
 
     /**

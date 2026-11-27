@@ -22,8 +22,6 @@ import tools.jackson.databind.JsonNode;
  */
 class BillingIT extends SellerIntegrationTest {
 
-    private static final String BILLING = "/v1/webhooks/stripe-billing";
-
     private BillingService billing;
     private InvoiceCollectionService collection;
 
@@ -208,10 +206,18 @@ class BillingIT extends SellerIntegrationTest {
                 "expYear", 2031));
         assertThat(declining.status()).isEqualTo(201);
         assertThat(declining.body().path("isDefault").asBoolean()).isFalse();
+        // Plan fees are paid by card (or from earnings): a bank account is refused.
         Response bank = post("/v1/orgs/" + org + "/billing/payment-methods", Map.of("stripePaymentMethodId",
                 "pm_ach_1", "kind", "US_BANK_ACCOUNT", "bankName", "Chase", "accountType", "checking",
                 "last4", "6789"));
-        assertThat(bank.body().path("label").asString()).isEqualTo("Chase checking ••6789");
+        assertThat(bank.status()).isEqualTo(422);
+        assertThat(bank.text("/code")).isEqualTo("seller.invalid-payment-method");
+        Response slow = post("/v1/orgs/" + org + "/billing/payment-methods", Map.of("stripePaymentMethodId",
+                "pm_processing_1", "kind", "CARD", "brand", "visa", "last4", "4000", "expMonth", 8,
+                "expYear", 2031));
+        assertThat(slow.status()).isEqualTo(201);
+        assertThat(StripeStub.bodies(STRIPE, "POST", "/v1/setup_intents")).anySatisfy(b -> assertThat(b)
+                .contains("allowed_payment_method_types[0]=card").doesNotContain("us_bank_account"));
 
         Response refuse = delete("/v1/orgs/" + org + "/billing/payment-methods/" + original);
         assertThat(refuse.status()).isEqualTo(409);
@@ -240,25 +246,29 @@ class BillingIT extends SellerIntegrationTest {
         assertThat(failed.path("nextAttemptAt").isNull()).isFalse();
         String invoiceId = failed.path("id").asString();
 
-        // The seller makes the bank account the default; the scheduled retry debits it (ACH settles later).
-        post("/v1/orgs/" + org + "/billing/payment-methods/" + bank.body().path("id").asString() + "/default",
+        // The seller makes another card the default; Stripe leaves the retry processing (rare for cards). There is no
+        // plan-fee webhook: the next pass reads the PaymentIntent back and settles the invoice, without a new charge.
+        post("/v1/orgs/" + org + "/billing/payment-methods/" + slow.body().path("id").asString() + "/default",
                 Map.of());
         jdbc.sql("update invoice set next_attempt_at = now() - interval '1 minute' where stripe_invoice_id = :i")
                 .param("i", invoiceId).update();
         assertThat(collection.collectDue()).isZero();
         assertThat(jdbc.sql("select source || ':' || status from invoice_payment where invoice_id = :i and status = "
                 + "'PENDING'").param("i", invoiceId).query(String.class).list()).containsExactly("CARD:PENDING");
-        assertThat(column(org, "status")).as("still past due until the debit settles").isEqualTo("PAST_DUE");
+        assertThat(column(org, "status")).as("still past due until the charge settles").isEqualTo("PAST_DUE");
+        assertThat(StripeStub.bodies(STRIPE, "POST", "/v1/payment_intents")).anySatisfy(b -> assertThat(b)
+                .contains("payment_method=pm_processing_1", "allowed_payment_method_types[0]=card")
+                .doesNotContain("automatic_payment_methods"));
 
         String intent = jdbc.sql("select reference from invoice_payment where invoice_id = :i and status = 'PENDING'")
                 .param("i", invoiceId).query(String.class).single();
-        String settled = StripeEvents.event(unique("evt"), "payment_intent.succeeded",
-                System.currentTimeMillis() / 1000, null, StripeEvents.planPayment(intent, invoiceId, null));
-        assertThat(webhook(BILLING, settled, sign(settled, BILLING_SECRET)).text("/outcome"))
-                .isEqualTo("plan-payment");
-        assertThat(webhook(BILLING, settled, sign(settled, BILLING_SECRET)).text("/outcome")).isEqualTo("duplicate");
-        assertThat(webhook(BILLING, settled, sign(settled, CONNECT_SECRET)).status()).as("connect secret on billing")
-                .isEqualTo(400);
+        int charges = StripeStub.requests(STRIPE, "POST", "/v1/payment_intents").size();
+        jdbc.sql("update invoice set next_attempt_at = now() - interval '1 minute' where stripe_invoice_id = :i")
+                .param("i", invoiceId).update();
+        assertThat(collection.collectDue()).isEqualTo(1);
+        assertThat(StripeStub.requests(STRIPE, "GET", "/v1/payment_intents/" + intent)).hasSize(1);
+        assertThat(StripeStub.requests(STRIPE, "POST", "/v1/payment_intents")).as("not charged twice")
+                .hasSize(charges);
         assertThat(column(org, "status")).isEqualTo("ACTIVE");
         assertThat(column(org, "dunning")).isEqualTo("NONE");
         JsonNode paid = get("/v1/orgs/" + org + "/billing/invoices").body().get(0);

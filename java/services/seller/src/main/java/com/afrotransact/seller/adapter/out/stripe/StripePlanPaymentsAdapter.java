@@ -6,6 +6,7 @@ import com.afrotransact.seller.port.GatewayException;
 import com.afrotransact.seller.port.PlanPaymentsGateway;
 import com.stripe.StripeClient;
 import com.stripe.exception.CardException;
+import com.stripe.model.StripeError;
 import com.stripe.model.Customer;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.SetupIntent;
@@ -15,7 +16,10 @@ import com.stripe.param.PaymentIntentCreateParams;
 import com.stripe.param.PaymentMethodAttachParams;
 import com.stripe.param.SetupIntentCreateParams;
 
-/** stripe-java adapter for plan fees: customers, SetupIntents and off-session PaymentIntents (no Stripe Billing). */
+/**
+ * stripe-java adapter for plan fees: customers, card SetupIntents and off-session card PaymentIntents (no Stripe
+ * Billing, no bank debits).
+ */
 public class StripePlanPaymentsAdapter implements PlanPaymentsGateway {
 
     private final StripeClient client;
@@ -36,7 +40,9 @@ public class StripePlanPaymentsAdapter implements PlanPaymentsGateway {
     @Override
     public SetupIntentSecret createSetupIntent(String customerId, String idempotencyKey) {
         SetupIntentCreateParams params = SetupIntentCreateParams.builder().setCustomer(customerId)
-                .setUsage(SetupIntentCreateParams.Usage.OFF_SESSION).putMetadata("purpose", "seller_billing").build();
+                .setUsage(SetupIntentCreateParams.Usage.OFF_SESSION)
+                .addAllowedPaymentMethodType(SetupIntentCreateParams.AllowedPaymentMethodType.CARD)
+                .putMetadata("purpose", "seller_billing").build();
         RequestOptions options = RequestOptions.builder().setIdempotencyKey(idempotencyKey).build();
         SetupIntent si = StripeCalls.call("setup intent", () -> client.v1().setupIntents().create(params, options));
         return new SetupIntentSecret(si.getId(), si.getClientSecret());
@@ -59,9 +65,7 @@ public class StripePlanPaymentsAdapter implements PlanPaymentsGateway {
         PaymentIntentCreateParams params = PaymentIntentCreateParams.builder().setAmount(amountCents)
                 .setCurrency(currency.toLowerCase(Locale.ROOT)).setCustomer(customerId)
                 .setPaymentMethod(paymentMethodId).setOffSession(true).setConfirm(true).setDescription(description)
-                .setAutomaticPaymentMethods(PaymentIntentCreateParams.AutomaticPaymentMethods.builder().setEnabled(true)
-                        .setAllowRedirects(PaymentIntentCreateParams.AutomaticPaymentMethods.AllowRedirects.NEVER)
-                        .build())
+                .addAllowedPaymentMethodType(PaymentIntentCreateParams.AllowedPaymentMethodType.CARD)
                 .putMetadata("purpose", "plan_fee").putMetadata("invoice_id", invoiceId).build();
         RequestOptions options = RequestOptions.builder().setIdempotencyKey(idempotencyKey).build();
         try {
@@ -76,6 +80,15 @@ public class StripePlanPaymentsAdapter implements PlanPaymentsGateway {
             }
             throw e;
         }
+    }
+
+    @Override
+    public Charge paymentStatus(String paymentIntentId) {
+        PaymentIntent pi = StripeCalls.call("plan charge status", () -> client.v1().paymentIntents()
+                .retrieve(paymentIntentId));
+        StripeError err = pi.getLastPaymentError();
+        return new Charge(status(pi.getStatus()), pi.getId(), err == null ? null : err.getCode(),
+                err == null ? null : err.getMessage());
     }
 
     private static Status status(String s) {

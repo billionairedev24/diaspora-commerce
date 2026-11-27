@@ -11,23 +11,23 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Verifies {@code Stripe-Signature} with stripe-java ({@link Webhook#constructEvent}: HMAC-SHA256 over
- * {@code t.payload}, 5-minute tolerance) against the endpoint's secret, then parses the event body.
+ * {@code t.payload}, 5-minute tolerance) against the Connect endpoint's secret, then parses the event body. The seller
+ * module has no other Stripe webhook: plan fees are charged by card and their outcome is read back from the
+ * PaymentIntent (InvoiceCollectionService), not delivered by a webhook.
  */
 public class StripeWebhookAdapter implements StripeWebhookParser {
 
     private final String connectSecret;
-    private final String billingSecret;
     private final StripeJson json;
 
-    public StripeWebhookAdapter(String connectSecret, String billingSecret, JsonMapper mapper) {
+    public StripeWebhookAdapter(String connectSecret, JsonMapper mapper) {
         this.connectSecret = connectSecret;
-        this.billingSecret = billingSecret;
         this.json = new StripeJson(mapper);
     }
 
     @Override
     public StripeEvent parse(Endpoint endpoint, String payload, String signatureHeader) {
-        String secret = endpoint == Endpoint.CONNECT ? connectSecret : billingSecret;
+        String secret = connectSecret;
         if (secret == null || secret.isBlank() || signatureHeader == null || signatureHeader.isBlank()) {
             throw invalid();
         }
@@ -45,7 +45,6 @@ public class StripeWebhookAdapter implements StripeWebhookParser {
         StripeEvent.ExternalAccount bank = null;
         StripeEvent.Payout payout = null;
         RequirementsSnapshot accountSnapshot = null;
-        StripeEvent.PaymentIntentResult paymentIntent = null;
         if (type != null) {
             switch (type) {
                 case "account.updated" -> {
@@ -77,22 +76,13 @@ public class StripeWebhookAdapter implements StripeWebhookParser {
                         o.path("amount").asLong(0), StripeJson.text(o, "currency"),
                         StripeJson.text(o, "failure_code"), StripeJson.text(o, "failure_message"),
                         StripeJson.epoch(o.path("arrival_date")));
-                case "payment_intent.succeeded", "payment_intent.payment_failed" -> {
-                    if ("plan_fee".equals(o.path("metadata").path("purpose").asString(null))) {
-                        JsonNode err = o.path("last_payment_error");
-                        paymentIntent = new StripeEvent.PaymentIntentResult(StripeJson.text(o, "id"),
-                                o.path("metadata").path("invoice_id").asString(null),
-                                "payment_intent.succeeded".equals(type), StripeJson.text(err, "code"),
-                                StripeJson.text(err, "message"));
-                    }
-                }
                 default -> {
-                    // not a billing event we act on
+                    // not a Connect event we act on
                 }
             }
         }
         return new StripeEvent(StripeJson.text(e, "id"), type, e.path("created").asLong(0), account,
-                accountSnapshot, capability, person, bank, payout, paymentIntent);
+                accountSnapshot, capability, person, bank, payout);
     }
 
     private static SellerRuleViolation invalid() {
