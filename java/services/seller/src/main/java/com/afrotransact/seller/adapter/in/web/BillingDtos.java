@@ -193,8 +193,8 @@ final class BillingDtos {
     record ChangePlanResponse(String applied, BillingResponse billing) {
     }
 
-    @Schema(name = "AddPaymentMethodRequest", description = "Tokenised client-side by Stripe.js (card) or Financial "
-            + "Connections (bank); only display fields are stored")
+    @Schema(name = "AddPaymentMethodRequest", description = "A card tokenised client-side by Stripe.js; only display "
+            + "fields are stored. Plan fees are paid by card: US_BANK_ACCOUNT is refused (422).")
     record AddPaymentMethodRequest(@NotBlank String stripePaymentMethodId,
                                    @Schema(allowableValues = {"CARD", "US_BANK_ACCOUNT"}) @NotBlank String kind,
                                    String brand, String last4, Integer expMonth, Integer expYear, String bankName,

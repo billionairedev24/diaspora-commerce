@@ -36,8 +36,7 @@ class SellerSecurityConfiguration {
         "/actuator/health/**", "/actuator/info",
         "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/docs", "/redoc", "/error"
     };
-    static final List<String> PUBLIC_POSTS = List.of("/v1/webhooks/stripe-connect", "/v1/webhooks/stripe-billing",
-            "/v1/launch-list");
+    static final List<String> PUBLIC_POSTS = List.of("/v1/webhooks/stripe-connect", "/v1/launch-list");
 
     @Bean
     SecurityPermits sellerSecurityPermits() {

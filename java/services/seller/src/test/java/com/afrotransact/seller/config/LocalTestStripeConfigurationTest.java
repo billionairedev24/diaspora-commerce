@@ -30,7 +30,7 @@ class LocalTestStripeConfigurationTest {
     private final JsonMapper mapper = JsonMapper.builder().build();
 
     private static SellerProperties.Stripe stripe(String mode, String key) {
-        return new SellerProperties.Stripe(key, null, null, null, null, List.of(), null, mode);
+        return new SellerProperties.Stripe(key, null, null, null, List.of(), null, mode);
     }
 
     private static SellerProperties props(String mode, String key) {

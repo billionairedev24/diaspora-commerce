@@ -11,8 +11,8 @@ import org.springframework.transaction.support.TransactionOperations;
 /**
  * Verifies the signature first (outside any transaction), then claims the event id in the inbox and applies the
  * event in the same transaction, so a crash re-delivers and a duplicate delivery is a no-op. Connect events go to
- * compliance. The billing endpoint carries only the outcome of plan-fee PaymentIntents (a bank debit that was still
- * processing when we charged): it is applied in the same transaction (database work only).
+ * compliance. There is no billing webhook: plan-fee charges are card PaymentIntents whose outcome
+ * InvoiceCollectionService reads back from Stripe.
  */
 @Service
 class StripeWebhookServiceImpl implements StripeWebhookService {
@@ -22,15 +22,13 @@ class StripeWebhookServiceImpl implements StripeWebhookService {
     private final StripeWebhookParser parser;
     private final WebhookInbox inbox;
     private final ComplianceService compliance;
-    private final InvoiceCollectionService collection;
     private final TransactionOperations tx;
 
     StripeWebhookServiceImpl(StripeWebhookParser parser, WebhookInbox inbox, ComplianceService compliance,
-                             InvoiceCollectionService collection, TransactionOperations tx) {
+                             TransactionOperations tx) {
         this.parser = parser;
         this.inbox = inbox;
         this.compliance = compliance;
-        this.collection = collection;
         this.tx = tx;
     }
 
@@ -45,10 +43,6 @@ class StripeWebhookServiceImpl implements StripeWebhookService {
             String outcome = "ignored";
             if (endpoint == StripeWebhookParser.Endpoint.CONNECT) {
                 outcome = compliance.handle(event);
-            } else if (event.paymentIntent() != null) {
-                StripeEvent.PaymentIntentResult pi = event.paymentIntent();
-                collection.onPaymentIntentResult(pi.id(), pi.succeeded(), pi.failureCode(), pi.failureMessage());
-                outcome = "plan-payment";
             }
             inbox.outcome(event.id(), outcome);
             return new WebhookResult(event.id(), event.type(), false, outcome);

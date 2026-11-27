@@ -138,8 +138,7 @@ class StripeConnectGuardrailsTest {
 
     @Test
     void theDefaultSessionComponentsAreTheOnesSellersMayHave() {
-        SellerProperties.Stripe defaults = new SellerProperties.Stripe("sk", null, null, null, null, null, null,
-                null);
+        SellerProperties.Stripe defaults = new SellerProperties.Stripe("sk", null, null, null, null, null, null);
         assertThat(defaults.sessionComponents()).containsExactlyInAnyOrderElementsOf(ALLOWED_COMPONENTS);
     }
 }

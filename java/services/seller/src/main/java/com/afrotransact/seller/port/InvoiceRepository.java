@@ -36,9 +36,6 @@ public interface InvoiceRepository {
     /** Moves a payment to APPLIED, FAILED or REVERSED. */
     void setPaymentStatus(UUID paymentId, String status, String note);
 
-    /** The pending bank debit with this reference (a PaymentIntent id), if any. */
-    Optional<InvoicePayment> findPaymentByReference(String reference);
-
     /** Recomputes {@code amount_paid_cents} from the applied payments. */
     void refreshPaid(String invoiceId, Instant at);
 

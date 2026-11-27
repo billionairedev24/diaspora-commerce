@@ -179,8 +179,7 @@ class SellerConfiguration {
 
     @Bean
     StripeWebhookParser stripeWebhookParser(SellerProperties props, JsonMapper mapper) {
-        return new StripeWebhookAdapter(props.stripe().connectWebhookSecret(), props.stripe().billingWebhookSecret(),
-                mapper);
+        return new StripeWebhookAdapter(props.stripe().connectWebhookSecret(), mapper);
     }
 
     @Bean

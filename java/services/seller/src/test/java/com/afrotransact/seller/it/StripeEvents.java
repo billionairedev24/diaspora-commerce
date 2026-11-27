@@ -27,15 +27,6 @@ final class StripeEvents {
                 + (disabledReason == null ? "null" : "\"" + disabledReason + "\"") + "}}";
     }
 
-    /** payment_intent.succeeded / payment_intent.payment_failed of a plan fee. */
-    static String planPayment(String intentId, String invoiceId, String error) {
-        return "{\"id\":\"" + intentId + "\",\"object\":\"payment_intent\",\"status\":\""
-                + (error == null ? "succeeded" : "requires_payment_method") + "\",\"metadata\":{\"purpose\":"
-                + "\"plan_fee\",\"invoice_id\":\"" + invoiceId + "\"}"
-                + (error == null ? "" : ",\"last_payment_error\":{\"code\":\"account_closed\",\"message\":\""
-                + error + "\"}") + "}";
-    }
-
     private static String arr(List<String> values) {
         return values.stream().map(v -> "\"" + v + "\"").collect(Collectors.joining(",", "[", "]"));
     }

@@ -123,7 +123,7 @@ class BillingController {
         return billing.paymentMethods(orgId).stream().map(PaymentMethodResponse::of).toList();
     }
 
-    @Operation(summary = "Add a card or bank account (owner)")
+    @Operation(summary = "Add a card (owner); plan fees are paid by card, a bank account is refused (422)")
     @PostMapping("/v1/orgs/{orgId}/billing/payment-methods")
     @ResponseStatus(HttpStatus.CREATED)
     PaymentMethodResponse addPaymentMethod(@PathVariable String orgId, @Valid @RequestBody AddPaymentMethodRequest b) {
@@ -162,13 +162,13 @@ class BillingController {
 
     @Operation(summary = "Retry an unpaid invoice now (owner / finance)",
             description = "After fixing the payment method: reopens an uncollectible invoice and collects it again "
-                    + "(credit, then earnings if chosen, then the saved card or bank).")
+                    + "(credit, then earnings if chosen, then the saved card).")
     @PostMapping("/v1/orgs/{orgId}/billing/invoices/{invoiceId}/retry")
     InvoiceResponse retryInvoice(@PathVariable String orgId, @PathVariable String invoiceId) {
         return InvoiceResponse.of(billing.retryInvoice(orgId, invoiceId));
     }
 
-    @Operation(summary = "Start adding a card or bank account (owner): Stripe SetupIntent",
+    @Operation(summary = "Start adding a card (owner): Stripe SetupIntent, card only",
             description = "Confirm the clientSecret with Stripe.js (Payment Element) or the mobile PaymentSheet, then "
                     + "register the resulting pm_… with POST /billing/payment-methods.")
     @PostMapping("/v1/orgs/{orgId}/billing/setup-intents")
