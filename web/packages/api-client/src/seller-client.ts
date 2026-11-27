@@ -81,6 +81,8 @@ import {
   InvitationPreviewSchema,
   type Invoice,
   InvoiceSchema,
+  type PlanPaymentConfirmation,
+  PlanPaymentConfirmationSchema,
   type LabelPurchase,
   LabelPurchaseSchema,
   type ListingContext,
@@ -672,6 +674,9 @@ export function createSellerApiClient(options: ApiClientOptions) {
     /** Collect an unpaid invoice again after fixing the payment method (owner / finance). */
     retryInvoice: (invoiceId: string): Promise<Invoice> =>
       request(`/v1/seller/billing/invoices/${enc(invoiceId)}/retry`, InvoiceSchema, { method: 'POST' }),
+    /** Owner / finance: what stripe.confirmCardPayment needs for a plan charge your bank asks you to confirm (3-D Secure). */
+    confirmPlanPayment: (invoiceId: string): Promise<PlanPaymentConfirmation> =>
+      request(`/v1/seller/billing/invoices/${enc(invoiceId)}/confirm-payment`, PlanPaymentConfirmationSchema, { method: 'POST' }),
     /** A printable invoice (HTML; Print › Save as PDF makes the PDF). */
     downloadInvoice: (invoiceId: string): Promise<DownloadedFile> =>
       download(`/v1/seller/billing/invoices/${enc(invoiceId)}/document`, {}, 'invoice.html'),

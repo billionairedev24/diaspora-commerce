@@ -10,7 +10,7 @@ import { CataloguePanel } from './CataloguePanel';
 import { FeatureMatrixPanel } from './FeatureMatrixPanel';
 import { GrantsPanel } from './GrantsPanel';
 import { RewardsPanel } from './RewardsPanel';
-import { SellerBillingPanel } from './SellerBillingPanel';
+import { PlanFeeDisputesPanel, SellerBillingPanel } from './SellerBillingPanel';
 import { SettingsPanel } from './SettingsPanel';
 import { TrialsPanel } from './TrialsPanel';
 
@@ -38,6 +38,7 @@ export function PlansView() {
           { value: 'rewards', label: t('st.plans.tab.rewards'), content: <RewardsPanel /> },
           { value: 'grants', label: t('st.plans.tab.grants'), content: <GrantsPanel /> },
           { value: 'sellers', label: t('st.plans.tab.sellers'), content: <SellerBillingPanel /> },
+          { value: 'disputes', label: t('st.plans.tab.disputes'), content: <PlanFeeDisputesPanel /> },
           { value: 'settings', label: t('st.plans.tab.settings'), content: <SettingsPanel /> }
         ]}
       />

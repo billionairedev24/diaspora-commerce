@@ -105,6 +105,8 @@ export interface StripePaymentInstance {
     appearance?: { variables: Record<string, string> };
   }): StripePaymentElements;
   createPaymentMethod(options: { elements: StripePaymentElements }): Promise<ElementsPaymentMethodResult>;
+  /** A plan charge your bank asks you to confirm (3-D Secure): the bank's check, then Stripe's event settles the invoice. */
+  confirmCardPayment(clientSecret: string, data?: { payment_method?: string }): Promise<{ error?: { message?: string }; paymentIntent?: { id: string; status: string } }>;
   confirmSetup(options: {
     clientSecret: string;
     confirmParams: { payment_method: string; return_url: string };

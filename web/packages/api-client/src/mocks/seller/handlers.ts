@@ -729,7 +729,7 @@ function planFeeView(ctx: { db: MockSellerDb; org: MockOrg; role: string; now: D
 const AddPaymentMethodBody = z.object({
   stripePaymentMethodId: z.string().regex(/^pm_/, 'Expected a Stripe payment method id (pm_…)'), kind: z.enum(['CARD', 'US_BANK_ACCOUNT']), brand: z.string().optional(),
   last4: z.string().regex(/^[0-9]{4}$/, 'Four digits'), expMonth: z.number().int().optional(), expYear: z.number().int().optional(), bankName: z.string().optional(),
-  accountType: z.string().optional(), makeDefault: z.boolean().optional()
+  accountType: z.string().optional(), makeDefault: z.boolean().optional(), setupIntentId: z.string().optional()
 });
 const InviteBody = z.object({ email: z.email('Enter a valid email address'), roleKey: z.string().min(1) });
 const RoleBody = z.object({ roleKey: z.string().min(1) });
@@ -2502,6 +2502,18 @@ export const sellerHandlers = [
       if (!inv.canRetry) throw conflict('That invoice is not waiting for payment.');
       Object.assign(inv, { status: 'PAID', amountPaidMinor: inv.amountDueMinor, paidByCardMinor: inv.amountDueMinor, paidAt: ctx.now.toISOString(), lastError: null, nextAttemptAt: null, canRetry: false });
       return inv;
+    })
+  ),
+  http.post(
+    `${W}/billing/invoices/:invoiceId/confirm-payment`,
+    route((ctx, p) => {
+      if (!ctx.role.endsWith('.owner') && !ctx.role.endsWith('.finance')) throw forbidden('Only the owner or a finance member can confirm a payment.');
+      const inv = ctx.db.invoices.find((i) => i.id === p.invoiceId);
+      if (!inv) throw notFound('We couldn’t find that invoice.');
+      if (!inv.actionRequired) throw conflict('No payment on that invoice is waiting for you.');
+      // The mock has no bank check: confirming settles the invoice, as Stripe's event would.
+      Object.assign(inv, { status: 'PAID', amountPaidMinor: inv.amountDueMinor, paidByCardMinor: inv.amountDueMinor, paidAt: ctx.now.toISOString(), lastError: null, nextAttemptAt: null, canRetry: false, actionRequired: false });
+      return { invoiceId: inv.id, clientSecret: null, paymentMethodId: null, publishableKey: 'pk_test_mock', status: 'SUCCEEDED' };
     })
   ),
   http.get(`${W}/billing/invoices/:invoiceId/document`, ({ params }) =>

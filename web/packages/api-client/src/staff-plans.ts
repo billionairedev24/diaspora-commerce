@@ -479,6 +479,44 @@ export const StaffBillingInvoiceSchema = z.object({
 });
 export type StaffBillingInvoice = z.infer<typeof StaffBillingInvoiceSchema>;
 
+/** A refund of a plan fee: a credit on the invoice (STAFF = refunded here, DASHBOARD = in the Stripe dashboard, reconciled). */
+export const StaffPlanFeeRefundSchema = z.object({
+  id: z.string(),
+  invoiceId: z.string(),
+  orgId: nullableString.default(null),
+  amountCents: z.number().int(),
+  status: z.enum(['PENDING', 'SUCCEEDED', 'FAILED']),
+  origin: z.enum(['STAFF', 'DASHBOARD']),
+  reasonCode: nullableString.default(null),
+  note: nullableString.default(null),
+  requestedBy: nullableString.default(null),
+  stripeRefundId: nullableString.default(null),
+  createdAt: z.string()
+});
+export type StaffPlanFeeRefund = z.infer<typeof StaffPlanFeeRefundSchema>;
+/** A dispute (chargeback, ACH unauthorised return) on a plan fee: LOST reopened the invoice, WON changed nothing. */
+export const StaffPlanFeeDisputeSchema = z.object({
+  id: z.string(),
+  stripeDisputeId: z.string(),
+  invoiceId: z.string(),
+  orgId: z.string(),
+  amountCents: z.number().int(),
+  reason: nullableString.default(null),
+  stripeStatus: z.string().default(''),
+  outcome: z.enum(['OPEN', 'WON', 'LOST']),
+  fundsWithdrawn: z.boolean().default(false),
+  createdAt: z.string(),
+  closedAt: nullableString.default(null)
+});
+export type StaffPlanFeeDispute = z.infer<typeof StaffPlanFeeDisputeSchema>;
+export const StaffInvoiceAdjustmentsSchema = z.object({
+  invoiceId: z.string(),
+  refundedCents: z.number().int(),
+  refunds: z.array(StaffPlanFeeRefundSchema),
+  disputes: z.array(StaffPlanFeeDisputeSchema)
+});
+export type StaffInvoiceAdjustments = z.infer<typeof StaffInvoiceAdjustmentsSchema>;
+
 /** One plan invoice paid (or asked to be paid) from earnings (S298). */
 export const StaffEarningsCollectionSchema = z.object({
   invoiceId: z.string(),
@@ -635,6 +673,14 @@ export function createStaffPlansApi(request: Requester) {
       request(`${org(orgId)}/charge-gate/clear`, StaffBillingGrantSchema, { method: 'POST', body: adj, headers: idem(key) }),
     waiveInvoice: (orgId: string, invoiceId: string, adj: StaffAdjustment, key: string): Promise<StaffBillingGrant> =>
       request(`${org(orgId)}/invoices/${enc(invoiceId)}/waive`, StaffBillingGrantSchema, { method: 'POST', body: adj, headers: idem(key) }),
+    /** Refund a plan fee, full or partial, with a reason (billing:adjust); the key makes a retried click return the first refund. */
+    refundPlanFee: (orgId: string, invoiceId: string, amountCents: number, adj: StaffAdjustment, key: string): Promise<StaffPlanFeeRefund> =>
+      request(`${org(orgId)}/invoices/${enc(invoiceId)}/refunds`, StaffPlanFeeRefundSchema, { method: 'POST', body: { amountCents, ...adj }, headers: idem(key) }),
+    invoiceAdjustments: (orgId: string, invoiceId: string, signal?: AbortSignal): Promise<StaffInvoiceAdjustments> =>
+      request(`${org(orgId)}/invoices/${enc(invoiceId)}/adjustments`, StaffInvoiceAdjustmentsSchema, { signal }),
+    /** Plan-fee disputes, newest first: OPEN is the work queue. */
+    planFeeDisputes: (outcome: 'OPEN' | 'WON' | 'LOST' | '', signal?: AbortSignal): Promise<StaffPlanFeeDispute[]> =>
+      request(`${B}/disputes`, z.array(StaffPlanFeeDisputeSchema), { query: { outcome: outcome || undefined }, signal }),
     /** S298: per-seller override of how the plan is paid, audited with a reason (billing:adjust). */
     overridePlanFeeCollection: (orgId: string, mode: StaffPlanFeeMode, adj: StaffAdjustment): Promise<StaffPlanFeeCollection> =>
       request(`${org(orgId)}/plan-fee-collection`, StaffPlanFeeCollectionSchema, { method: 'PUT', body: { mode, ...adj } }),
@@ -659,6 +705,7 @@ export const staffPlanKeys = {
   reasonCodes: () => [...staffPlanKeys.all, 'reason-codes'] as const,
   orgs: (q: string) => [...staffPlanKeys.all, 'orgs', q] as const,
   panel: (orgId: string) => [...staffPlanKeys.all, 'panel', orgId] as const,
+  disputes: (outcome: string) => [...staffPlanKeys.all, 'disputes', outcome] as const,
   settings: () => [...staffPlanKeys.all, 'settings'] as const
 };
 
@@ -683,5 +730,7 @@ export const staffPlanQueries = {
     queryOptions({ queryKey: staffPlanKeys.orgs(q), queryFn: ({ signal }) => api.searchOrgs(q, signal), enabled: q.trim().length >= 2, staleTime: 30_000 }),
   panel: (api: StaffPlansApi, orgId: string) =>
     queryOptions({ queryKey: staffPlanKeys.panel(orgId), queryFn: ({ signal }) => api.panel(orgId, signal), enabled: Boolean(orgId), staleTime: 10_000 }),
+  disputes: (api: StaffPlansApi, outcome: 'OPEN' | 'WON' | 'LOST' | '') =>
+    queryOptions({ queryKey: staffPlanKeys.disputes(outcome), queryFn: ({ signal }) => api.planFeeDisputes(outcome, signal), staleTime: 10_000 }),
   settings: (api: StaffPlansApi) => queryOptions({ queryKey: staffPlanKeys.settings(), queryFn: ({ signal }) => api.billingSettings(signal), staleTime: 30_000 })
 };

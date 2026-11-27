@@ -662,7 +662,8 @@ function freshDb(now: Date): MockSellerDb {
           { kind: 'PLAN' as const, description: 'Seller Growth, billed every 3 months', amountMinor: 11115 },
           ...(i === 2 ? [{ kind: 'WAIVER' as const, description: 'Free quarter (welcome offer)', amountMinor: -11115 }] : [])
         ],
-        paidFromCreditMinor: credit, paidFromSalesMinor: sales, paidByCardMinor: i === 2 ? 0 : due - sales - credit, waivedMinor: 0, canRetry: false
+        paidFromCreditMinor: credit, paidFromSalesMinor: sales, paidByCardMinor: i === 2 ? 0 : due - sales - credit, waivedMinor: 0, canRetry: false,
+        actionRequired: false, paymentInProgress: false
       };
     }),
     planFeeCollection: { SELLER: 'EARNINGS_FIRST', PROVIDER: 'CARD' },
