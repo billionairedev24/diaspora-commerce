@@ -120,6 +120,21 @@ class JdbcInvoiceRepository implements InvoiceRepository {
     }
 
     @Override
+    public Optional<InvoicePayment> findPaymentByReference(String reference) {
+        return jdbc.sql("select * from invoice_payment where reference = :r and source = 'CARD' "
+                        + "order by created_at desc limit 1")
+                .param("r", reference).query(JdbcInvoiceRepository::payment).optional();
+    }
+
+    @Override
+    public void reopenPaid(String invoiceId, Instant at) {
+        jdbc.sql("""
+                update invoice set status = 'open', paid_at = null, updated_at = :at, version = version + 1
+                where stripe_invoice_id = :id and status = 'paid'
+                """).param("id", invoiceId).param("at", Sql.ts(at)).update();
+    }
+
+    @Override
     public void refreshPaid(String invoiceId, Instant at) {
         jdbc.sql("""
                 update invoice set amount_paid_cents = coalesce((select sum(amount_cents) from invoice_payment

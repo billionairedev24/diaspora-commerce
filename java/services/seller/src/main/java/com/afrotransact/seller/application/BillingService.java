@@ -36,8 +36,8 @@ public interface BillingService {
     List<PaymentMethod> paymentMethods(String orgId);
 
     /**
-     * Starts adding a card: a Stripe SetupIntent (payment method type card only) on the organisation's customer
-     * (created on first use). The client confirms it with Stripe.js / PaymentSheet, then registers the resulting {@code pm_…}.
+     * Starts adding a card or US bank account: a Stripe SetupIntent on the organisation's customer (created on first
+     * use). The client confirms it with Stripe.js / PaymentSheet, then registers the resulting {@code pm_…}.
      */
     SetupIntentView setupIntent(String orgId);
 

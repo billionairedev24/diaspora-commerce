@@ -9,6 +9,7 @@ import java.util.Map;
 
 import com.afrotransact.seller.application.BillingService;
 import com.afrotransact.seller.application.InvoiceCollectionService;
+import com.afrotransact.seller.application.PlanFeePaymentService;
 import com.afrotransact.seller.application.SellerEvents;
 import com.afrotransact.seller.domain.Cadence;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,11 +24,14 @@ import tools.jackson.databind.JsonNode;
 class BillingIT extends SellerIntegrationTest {
 
     private BillingService billing;
+    private PlanFeePaymentService planFees;
     private InvoiceCollectionService collection;
 
     @BeforeEach
-    void wire(@Autowired BillingService billingService, @Autowired InvoiceCollectionService collectionService) {
+    void wire(@Autowired BillingService billingService, @Autowired InvoiceCollectionService collectionService,
+              @Autowired PlanFeePaymentService planFeeService) {
         this.billing = billingService;
+        this.planFees = planFeeService;
         this.collection = collectionService;
     }
 
@@ -206,18 +210,17 @@ class BillingIT extends SellerIntegrationTest {
                 "expYear", 2031));
         assertThat(declining.status()).isEqualTo(201);
         assertThat(declining.body().path("isDefault").asBoolean()).isFalse();
-        // Plan fees are paid by card (or from earnings): a bank account is refused.
+        // A US bank account (ACH) saved through Financial Connections: verified from its SetupIntent, mandate kept.
         Response bank = post("/v1/orgs/" + org + "/billing/payment-methods", Map.of("stripePaymentMethodId",
                 "pm_ach_1", "kind", "US_BANK_ACCOUNT", "bankName", "Chase", "accountType", "checking",
-                "last4", "6789"));
-        assertThat(bank.status()).isEqualTo(422);
-        assertThat(bank.text("/code")).isEqualTo("seller.invalid-payment-method");
-        Response slow = post("/v1/orgs/" + org + "/billing/payment-methods", Map.of("stripePaymentMethodId",
-                "pm_processing_1", "kind", "CARD", "brand", "visa", "last4", "4000", "expMonth", 8,
-                "expYear", 2031));
-        assertThat(slow.status()).isEqualTo(201);
+                "last4", "6789", "setupIntentId", "seti_verified_1"));
+        assertThat(bank.status()).isEqualTo(201);
+        assertThat(bank.body().path("label").asString()).isEqualTo("Chase checking ••6789");
+        assertThat(jdbc.sql("select verified || ':' || stripe_mandate_id from payment_method where "
+                + "stripe_payment_method_id = 'pm_ach_1'").query(String.class).single()).isEqualTo("true:mandate_ach_1");
         assertThat(StripeStub.bodies(STRIPE, "POST", "/v1/setup_intents")).anySatisfy(b -> assertThat(b)
-                .contains("allowed_payment_method_types[0]=card").doesNotContain("us_bank_account"));
+                .contains("allowed_payment_method_types[0]=card", "allowed_payment_method_types[1]=us_bank_account",
+                        "payment_method_options[us_bank_account][verification_method]=automatic"));
 
         Response refuse = delete("/v1/orgs/" + org + "/billing/payment-methods/" + original);
         assertThat(refuse.status()).isEqualTo(409);
@@ -246,29 +249,29 @@ class BillingIT extends SellerIntegrationTest {
         assertThat(failed.path("nextAttemptAt").isNull()).isFalse();
         String invoiceId = failed.path("id").asString();
 
-        // The seller makes another card the default; Stripe leaves the retry processing (rare for cards). There is no
-        // plan-fee webhook: the next pass reads the PaymentIntent back and settles the invoice, without a new charge.
-        post("/v1/orgs/" + org + "/billing/payment-methods/" + slow.body().path("id").asString() + "/default",
+        // The seller makes the bank account the default; the scheduled retry debits it (ACH settles in up to 4 business
+        // days). Its outcome arrives on the platform webhook: payments hands it to seller (payments.plan_fee.stripe_event).
+        post("/v1/orgs/" + org + "/billing/payment-methods/" + bank.body().path("id").asString() + "/default",
                 Map.of());
         jdbc.sql("update invoice set next_attempt_at = now() - interval '1 minute' where stripe_invoice_id = :i")
                 .param("i", invoiceId).update();
         assertThat(collection.collectDue()).isZero();
         assertThat(jdbc.sql("select source || ':' || status from invoice_payment where invoice_id = :i and status = "
                 + "'PENDING'").param("i", invoiceId).query(String.class).list()).containsExactly("CARD:PENDING");
-        assertThat(column(org, "status")).as("still past due until the charge settles").isEqualTo("PAST_DUE");
+        assertThat(column(org, "status")).as("still past due until the debit settles").isEqualTo("PAST_DUE");
+        JsonNode inFlight = get("/v1/orgs/" + org + "/billing/invoices").body().get(0);
+        assertThat(inFlight.path("paymentInProgress").asBoolean()).isTrue();
+        assertThat(inFlight.path("lastError").asString()).isEqualTo("Bank debit in progress (up to 4 business days)");
         assertThat(StripeStub.bodies(STRIPE, "POST", "/v1/payment_intents")).anySatisfy(b -> assertThat(b)
-                .contains("payment_method=pm_processing_1", "allowed_payment_method_types[0]=card")
-                .doesNotContain("automatic_payment_methods"));
+                .contains("payment_method=pm_ach_1", "allowed_payment_method_types[1]=us_bank_account"));
 
         String intent = jdbc.sql("select reference from invoice_payment where invoice_id = :i and status = 'PENDING'")
                 .param("i", invoiceId).query(String.class).single();
-        int charges = StripeStub.requests(STRIPE, "POST", "/v1/payment_intents").size();
-        jdbc.sql("update invoice set next_attempt_at = now() - interval '1 minute' where stripe_invoice_id = :i")
-                .param("i", invoiceId).update();
-        assertThat(collection.collectDue()).isEqualTo(1);
-        assertThat(StripeStub.requests(STRIPE, "GET", "/v1/payment_intents/" + intent)).hasSize(1);
-        assertThat(StripeStub.requests(STRIPE, "POST", "/v1/payment_intents")).as("not charged twice")
-                .hasSize(charges);
+        String evt = unique("evt");
+        assertThat(planFees.apply(PlanFeeEvents.intent(evt, "payment_intent.succeeded", intent, invoiceId)))
+                .isEqualTo("settled");
+        assertThat(planFees.apply(PlanFeeEvents.intent(evt, "payment_intent.succeeded", intent, invoiceId)))
+                .as("a redelivered event").isEqualTo("duplicate");
         assertThat(column(org, "status")).isEqualTo("ACTIVE");
         assertThat(column(org, "dunning")).isEqualTo("NONE");
         JsonNode paid = get("/v1/orgs/" + org + "/billing/invoices").body().get(0);

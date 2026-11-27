@@ -9,6 +9,7 @@ import java.util.UUID;
 import com.afrotransact.seller.application.BillingOverview;
 import com.afrotransact.seller.application.EntitlementsService;
 import com.afrotransact.seller.application.PlanChangePreview;
+import com.afrotransact.seller.application.PlanFeePaymentService;
 import com.afrotransact.seller.application.PlanOffer;
 import com.afrotransact.seller.domain.PlanAssignment;
 import com.afrotransact.seller.domain.ChargeGate;
@@ -20,6 +21,8 @@ import com.afrotransact.seller.domain.PaymentMethod;
 import com.afrotransact.seller.domain.PaymentSource;
 import com.afrotransact.seller.domain.PlanChargePolicy;
 import com.afrotransact.seller.domain.PlanEntitlements;
+import com.afrotransact.seller.domain.PlanFeeDispute;
+import com.afrotransact.seller.domain.PlanFeeRefund;
 import com.afrotransact.seller.domain.PlanPricing;
 import com.afrotransact.seller.domain.PlanQuote;
 import com.afrotransact.seller.domain.Subscription;
@@ -193,12 +196,16 @@ final class BillingDtos {
     record ChangePlanResponse(String applied, BillingResponse billing) {
     }
 
-    @Schema(name = "AddPaymentMethodRequest", description = "A card tokenised client-side by Stripe.js; only display "
-            + "fields are stored. Plan fees are paid by card: US_BANK_ACCOUNT is refused (422).")
+    @Schema(name = "AddPaymentMethodRequest", description = "Tokenised client-side by Stripe.js (card) or Financial "
+            + "Connections (bank); only display fields are stored")
     record AddPaymentMethodRequest(@NotBlank String stripePaymentMethodId,
                                    @Schema(allowableValues = {"CARD", "US_BANK_ACCOUNT"}) @NotBlank String kind,
                                    String brand, String last4, Integer expMonth, Integer expYear, String bankName,
-                                   String accountType, Boolean makeDefault) {
+                                   String accountType, Boolean makeDefault,
+                                   @Schema(description = "The confirmed SetupIntent (seti_…): for a US bank account it "
+                                           + "tells whether the account is verified (Financial Connections) or waits "
+                                           + "for microdeposits, and carries the ACH mandate")
+                                   String setupIntentId) {
     }
 
     @Schema(name = "InvoiceLine", description = "Plan, proration, usage, coupon or waiver line (S206)")
@@ -218,7 +225,11 @@ final class BillingDtos {
             + "credit, the seller's earnings (only if they chose that), the saved card or bank, or a waiver")
     record InvoicePaymentResponse(UUID id, @Schema(allowableValues = {"CREDIT", "EARNINGS", "CARD", "WAIVER"})
                                   String source, long amountCents,
-                                  @Schema(allowableValues = {"APPLIED", "PENDING", "FAILED", "REVERSED"}) String status,
+                                  @Schema(allowableValues = {"APPLIED", "PENDING", "FAILED", "REVERSED",
+                                          "ACTION_REQUIRED"}, description = "PENDING: a bank debit (up to 4 business "
+                                          + "days) or card charge in progress; ACTION_REQUIRED: the seller must "
+                                          + "confirm it (3-D Secure); REVERSED: taken back (bank return, lost dispute)")
+                                  String status,
                                   String note, Instant createdAt) {
 
         static InvoicePaymentResponse of(InvoicePayment p) {
@@ -242,7 +253,11 @@ final class BillingDtos {
                            @Schema(description = "Paid from the organisation's sales (S298): withheld from its "
                                    + "earnings, only if it chose that") long paidFromSalesCents,
                            @Schema(description = "Paid (or, while open, due) by card or bank") long paidByCardCents,
-                           @Schema(description = "Waived by staff") long waivedCents) {
+                           @Schema(description = "Waived by staff") long waivedCents,
+                           @Schema(description = "A charge waits for the seller to confirm it (3-D Secure): show "
+                                   + "Confirm payment (POST …/invoices/{id}/confirm-payment)") boolean actionRequired,
+                           @Schema(description = "A bank debit or card charge is in progress; lastError says which "
+                                   + "(\"Bank debit in progress (up to 4 business days)\")") boolean paymentInProgress) {
 
         static InvoiceResponse of(Invoice i) {
             long card = i.isOpen() ? i.remainingCents() + i.paidBy(PaymentSource.CARD) : i.paidBy(PaymentSource.CARD);
@@ -254,8 +269,66 @@ final class BillingDtos {
                     i.payments().stream().map(InvoicePaymentResponse::of).toList(),
                     i.meteredLines().stream().mapToLong(InvoiceLine::amountCents).sum(),
                     i.paidBy(PaymentSource.CREDIT), i.paidBy(PaymentSource.EARNINGS), card,
-                    i.paidBy(PaymentSource.WAIVER));
+                    i.paidBy(PaymentSource.WAIVER),
+                    i.payments().stream().anyMatch(p -> InvoicePayment.ACTION_REQUIRED.equals(p.status())),
+                    i.payments().stream().anyMatch(p -> InvoicePayment.PENDING.equals(p.status())
+                            && p.source() == PaymentSource.CARD));
         }
+    }
+
+    @Schema(name = "PaymentConfirmation", description = "Confirm with Stripe.js confirmCardPayment(clientSecret, "
+            + "{payment_method}); the invoice settles when Stripe's event arrives. clientSecret is null when the "
+            + "payment already succeeded")
+    record PaymentConfirmationResponse(String invoiceId, String paymentIntentId, String clientSecret,
+                                       String paymentMethodId,
+                                       @Schema(allowableValues = {"SUCCEEDED", "PROCESSING", "REQUIRES_ACTION",
+                                               "FAILED"}) String status) {
+
+        static PaymentConfirmationResponse of(PlanFeePaymentService.PaymentConfirmation c) {
+            return new PaymentConfirmationResponse(c.invoiceId(), c.paymentIntentId(), c.clientSecret(),
+                    c.paymentMethodId(), c.status());
+        }
+    }
+
+    @Schema(name = "PlanFeeRefund", description = "A refund of a plan fee: a credit on the invoice")
+    record RefundResponse(UUID id, String invoiceId, String orgId, long amountCents,
+                          @Schema(allowableValues = {"PENDING", "SUCCEEDED", "FAILED"}) String status,
+                          @Schema(allowableValues = {"STAFF", "DASHBOARD"}) String origin, String reasonCode,
+                          String note, String requestedBy, String stripeRefundId, Instant createdAt) {
+
+        static RefundResponse of(PlanFeeRefund r) {
+            return new RefundResponse(r.id(), r.invoiceId(), r.orgId(), r.amountCents(), r.status(), r.origin(),
+                    r.reasonCode(), r.note(), r.requestedBy(), r.stripeRefundId(), r.createdAt());
+        }
+    }
+
+    @Schema(name = "PlanFeeDispute", description = "A dispute (chargeback, ACH unauthorised return) on a plan fee")
+    record DisputeResponse(UUID id, String stripeDisputeId, String invoiceId, String orgId, long amountCents,
+                           String reason, String stripeStatus,
+                           @Schema(allowableValues = {"OPEN", "WON", "LOST"}) String outcome,
+                           boolean fundsWithdrawn, Instant createdAt, Instant closedAt) {
+
+        static DisputeResponse of(PlanFeeDispute d) {
+            return new DisputeResponse(d.id(), d.stripeDisputeId(), d.invoiceId(), d.orgId(), d.amountCents(),
+                    d.reason(), d.stripeStatus(), d.outcome(), d.fundsWithdrawn(), d.createdAt(), d.closedAt());
+        }
+    }
+
+    @Schema(name = "InvoiceAdjustments", description = "Refunds (credits) and disputes of one invoice")
+    record AdjustmentsResponse(String invoiceId, long refundedCents, List<RefundResponse> refunds,
+                               List<DisputeResponse> disputes) {
+
+        static AdjustmentsResponse of(PlanFeePaymentService.InvoiceAdjustments a) {
+            return new AdjustmentsResponse(a.invoiceId(), a.refundedCents(),
+                    a.refunds().stream().map(RefundResponse::of).toList(),
+                    a.disputes().stream().map(DisputeResponse::of).toList());
+        }
+    }
+
+    @Schema(name = "PlanFeeRefundRequest", description = "Full or partial refund; reasonCode from the adjustment reason "
+            + "codes (OTHER needs a note)")
+    record RefundRequest(@Schema(description = "1 to what is left of the payment") long amountCents,
+                         @NotBlank String reasonCode, String note) {
     }
 
     @Schema(name = "PlanChangePreview")

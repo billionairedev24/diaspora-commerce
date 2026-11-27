@@ -17,4 +17,6 @@ public record InvoicePayment(UUID id, String invoiceId, String orgId, PaymentSou
     public static final String PENDING = "PENDING";
     public static final String FAILED = "FAILED";
     public static final String REVERSED = "REVERSED";
+    /** A charge Stripe needs the seller to confirm (3-D Secure off-session): settled when the confirmation succeeds. */
+    public static final String ACTION_REQUIRED = "ACTION_REQUIRED";
 }

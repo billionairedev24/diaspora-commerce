@@ -40,8 +40,19 @@ class InvoiceCollectionServiceImpl implements InvoiceCollectionService {
     static final int MAX_FAILURES = RETRY_AFTER.size() + 1;
     static final Duration EARNINGS_RETRY = Duration.ofMinutes(5);
     static final Duration UNAVAILABLE_RETRY = Duration.ofMinutes(30);
-    /** A card charge Stripe left processing is asked about again after this (there is no plan-fee webhook). */
+    /**
+     * A bank debit settles in up to 4 business days; its outcome arrives on the platform webhook (through payments). The
+     * collection job asks Stripe itself only after this, as a backstop for a lost event.
+     */
+    static final Duration BANK_DEBIT_WAIT = Duration.ofDays(7);
+    /** A card charge Stripe left processing (rare) is asked about again after this when no event came. */
     static final Duration PROCESSING_RECHECK = Duration.ofHours(1);
+    /** How long the seller has to confirm a charge that needs 3-D Secure before it counts as a failed attempt. */
+    static final Duration ACTION_WAIT = Duration.ofDays(3);
+    static final String BANK_DEBIT_IN_PROGRESS = "Bank debit in progress (up to 4 business days)";
+    static final String CARD_PROCESSING = "Card payment processing";
+    static final String ACTION_NEEDED = "Action needed: your bank asks you to confirm this payment. Open Plan & "
+            + "billing and choose Confirm payment.";
 
     private static final Logger LOG = LoggerFactory.getLogger(InvoiceCollectionServiceImpl.class);
     private static final int BATCH = 50;
@@ -194,10 +205,10 @@ class InvoiceCollectionServiceImpl implements InvoiceCollectionService {
             return failed(inv.id(), "no_payment_method", "No payment method on file. Add a card in Plan & billing.",
                     now);
         }
-        if (pm.get().kind() != PaymentMethodKind.CARD) {
-            // A bank account saved before plan fees became card-only: never debit it, ask for a card instead.
-            return failed(inv.id(), "card_required", "Plan fees are paid by card. Add a card in Plan & billing and "
-                    + "make it the default.", now);
+        boolean bank = pm.get().kind() == PaymentMethodKind.US_BANK_ACCOUNT;
+        if (bank && !pm.get().verified()) {
+            return failed(inv.id(), "bank_not_verified", "Your bank account is not verified yet. Confirm the two "
+                    + "small deposits in Plan & billing, or add a card.", now);
         }
         PlanPaymentsGateway.Charge charge;
         try {
@@ -231,29 +242,52 @@ class InvoiceCollectionServiceImpl implements InvoiceCollectionService {
                     invoices.addPayment(new InvoicePayment(UUID.randomUUID(), inv.id(), inv.orgId(),
                             PaymentSource.CARD, remaining, InvoicePayment.PENDING, charge.reference(),
                             pm.get().label(), now));
-                    invoices.recordAttempt(inv.id(), inv.attempts(), now.plus(PROCESSING_RECHECK),
-                            "Card payment processing", now);
+                    invoices.recordAttempt(inv.id(), inv.attempts(),
+                            now.plus(bank ? BANK_DEBIT_WAIT : PROCESSING_RECHECK),
+                            bank ? BANK_DEBIT_IN_PROGRESS : CARD_PROCESSING, now);
                 });
                 yield Outcome.PENDING;
             }
-            case REQUIRES_ACTION -> failed(inv.id(), "requires_action", "Your bank needs you to confirm this "
-                    + "payment. Re-add the payment method in Plan & billing.", now);
+            case REQUIRES_ACTION -> {
+                if (charge.reference() == null) {
+                    yield failed(inv.id(), "requires_action", ACTION_NEEDED, now);
+                }
+                tx.executeWithoutResult(s -> {
+                    invoices.addPayment(new InvoicePayment(UUID.randomUUID(), inv.id(), inv.orgId(),
+                            PaymentSource.CARD, remaining, InvoicePayment.ACTION_REQUIRED, charge.reference(),
+                            pm.get().label(), now));
+                    actionRequired(inv, remaining, now);
+                });
+                yield Outcome.PENDING;
+            }
             case FAILED -> failed(inv.id(), charge.failureCode(), charge.failureMessage() == null
                     ? "The payment was declined" : charge.failureMessage(), now);
         };
     }
 
-    /** A card charge recorded PENDING because Stripe answered {@code processing}; its reference is the PaymentIntent. */
+    /**
+     * A card or bank charge still in flight: PENDING (Stripe answered {@code processing}) or ACTION_REQUIRED (3-D
+     * Secure); its reference is the PaymentIntent. While one exists the invoice is never charged again.
+     */
     private static Optional<InvoicePayment> pendingCardCharge(Invoice inv) {
-        return inv.payments().stream().filter(p -> InvoicePayment.PENDING.equals(p.status())
+        return inv.payments().stream().filter(p -> (InvoicePayment.PENDING.equals(p.status())
+                || InvoicePayment.ACTION_REQUIRED.equals(p.status()))
                 && p.source() == PaymentSource.CARD && p.reference() != null).findFirst();
     }
 
+    /** The invoice waits for the seller to confirm the charge; the owners are told (email, push). In a transaction. */
+    private void actionRequired(Invoice inv, long amountCents, Instant now) {
+        invoices.recordAttempt(inv.id(), inv.attempts(), now.plus(ACTION_WAIT), ACTION_NEEDED, now);
+        events.publish(SellerEvents.BILLING_PAYMENT_ACTION_REQUIRED, SellerEvents.AGGREGATE_SUBSCRIPTION, inv.orgId(),
+                new PaymentActionRequiredPayload(inv.orgId(), inv.id(), inv.number(), amountCents, inv.currency(),
+                        now.plus(ACTION_WAIT), now));
+    }
+
     /**
-     * Asks Stripe how a processing card charge ended (no webhook): succeeded settles the invoice; failed, canceled or
-     * needing the customer counts as a failed attempt under the normal retry schedule (the next attempt is a new
-     * PaymentIntent, so nothing is charged twice); still processing waits and asks again. Never charges again while a
-     * charge is pending.
+     * Backstop when the collection job reaches an invoice whose charge is still in flight (the event from the platform
+     * webhook normally settles it first): asks Stripe. Succeeded settles; processing waits again; an unconfirmed 3-D
+     * Secure charge past its wait, a failure or a cancellation counts as a failed attempt under the normal retry
+     * schedule (the next attempt is a new PaymentIntent, so nothing is charged twice).
      */
     private Outcome settleProcessing(Invoice inv, InvoicePayment pending) {
         Instant now = Instant.now(clock);
@@ -274,11 +308,35 @@ class InvoiceCollectionServiceImpl implements InvoiceCollectionService {
                 return after == null || !after.isOpen() ? Outcome.PAID : Outcome.PENDING;
             });
             case PROCESSING -> {
-                tx.executeWithoutResult(s -> invoices.recordAttempt(inv.id(), inv.attempts(),
-                        now.plus(PROCESSING_RECHECK), "Card payment processing", now));
+                boolean bank = isBankDebit(inv.orgId(), status.paymentMethodId());
+                tx.executeWithoutResult(s -> {
+                    if (InvoicePayment.ACTION_REQUIRED.equals(pending.status())) {
+                        invoices.setPaymentStatus(pending.id(), InvoicePayment.PENDING, null);
+                    }
+                    invoices.recordAttempt(inv.id(), inv.attempts(),
+                            now.plus(bank ? BANK_DEBIT_WAIT : PROCESSING_RECHECK),
+                            bank ? BANK_DEBIT_IN_PROGRESS : CARD_PROCESSING, now);
+                });
                 yield Outcome.PENDING;
             }
-            case REQUIRES_ACTION, FAILED -> {
+            case REQUIRES_ACTION -> {
+                if (InvoicePayment.PENDING.equals(pending.status())) {
+                    tx.executeWithoutResult(s -> {
+                        invoices.setPaymentStatus(pending.id(), InvoicePayment.ACTION_REQUIRED, null);
+                        actionRequired(inv, pending.amountCents(), now);
+                    });
+                    yield Outcome.PENDING;
+                }
+                yield tx.execute(s -> {
+                    invoices.setPaymentStatus(pending.id(), InvoicePayment.FAILED, "Not confirmed in time");
+                    invoices.refreshPaid(inv.id(), now);
+                    return invoices.lock(inv.id()).filter(Invoice::isOpen)
+                            .map(open -> failure(open, "authentication_required", "The payment was not confirmed. "
+                                    + "We will try again; confirm it when your bank asks.", now))
+                            .orElse(Outcome.PAID);
+                });
+            }
+            case FAILED -> {
                 String message = status.failureMessage() == null ? "The payment was declined" : status.failureMessage();
                 yield tx.execute(s -> {
                     invoices.setPaymentStatus(pending.id(), InvoicePayment.FAILED, message);
@@ -288,6 +346,103 @@ class InvoiceCollectionServiceImpl implements InvoiceCollectionService {
                 });
             }
         };
+    }
+
+    private boolean isBankDebit(String orgId, String stripePaymentMethodId) {
+        return stripePaymentMethodId != null && tx.execute(s -> methods.list(orgId)).stream()
+                .anyMatch(m -> stripePaymentMethodId.equals(m.stripePaymentMethodId())
+                        && m.kind() == PaymentMethodKind.US_BANK_ACCOUNT);
+    }
+
+    // ── outcomes reported by Stripe through the platform webhook (payments.plan_fee.stripe_event) ───────────────────
+
+    @Override
+    public boolean onPaymentIntentResult(String paymentIntentId, boolean succeeded, String failureCode,
+                                         String failureMessage) {
+        Optional<InvoicePayment> found = tx.execute(s -> invoices.findPaymentByReference(paymentIntentId));
+        if (found.isEmpty()) {
+            return false;
+        }
+        InvoicePayment p = found.get();
+        Instant now = Instant.now(clock);
+        boolean inFlight = InvoicePayment.PENDING.equals(p.status())
+                || InvoicePayment.ACTION_REQUIRED.equals(p.status());
+        if (succeeded) {
+            if (InvoicePayment.APPLIED.equals(p.status())) {
+                return true;
+            }
+            tx.executeWithoutResult(s -> {
+                Invoice inv = invoices.lock(p.invoiceId()).orElseThrow();
+                if (!inFlight && (!inv.isOpen() || inv.remainingCents() < p.amountCents())) {
+                    LOG.warn("Plan charge {} of invoice {} succeeded after it was replaced: {} received twice; refund "
+                            + "it from the staff console", paymentIntentId, inv.number(), PlanPricing.usd(p.amountCents()));
+                    return;
+                }
+                invoices.setPaymentStatus(p.id(), InvoicePayment.APPLIED, null);
+                invoices.refreshPaid(p.invoiceId(), now);
+                settleIfCovered(p.invoiceId());
+                resolveDunning(p.orgId(), now);
+                publish(p.orgId(), "PAYMENT_SUCCEEDED", now);
+            });
+            return true;
+        }
+        String message = failureMessage == null ? "The payment failed" : failureMessage;
+        if (InvoicePayment.APPLIED.equals(p.status())) {
+            // A bank debit can be returned days after it succeeded (insufficient funds, account closed).
+            reverse(p, failureCode, "Your bank returned the payment: " + message, now);
+            return true;
+        }
+        if (inFlight) {
+            tx.executeWithoutResult(s -> {
+                invoices.setPaymentStatus(p.id(), InvoicePayment.FAILED, message);
+                invoices.refreshPaid(p.invoiceId(), now);
+                invoices.lock(p.invoiceId()).filter(Invoice::isOpen).ifPresent(inv ->
+                        failure(inv, failureCode, message, now));
+            });
+        }
+        return true;
+    }
+
+    @Override
+    public boolean onProcessing(String paymentIntentId) {
+        Optional<InvoicePayment> found = tx.execute(s -> invoices.findPaymentByReference(paymentIntentId));
+        found.filter(p -> InvoicePayment.ACTION_REQUIRED.equals(p.status())).ifPresent(p ->
+                tx.executeWithoutResult(s -> invoices.setPaymentStatus(p.id(), InvoicePayment.PENDING, null)));
+        return found.isPresent();
+    }
+
+    @Override
+    public boolean onActionRequired(String paymentIntentId) {
+        Optional<InvoicePayment> found = tx.execute(s -> invoices.findPaymentByReference(paymentIntentId));
+        found.filter(p -> InvoicePayment.PENDING.equals(p.status())).ifPresent(p -> tx.executeWithoutResult(s -> {
+            invoices.setPaymentStatus(p.id(), InvoicePayment.ACTION_REQUIRED, null);
+            invoices.lock(p.invoiceId()).filter(Invoice::isOpen).ifPresent(inv ->
+                    actionRequired(inv, p.amountCents(), Instant.now(clock)));
+        }));
+        return found.isPresent();
+    }
+
+    @Override
+    public boolean onPaymentTakenBack(String paymentIntentId, String code, String message) {
+        Optional<InvoicePayment> found = tx.execute(s -> invoices.findPaymentByReference(paymentIntentId));
+        found.filter(p -> InvoicePayment.APPLIED.equals(p.status()))
+                .ifPresent(p -> reverse(p, code, message, Instant.now(clock)));
+        return found.isPresent();
+    }
+
+    /**
+     * A settled payment was taken back (late bank-debit return, lost dispute): the amount is owed again, the invoice is
+     * open and dunning restarts from where it was (the next attempt is scheduled by the normal retry schedule).
+     */
+    private void reverse(InvoicePayment p, String code, String message, Instant now) {
+        tx.executeWithoutResult(s -> {
+            invoices.setPaymentStatus(p.id(), InvoicePayment.REVERSED, message);
+            invoices.refreshPaid(p.invoiceId(), now);
+            invoices.reopenPaid(p.invoiceId(), now);
+            invoices.lock(p.invoiceId()).filter(Invoice::isOpen).ifPresent(inv -> failure(inv, code, message, now));
+        });
+        LOG.warn("Plan payment {} of invoice {} was taken back ({}): the invoice is open again", p.reference(),
+                p.invoiceId(), code);
     }
 
     private String customer(String orgId) {

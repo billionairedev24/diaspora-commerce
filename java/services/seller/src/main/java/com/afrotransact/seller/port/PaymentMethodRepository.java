@@ -19,4 +19,13 @@ public interface PaymentMethodRepository {
     void makeDefault(String orgId, UUID id);
 
     void delete(String orgId, UUID id);
+
+    /**
+     * A plan SetupIntent succeeded (Stripe, through payments): the saved bank account is verified (instantly with
+     * Financial Connections, or after microdeposits) and its online ACH mandate is kept. Unknown methods are ignored.
+     */
+    void markVerified(String stripePaymentMethodId, String mandateId);
+
+    /** The ACH mandate stored with the payment method, if any. */
+    Optional<String> mandate(String orgId, String stripePaymentMethodId);
 }

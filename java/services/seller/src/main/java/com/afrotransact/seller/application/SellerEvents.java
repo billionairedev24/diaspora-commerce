@@ -30,6 +30,13 @@ public final class SellerEvents {
     public static final String LISTINGS_HIDDEN = "seller.listings.hidden";
     public static final String LISTINGS_RESTORED = "seller.listings.restored";
     public static final String SUBSCRIPTION_CHANGED = "seller.subscription.changed";
+    /** A plan charge needs the seller to confirm it (3-D Secure): notifications emails the owners (key = org id). */
+    public static final String BILLING_PAYMENT_ACTION_REQUIRED = "seller.billing.payment_action_required";
+    /** A dispute was opened / closed on a plan fee (staff console; key = org id). */
+    public static final String BILLING_DISPUTE_OPENED = "seller.billing.dispute_opened";
+    public static final String BILLING_DISPUTE_CLOSED = "seller.billing.dispute_closed";
+    /** A plan fee was refunded by staff or in the Stripe dashboard (key = org id). */
+    public static final String BILLING_REFUNDED = "seller.billing.refunded";
     /** A reward or staff adjustment was applied at Stripe (at.seller-subscription.events); notifications tells the org. */
     public static final String BILLING_GRANT_APPLIED = "seller.billing.grant_applied";
     /** Staff approved or rejected a department request (at.seller-application.events, key = org id; audited by trust-ops). */
