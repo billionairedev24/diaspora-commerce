@@ -187,6 +187,14 @@ public class StripeJavaGateway implements StripeGateway {
     }
 
     @Override
+    public Map<String, String> intentMetadata(String intentId) {
+        return call(() -> {
+            Map<String, String> m = client.v1().paymentIntents().retrieve(intentId).getMetadata();
+            return m == null ? Map.<String, String>of() : Map.copyOf(m);
+        });
+    }
+
+    @Override
     public IntentSnapshot capture(String intentId, Money amount, Boolean finalCapture, Map<String, String> metadata,
                                   String idempotencyKey) {
         PaymentIntentCaptureParams.Builder params = PaymentIntentCaptureParams.builder()

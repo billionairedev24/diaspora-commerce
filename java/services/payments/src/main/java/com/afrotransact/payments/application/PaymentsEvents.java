@@ -26,6 +26,12 @@ public final class PaymentsEvents {
     public static final String PAYOUT_FAILED = "payments.payout.failed";
     public static final String DISPUTE_OPENED = "payments.dispute.opened";
     public static final String DISPUTE_CLOSED = "payments.dispute.closed";
+    /**
+     * A Stripe event of a seller plan fee (PaymentIntent metadata purpose=plan_fee, or a plan SetupIntent with
+     * purpose=seller_billing) received on the platform endpoint and handed to seller (topic at.payment.events, key = plan
+     * invoice id, else the intent id). Payments does not treat it as an order payment.
+     */
+    public static final String PLAN_FEE_STRIPE_EVENT = "payments.plan_fee.stripe_event";
     /** A provider fee (late provider cancellation) was recorded: topic at.payout.events, key = organisation. */
     public static final String PROVIDER_FEE_RECORDED = "payments.provider_fee.recorded";
     /** A provider fee was debited from the provider's connected account. */
