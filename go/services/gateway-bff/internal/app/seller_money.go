@@ -557,11 +557,12 @@ func (s *sellerMoneyImpl) SetupIntent(ctx context.Context, c *domain.Caller) (do
 func (s *sellerMoneyImpl) AddPaymentMethod(ctx context.Context, c *domain.Caller, in domain.AddBillingPaymentMethod) (domain.BillingPaymentMethod, error) {
 	errs := map[string]string{}
 	if !strings.HasPrefix(in.StripePaymentMethodID, "pm_") {
-		errs["stripePaymentMethodId"] = "Confirm the card or bank account with Stripe first"
+		errs["stripePaymentMethodId"] = "Confirm the card with Stripe first"
 	}
+	// Plan fees are paid by card (or from sales), never by bank debit: seller refuses anything else too.
 	kind := strings.ToUpper(in.Kind)
-	if kind != "CARD" && kind != "US_BANK_ACCOUNT" {
-		errs["kind"] = "Card or bank account"
+	if kind != "CARD" {
+		errs["kind"] = "Plan fees are paid by card"
 	}
 	if len(in.Last4) != 4 {
 		errs["last4"] = "Last 4 digits"

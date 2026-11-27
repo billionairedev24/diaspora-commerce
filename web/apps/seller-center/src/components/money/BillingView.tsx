@@ -324,18 +324,19 @@ function ChangePlanDialog({ target, onClose, t }: { target: { plan: Plan; cadenc
 
 interface CollectedMethod {
   stripePaymentMethodId: string;
-  kind: 'CARD' | 'US_BANK_ACCOUNT';
+  kind: 'CARD';
   brand?: string;
   last4: string;
   expMonth?: number;
   expYear?: number;
-  bankName?: string;
-  accountType?: string;
 }
+
+/** Plan fees are paid by card (or from earnings); bank debit is never offered. */
+const PLAN_PAYMENT_METHOD_TYPES = ['card'] as const;
 
 const brandOf = (n: string): string => (/^4/.test(n) ? 'visa' : /^(5[1-5]|2[2-7])/.test(n) ? 'mastercard' : /^3[47]/.test(n) ? 'amex' : /^6(011|5)/.test(n) ? 'discover' : '');
 
-/** Adds a card or US bank account: Stripe's Payment Element with a SetupIntent, or the labelled local stand-in without a Stripe key. */
+/** Adds a card (plan fees are paid by card, never by bank debit): Stripe's Payment Element limited to cards with a SetupIntent, or the labelled local stand-in without a Stripe key. */
 function AddPaymentMethodDialog({ open, onClose, t }: { open: boolean; onClose: () => void; t: T }) {
   const api = sellerApi();
   const qc = useQueryClient();
@@ -365,8 +366,8 @@ function AddPaymentMethodDialog({ open, onClose, t }: { open: boolean; onClose: 
     getStripePayments(intent.publishableKey)
       .then((s) => {
         if (cancelled || !box.current) return;
-        const elements = s.elements({ mode: 'setup', currency: 'usd', paymentMethodCreation: 'manual', appearance: appearance() });
-        const el = elements.create('payment', { paymentMethodOrder: ['card', 'us_bank_account'] });
+        const elements = s.elements({ mode: 'setup', currency: 'usd', paymentMethodCreation: 'manual', paymentMethodTypes: PLAN_PAYMENT_METHOD_TYPES, appearance: appearance() });
+        const el = elements.create('payment');
         el.mount(box.current);
         stripe.current = { s, elements, el };
       })
@@ -394,11 +395,9 @@ function AddPaymentMethodDialog({ open, onClose, t }: { open: boolean; onClose: 
     const r = await cur.s.createPaymentMethod({ elements: cur.elements });
     const pm = r.paymentMethod;
     if (r.error || !pm) return r.error?.message ?? t('sc.billing.add.failed');
+    if (pm.type !== 'card' || !pm.card) return t('sc.billing.add.cardOnly');
     const confirmed = await cur.s.confirmSetup({ clientSecret: intent.clientSecret, confirmParams: { payment_method: pm.id, return_url: window.location.href }, redirect: 'if_required' });
     if (confirmed.error) return confirmed.error.message ?? t('sc.billing.add.failed');
-    if (pm.us_bank_account) {
-      return { stripePaymentMethodId: pm.id, kind: 'US_BANK_ACCOUNT', last4: pm.us_bank_account.last4 ?? '0000', bankName: pm.us_bank_account.bank_name, accountType: pm.us_bank_account.account_type };
-    }
     return { stripePaymentMethodId: pm.id, kind: 'CARD', brand: pm.card?.brand, last4: pm.card?.last4 ?? '0000', expMonth: pm.card?.exp_month, expYear: pm.card?.exp_year };
   };
   const save = useMutation({
