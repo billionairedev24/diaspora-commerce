@@ -64,7 +64,6 @@ import tools.jackson.databind.json.JsonMapper;
     "at.seller.consumers.enabled=false",
     "at.seller.stripe.secret-key=sk_test_seller_it",
     "at.seller.stripe.connect-webhook-secret=" + SellerIntegrationTest.CONNECT_SECRET,
-    "at.seller.stripe.billing-webhook-secret=" + SellerIntegrationTest.BILLING_SECRET,
     "at.seller.stripe.max-network-retries=0",
     "at.seller.billing.sync-on-startup=false"
 })
@@ -73,7 +72,6 @@ import tools.jackson.databind.json.JsonMapper;
 abstract class SellerIntegrationTest {
 
     static final String CONNECT_SECRET = "whsec_connect_test_secret";
-    static final String BILLING_SECRET = "whsec_billing_test_secret";
     /** Set {@code AT_IT_POSTGRES_URL} (jdbc:postgresql://…, with PostGIS) to run without Docker. */
     static final String EXTERNAL_DB = System.getenv("AT_IT_POSTGRES_URL");
     static final PostgreSQLContainer POSTGRES = PostgresTestContainer.create();

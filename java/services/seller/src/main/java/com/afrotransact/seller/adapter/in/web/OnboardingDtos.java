@@ -120,7 +120,7 @@ final class OnboardingDtos {
     }
 
     @Schema(name = "PlanStep", description = "Step 'plan'. Cards are tokenised client-side (pm_…); only brand, last 4 "
-            + "and expiry are stored. US_BANK_ACCOUNT charges the payout bank by ACH.")
+            + "and expiry are stored. Plan fees are paid by card: US_BANK_ACCOUNT is refused (422).")
     record PlanStep(String planCode, @Schema(allowableValues = {"MONTHLY", "QUARTERLY", "ANNUAL"}) String cadence,
                     @Schema(allowableValues = {"CARD", "US_BANK_ACCOUNT"}) String paymentMethodKind,
                     String stripePaymentMethodId, String cardBrand, String cardLast4, Integer cardExpMonth,

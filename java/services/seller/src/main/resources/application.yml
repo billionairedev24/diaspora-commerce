@@ -104,7 +104,6 @@ at:
     stripe:
       secret-key: ${STRIPE_SECRET_KEY:}
       connect-webhook-secret: ${STRIPE_CONNECT_WEBHOOK_SECRET:}
-      billing-webhook-secret: ${STRIPE_BILLING_WEBHOOK_SECRET:}
       session-components: account_onboarding,account_management,notification_banner
       max-network-retries: 2
       # stripe everywhere; only the local profile may use the stand-in (auto / local-test, LocalTestStripePolicy).

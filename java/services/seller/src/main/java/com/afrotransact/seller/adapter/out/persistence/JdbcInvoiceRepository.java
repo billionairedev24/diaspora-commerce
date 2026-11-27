@@ -120,12 +120,6 @@ class JdbcInvoiceRepository implements InvoiceRepository {
     }
 
     @Override
-    public Optional<InvoicePayment> findPaymentByReference(String reference) {
-        return jdbc.sql("select * from invoice_payment where reference = :r and source = 'CARD' limit 1")
-                .param("r", reference).query(JdbcInvoiceRepository::payment).optional();
-    }
-
-    @Override
     public void refreshPaid(String invoiceId, Instant at) {
         jdbc.sql("""
                 update invoice set amount_paid_cents = coalesce((select sum(amount_cents) from invoice_payment

@@ -243,16 +243,80 @@ class InvoiceCollectionServiceImplTest {
     }
 
     @Test
-    void aBankDebitThatSucceedsLaterSettlesTheInvoice() {
+    void aCardChargeStripeLeavesProcessingStaysPendingAndIsAskedAboutAgainSoon() {
+        Invoice open = invoice(3900, 0, List.of());
+        when(invoices.lock("inv_1")).thenReturn(Optional.of(open));
+        when(gateway.charge(any(), any(), anyLong(), any(), any(), any(), any())).thenReturn(
+                new PlanPaymentsGateway.Charge(PlanPaymentsGateway.Status.PROCESSING, "pi_p", null, null));
+
+        assertThat(service.collect("inv_1")).isEqualTo(InvoiceCollectionService.Outcome.PENDING);
+        ArgumentCaptor<InvoicePayment> p = ArgumentCaptor.forClass(InvoicePayment.class);
+        verify(invoices).addPayment(p.capture());
+        assertThat(p.getValue().status()).isEqualTo(InvoicePayment.PENDING);
+        assertThat(p.getValue().reference()).isEqualTo("pi_p");
+        verify(invoices).recordAttempt("inv_1", 0, NOW.plus(InvoiceCollectionServiceImpl.PROCESSING_RECHECK),
+                "Card payment processing", NOW);
+    }
+
+    @Test
+    void aPendingCardChargeThatSucceededSettlesTheInvoiceOnTheNextPassWithoutChargingAgain() {
         InvoicePayment pending = payment(PaymentSource.CARD, 3900, InvoicePayment.PENDING);
         Invoice open = invoice(3900, 0, List.of(pending));
         Invoice settled = invoice(3900, 3900, List.of(payment(PaymentSource.CARD, 3900, InvoicePayment.APPLIED)));
-        when(invoices.findPaymentByReference("pi_ach")).thenReturn(Optional.of(pending));
-        when(invoices.lock("inv_1")).thenReturn(Optional.of(settled));
-        service.onPaymentIntentResult("pi_ach", true, null, null);
+        when(invoices.lock("inv_1")).thenReturn(Optional.of(open), Optional.of(open), Optional.of(settled));
+        when(invoices.findById("inv_1")).thenReturn(Optional.of(paidInvoice()));
+        when(gateway.paymentStatus(pending.reference())).thenReturn(
+                new PlanPaymentsGateway.Charge(PlanPaymentsGateway.Status.SUCCEEDED, pending.reference(), null, null));
+
+        assertThat(service.collect("inv_1")).isEqualTo(InvoiceCollectionService.Outcome.PAID);
         verify(invoices).setPaymentStatus(pending.id(), InvoicePayment.APPLIED, null);
         verify(invoices).markPaid("inv_1", NOW);
-        assertThat(open.isOpen()).isTrue();
+        verify(gateway, never()).charge(any(), any(), anyLong(), any(), any(), any(), any());
+    }
+
+    @Test
+    void aPendingCardChargeThatFailedIsAFailedAttemptUnderTheNormalRetrySchedule() {
+        InvoicePayment pending = payment(PaymentSource.CARD, 3900, InvoicePayment.PENDING);
+        Invoice open = invoice(3900, 0, List.of(pending));
+        Invoice afterFailure = invoice(3900, 0, List.of(payment(PaymentSource.CARD, 3900, InvoicePayment.FAILED)));
+        when(invoices.lock("inv_1")).thenReturn(Optional.of(open), Optional.of(open), Optional.of(afterFailure));
+        when(gateway.paymentStatus(pending.reference())).thenReturn(new PlanPaymentsGateway.Charge(
+                PlanPaymentsGateway.Status.FAILED, pending.reference(), "card_declined", "Your card was declined."));
+
+        assertThat(service.collect("inv_1")).isEqualTo(InvoiceCollectionService.Outcome.RETRY);
+        verify(invoices).setPaymentStatus(pending.id(), InvoicePayment.FAILED, "Your card was declined.");
+        verify(invoices).recordAttempt("inv_1", 1, NOW.plus(InvoiceCollectionServiceImpl.RETRY_AFTER.get(0)),
+                "Your card was declined.", NOW);
+        verify(gateway, never()).charge(any(), any(), anyLong(), any(), any(), any(), any());
+    }
+
+    @Test
+    void aPendingCardChargeStillProcessingWaitsAndIsNeverChargedTwice() {
+        InvoicePayment pending = payment(PaymentSource.CARD, 3900, InvoicePayment.PENDING);
+        Invoice open = invoice(3900, 0, List.of(pending));
+        when(invoices.lock("inv_1")).thenReturn(Optional.of(open));
+        when(gateway.paymentStatus(pending.reference())).thenReturn(new PlanPaymentsGateway.Charge(
+                PlanPaymentsGateway.Status.PROCESSING, pending.reference(), null, null));
+
+        assertThat(service.collect("inv_1")).isEqualTo(InvoiceCollectionService.Outcome.PENDING);
+        verify(invoices).recordAttempt("inv_1", 0, NOW.plus(InvoiceCollectionServiceImpl.PROCESSING_RECHECK),
+                "Card payment processing", NOW);
+        verify(invoices, never()).setPaymentStatus(any(), any(), any());
+        verify(gateway, never()).charge(any(), any(), anyLong(), any(), any(), any(), any());
+    }
+
+    @Test
+    void aSavedBankAccountIsNeverDebitedForPlanFees() {
+        PaymentMethod bank = new PaymentMethod(UUID.randomUUID(), "org_1", "pm_ach_1",
+                PaymentMethodKind.US_BANK_ACCOUNT, null, "6789", null, null, "Chase", "checking", true, true, true,
+                NOW);
+        when(methods.list("org_1")).thenReturn(List.of(bank));
+        Invoice open = invoice(3900, 0, List.of());
+        when(invoices.lock("inv_1")).thenReturn(Optional.of(open));
+
+        assertThat(service.collect("inv_1")).isEqualTo(InvoiceCollectionService.Outcome.RETRY);
+        verify(gateway, never()).charge(any(), any(), anyLong(), any(), any(), any(), any());
+        verify(invoices).recordAttempt(eq("inv_1"), eq(1), any(), contains("paid by card"), eq(NOW));
     }
 
     private static Invoice invoice(long due, long paid, List<InvoicePayment> payments) {

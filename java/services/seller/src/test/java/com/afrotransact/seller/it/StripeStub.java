@@ -41,11 +41,14 @@ final class StripeStub {
         wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/payment_intents"))
                 .willReturn(json("{\"id\":\"pi_" + RANDOM + "\",\"object\":\"payment_intent\",\"status\":"
                         + "\"succeeded\"}")));
-        // Bank debits settle later: the payment method id says so.
+        // A card charge Stripe leaves processing (rare): the payment method id says so; reading it back succeeds.
         wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/payment_intents"))
-                .withRequestBody(WireMock.containing("payment_method=pm_ach")).atPriority(1)
-                .willReturn(json("{\"id\":\"pi_" + RANDOM + "\",\"object\":\"payment_intent\",\"status\":"
-                        + "\"processing\"}")));
+                .withRequestBody(WireMock.containing("payment_method=pm_processing")).atPriority(1)
+                .willReturn(json("{\"id\":\"pi_processing_" + RANDOM + "\",\"object\":\"payment_intent\","
+                        + "\"status\":\"processing\"}")));
+        wm.stubFor(WireMock.get(WireMock.urlPathMatching("/v1/payment_intents/pi_[A-Za-z0-9_]+"))
+                .willReturn(json("{\"id\":\"{{request.pathSegments.[2]}}\",\"object\":\"payment_intent\","
+                        + "\"status\":\"succeeded\"}")));
         wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/payment_intents"))
                 .withRequestBody(WireMock.containing("payment_method=pm_decline")).atPriority(1)
                 .willReturn(WireMock.aResponse().withStatus(402).withHeader("Content-Type", "application/json")

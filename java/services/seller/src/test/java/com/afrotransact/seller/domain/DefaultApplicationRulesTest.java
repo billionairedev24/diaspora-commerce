@@ -169,6 +169,17 @@ class DefaultApplicationRulesTest {
     }
 
     @Test
+    void planFeesCannotBePaidByBankDebit() {
+        Plan growth = Plan.standard("seller_growth", OrgKind.SELLER, "Seller Growth", null, 3900, 30, List.of(), 1);
+        PlanSection ach = new PlanSection("seller_growth", Cadence.MONTHLY, PaymentMethodKind.US_BANK_ACCOUNT,
+                "pm_ach_1", null, null, null, null);
+        assertThat(rules.plan(ach, Optional.of(growth), ApplicationData.empty(), SELLER, false).errors())
+                .as("refused even in a draft").containsEntry("plan.paymentMethodKind", "Plan fees are paid by card");
+        assertThat(rules.plan(ach, Optional.of(growth), ApplicationData.empty(), SELLER, true).errors())
+                .containsKey("plan.paymentMethodKind");
+    }
+
+    @Test
     void complianceRequiresPermitsLicencesAgreementsAndW9() {
         ComplianceSection.ServiceLicence expired = new ComplianceSection.ServiceLicence("Braiding", true, "C-123",
                 "GA", TODAY.minusDays(1), "asset-lic");

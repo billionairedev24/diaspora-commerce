@@ -25,7 +25,7 @@ public record SellerProperties(List<String> liveCountries, Stripe stripe, Crypto
 
     public SellerProperties {
         liveCountries = liveCountries == null || liveCountries.isEmpty() ? List.of("US") : List.copyOf(liveCountries);
-        stripe = stripe == null ? new Stripe(null, null, null, null, null, null, null, null) : stripe;
+        stripe = stripe == null ? new Stripe(null, null, null, null, null, null, null) : stripe;
         crypto = crypto == null ? new Crypto(null, null) : crypto;
         media = media == null ? new Media(null, null) : media;
         jobs = jobs == null ? new Jobs(null) : jobs;
@@ -81,10 +81,9 @@ public record SellerProperties(List<String> liveCountries, Stripe stripe, Crypto
         }
     }
 
-    /** Stripe settings. Secrets only from env (STRIPE_SECRET_KEY, STRIPE_*_WEBHOOK_SECRET). */
+    /** Stripe settings. Secrets only from env (STRIPE_SECRET_KEY, STRIPE_CONNECT_WEBHOOK_SECRET). */
     public record Stripe(String secretKey, String apiBase, String filesBase, String connectWebhookSecret,
-                         String billingWebhookSecret, List<String> sessionComponents, Integer maxNetworkRetries,
-                         String mode) {
+                         List<String> sessionComponents, Integer maxNetworkRetries, String mode) {
 
         public Stripe {
             secretKey = secretKey == null ? "" : secretKey;
