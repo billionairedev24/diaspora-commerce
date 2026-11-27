@@ -40,10 +40,10 @@ class StripeEventHandlers {
 
     static final Set<String> SUPPORTED = Set.of(
             "payment_intent.succeeded", "payment_intent.amount_capturable_updated", "payment_intent.payment_failed",
-            "payment_intent.requires_action", "payment_intent.canceled", "charge.refunded",
-            "charge.dispute.created", "charge.dispute.closed", "transfer.reversed", "payout.paid", "payout.failed",
-            "setup_intent.succeeded", "setup_intent.requires_action", "payment_method.attached",
-            "payment_method.detached");
+            "payment_intent.requires_action", "payment_intent.canceled", "payment_intent.processing", "charge.refunded",
+            "charge.dispute.created", "charge.dispute.closed", "charge.dispute.funds_withdrawn", "transfer.reversed",
+            "payout.paid", "payout.failed", "setup_intent.succeeded", "setup_intent.requires_action",
+            "payment_method.attached", "payment_method.detached");
 
     private static final Logger LOG = LoggerFactory.getLogger(StripeEventHandlers.class);
     private static final String SYSTEM = "system:stripe-webhook";
@@ -60,12 +60,14 @@ class StripeEventHandlers {
     private final DomainEventPublisher events;
     private final JsonMapper json;
     private final PaymentsSettings settings;
+    private final PlanFeeEventForwarder planFees;
     private final Clock clock;
 
     StripeEventHandlers(PaymentRepository payments, DisputeRepository disputes, SettlementRepository settlements,
                         PayoutRepository payouts, PaymentStatusUpdater statuses, WalletSync wallet,
                         GiftCardService giftCards, StripeGateway stripe, LedgerPoster ledger,
-                        DomainEventPublisher events, JsonMapper json, PaymentsSettings settings, Clock clock) {
+                        DomainEventPublisher events, JsonMapper json, PaymentsSettings settings,
+                        PlanFeeEventForwarder planFees, Clock clock) {
         this.payments = payments;
         this.disputes = disputes;
         this.settlements = settlements;
@@ -78,6 +80,7 @@ class StripeEventHandlers {
         this.events = events;
         this.json = json;
         this.settings = settings;
+        this.planFees = planFees;
         this.clock = clock;
     }
 
@@ -86,7 +89,12 @@ class StripeEventHandlers {
     }
 
     void handle(InboxEvent event) {
-        JsonNode object = json.readTree(event.payload()).path("data").path("object");
+        JsonNode envelope = json.readTree(event.payload());
+        JsonNode object = envelope.path("data").path("object");
+        // Seller plan fees (card or US bank debit) share this endpoint: they are handed to seller, never orders.
+        if (planFees.forward(event.id(), event.type(), envelope.path("created").asLong(0), object)) {
+            return;
+        }
         switch (event.type()) {
             case "payment_intent.succeeded", "payment_intent.amount_capturable_updated" ->
                     intent(object, PaymentStatus.fromStripe(text(object, "status")), null);

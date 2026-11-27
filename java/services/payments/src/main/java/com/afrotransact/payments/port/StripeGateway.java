@@ -29,6 +29,14 @@ public interface StripeGateway {
     IntentSnapshot retrieveIntent(String intentId);
 
     /**
+     * The PaymentIntent's metadata (to recognise a seller plan fee, {@code purpose=plan_fee}, from a charge or dispute
+     * that does not carry it). Empty when unknown.
+     */
+    default Map<String, String> intentMetadata(String intentId) {
+        return Map.of();
+    }
+
+    /**
      * Captures {@code amount} (amount_to_capture). {@code finalCapture=false} keeps the rest capturable (multicapture
      * intents only); {@code null} sends no final_capture at all, as single-capture intents need: Stripe releases the
      * uncaptured rest.

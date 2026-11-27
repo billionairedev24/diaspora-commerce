@@ -18,6 +18,7 @@ channels:
       paymentsTransferCreated: {$ref: '#/components/messages/paymentsTransferCreated'}
       paymentsDisputeOpened: {$ref: '#/components/messages/paymentsDisputeOpened'}
       paymentsDisputeClosed: {$ref: '#/components/messages/paymentsDisputeClosed'}
+      paymentsPlanFeeStripeEvent: {$ref: '#/components/messages/paymentsPlanFeeStripeEvent'}
       paymentsGiftCardDeliver: {$ref: '#/components/messages/paymentsGiftCardDeliver'}
       paymentsGiftCardPurchased: {$ref: '#/components/messages/paymentsGiftCardPurchased'}
       paymentsGiftCardIssued: {$ref: '#/components/messages/paymentsGiftCardIssued'}
@@ -187,6 +188,15 @@ components:
       title: 'Chargeback closed as WON or LOST'
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/PaymentsDispute'}
+    paymentsPlanFeeStripeEvent:
+      name: payments.plan_fee.stripe_event
+      title: >-
+        A Stripe event of a seller plan fee (card or US bank debit PaymentIntent with metadata purpose=plan_fee, its charge
+        or dispute, or a plan SetupIntent with purpose=seller_billing) received on the platform endpoint and handed to
+        seller; payments does not treat it as an order (key = plan invoice id, else the intent id). Seller de-duplicates on
+        stripeEventId.
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsPlanFeeStripeEvent'}
     paymentsGiftCardDeliver:
       name: payments.gift_card.deliver
       title: 'A gift card is due: email the recipient with the code (S321; key = gift card id)'
@@ -516,6 +526,37 @@ components:
         amountMinor: {type: integer, format: int64}
         currency: {type: string}
         transferGroup: {type: string, description: Equals the order id}
+    PaymentsPlanFeeStripeEvent:
+      type: object
+      required: [stripeEventId, stripeEventType, created, purpose, objectType]
+      properties:
+        stripeEventId: {type: string, description: 'Stripe event id (evt_...): seller de-duplicates on it'}
+        stripeEventType:
+          type: string
+          enum: [payment_intent.succeeded, payment_intent.processing, payment_intent.payment_failed,
+                 payment_intent.requires_action, payment_intent.canceled, charge.refunded, charge.dispute.created,
+                 charge.dispute.closed, charge.dispute.funds_withdrawn, setup_intent.succeeded]
+        created: {type: integer, format: int64, description: 'Stripe event creation time (epoch seconds)'}
+        purpose: {type: string, enum: [plan_fee, seller_billing]}
+        objectType: {type: string, enum: [payment_intent, charge, dispute, setup_intent]}
+        paymentIntentId: {type: [string, 'null']}
+        invoiceId: {type: [string, 'null'], description: 'metadata.invoice_id of the PaymentIntent (inv_...)'}
+        orgId: {type: [string, 'null']}
+        status: {type: [string, 'null'], description: 'PaymentIntent / charge / SetupIntent status'}
+        amountMinor: {type: integer, format: int64}
+        amountReceivedMinor: {type: integer, format: int64}
+        amountRefundedMinor: {type: integer, format: int64, description: 'charge.refunded: cumulative refunded amount'}
+        currency: {type: [string, 'null']}
+        chargeId: {type: [string, 'null']}
+        failureCode: {type: [string, 'null']}
+        failureMessage: {type: [string, 'null']}
+        nextActionType: {type: [string, 'null']}
+        disputeId: {type: [string, 'null']}
+        disputeStatus: {type: [string, 'null']}
+        disputeReason: {type: [string, 'null']}
+        setupIntentId: {type: [string, 'null']}
+        paymentMethodId: {type: [string, 'null']}
+        mandateId: {type: [string, 'null'], description: 'setup_intent.succeeded of a US bank account: the mandate'}
     PaymentsDispute:
       type: object
       required: [disputeId, paymentId, orderId, amountMinor, currency, status, allocations]

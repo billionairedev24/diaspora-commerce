@@ -37,6 +37,28 @@ public final class PaymentsEventPayloads {
         }
     }
 
+    /**
+     * payments.plan_fee.stripe_event: the fields of one Stripe event seller needs to settle a plan invoice. Seller
+     * de-duplicates on {@code stripeEventId}.
+     *
+     * @param stripeEventType  payment_intent.succeeded / processing / payment_failed / requires_action / canceled,
+     *                         charge.refunded, charge.dispute.created / closed / funds_withdrawn, setup_intent.succeeded
+     * @param purpose          plan_fee (PaymentIntent, charge, dispute) or seller_billing (SetupIntent)
+     * @param objectType       payment_intent, charge, dispute or setup_intent
+     * @param status           the PaymentIntent / charge / SetupIntent status (null for a dispute)
+     * @param amountRefunded   a charge's cumulative refunded amount (charge.refunded)
+     * @param nextActionType   a PaymentIntent's next_action.type (requires_action)
+     * @param disputeStatus    warning_needs_response, needs_response, under_review, won, lost, ...
+     */
+    public record PlanFeeStripeEvent(String stripeEventId, String stripeEventType, long created, String purpose,
+                                     String objectType, String paymentIntentId, String invoiceId, String orgId,
+                                     String status, long amountMinor, long amountReceivedMinor,
+                                     long amountRefundedMinor, String currency, String chargeId, String failureCode,
+                                     String failureMessage, String nextActionType, String disputeId,
+                                     String disputeStatus, String disputeReason, String setupIntentId,
+                                     String paymentMethodId, String mandateId) {
+    }
+
     /** payments.authorization.released. */
     public record ReleasedPayload(UUID paymentId, String orderId, String stripePaymentIntentId, String status,
                                   long amountMinor, long capturedMinor, long releasedMinor, String currency,
