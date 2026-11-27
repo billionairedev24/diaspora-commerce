@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -104,6 +105,19 @@ func samplePanel() map[string]any {
 			"reason": "Only $25.00 was available", "attempts": 1, "lastError": nil, "createdAt": "2026-10-09T10:00:00Z",
 			"updatedAt": "2026-10-09T10:01:00Z"}},
 		"earningsCollectionEnabled": true, "planFeeCollection": samplePlanFeeCollection("EARNINGS_FIRST", "DEFAULT")}
+}
+
+// sampleRefund and sampleDispute are seller's PlanFeeRefund and PlanFeeDispute.
+func sampleRefund() map[string]any {
+	return map[string]any{"id": "0f0e0d0c-0000-4000-8000-0000000000a1", "invoiceId": "in_1", "orgId": "org_1", "amountCents": 1000,
+		"status": "SUCCEEDED", "origin": "STAFF", "reasonCode": "GOODWILL", "note": nil, "requestedBy": "stf-finance",
+		"stripeRefundId": "re_1", "createdAt": "2026-10-12T10:00:00Z"}
+}
+
+func sampleDispute() map[string]any {
+	return map[string]any{"id": "0f0e0d0c-0000-4000-8000-0000000000d1", "stripeDisputeId": "dp_1", "invoiceId": "in_1", "orgId": "org_1",
+		"amountCents": 3900, "reason": "fraudulent", "stripeStatus": "needs_response", "outcome": "OPEN", "fundsWithdrawn": true,
+		"createdAt": "2026-10-12T10:00:00Z", "closedAt": nil}
 }
 
 // samplePlanFeeCollection is seller's PlanFeeCollection (S298).
@@ -225,6 +239,13 @@ func (f *fakeSellerBilling) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"updatedAt": "2026-10-12T10:00:00Z"})
 	case p == "/v1/orgs/org_404/billing/panel":
 		problemJ(w, 404, "seller.org-not-found")
+	case key == "GET /v1/billing/disputes":
+		writeJ(w, 200, []any{sampleDispute()})
+	case key == "GET /v1/orgs/org_1/billing/invoices/in_1/adjustments":
+		writeJ(w, 200, map[string]any{"invoiceId": "in_1", "refundedCents": 1000, "refunds": []any{sampleRefund()},
+			"disputes": []any{sampleDispute()}})
+	case key == "POST /v1/orgs/org_1/billing/invoices/in_1/refunds" && body["reasonCode"] != nil:
+		writeJ(w, 201, sampleRefund())
 	case strings.HasPrefix(p, "/v1/orgs/org_1/billing/"):
 		if body["reasonCode"] == nil {
 			writeJ(w, 422, map[string]any{"status": 422, "code": "seller.invalid-adjustment", "detail": "Choose a reason",
@@ -441,6 +462,22 @@ func TestStaffPlansAndBilling(t *testing.T) {
 		"reasonCode": "SELLER_REQUEST", "note": "Asked by phone"}, 200)
 	if overridden["source"] != "STAFF" || f.bodies["PUT /v1/orgs/org_1/billing/plan-fee-collection/override"]["reasonCode"] != "SELLER_REQUEST" {
 		t.Errorf("override = %v, relayed %v", overridden, f.bodies["PUT /v1/orgs/org_1/billing/plan-fee-collection/override"])
+	}
+	// Plan-fee refunds (billing:adjust, Idempotency-Key relayed), an invoice's adjustments and the disputes queue.
+	do("auditor", "POST", "/v1/staff/billing/orgs/org_1/invoices/in_1/refunds", map[string]any{"amountCents": 1000,
+		"reasonCode": "GOODWILL"}, 403)
+	do("finance", "POST", "/v1/staff/billing/orgs/org_1/invoices/in_1/refunds", map[string]any{"amountCents": 1000}, 422)
+	if r := do("finance", "POST", "/v1/staff/billing/orgs/org_1/invoices/in_1/refunds", map[string]any{"amountCents": 1000,
+		"reasonCode": "GOODWILL"}, 201, "Idempotency-Key", "refund-0123456789"); r["status"] != "SUCCEEDED" {
+		t.Errorf("refund = %v", r)
+	}
+	if got := f.idem["POST /v1/orgs/org_1/billing/invoices/in_1/refunds"]; got != "refund-0123456789" {
+		t.Errorf("refund Idempotency-Key relayed = %q", got)
+	}
+	do("auditor", "GET", "/v1/staff/billing/orgs/org_1/invoices/in_1/adjustments", nil, 200)
+	do("auditor", "GET", "/v1/staff/billing/disputes?outcome=OPEN", nil, 200)
+	if !slices.Contains(f.calls, "GET /v1/billing/disputes?outcome=OPEN") {
+		t.Errorf("disputes query not relayed: %v", f.calls)
 	}
 	do("auditor", "GET", "/v1/staff/billing/settings", nil, 200)
 	do("support", "GET", "/v1/staff/billing/settings", nil, 403)

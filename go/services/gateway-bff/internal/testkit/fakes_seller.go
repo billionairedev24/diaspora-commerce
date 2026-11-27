@@ -463,6 +463,10 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/orgs/{id}/billing/invoices/{invoice}/retry", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, invoice("paid"))
 	})
+	mux.HandleFunc("POST /v1/orgs/{id}/billing/invoices/{invoice}/confirm-payment", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, map[string]any{"invoiceId": r.PathValue("invoice"), "paymentIntentId": "pi_3ds_1",
+			"clientSecret": "pi_3ds_1_secret_test", "paymentMethodId": "pm_3ds_1", "status": "REQUIRES_ACTION"})
+	})
 	mux.HandleFunc("GET /v1/orgs/{id}/billing/invoices/{invoice}/document", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html;charset=UTF-8")
 		_, _ = w.Write([]byte("<!doctype html><html><body><h1>AfroTransact invoice AT-INV-2026-1003</h1></body></html>"))
