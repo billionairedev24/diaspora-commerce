@@ -28,7 +28,7 @@ expect "bff ready https://$API/bff/readyz"            "200" "$(code "https://$AP
 expect "openid configuration https://$AUTH"           "200" "$(code "https://$AUTH/.well-known/openid-configuration")"
 expect "jwks https://$AUTH/oauth2/jwks"               "200" "$(code "https://$AUTH/oauth2/jwks")"
 echo "== $ENV: webhook routes exist and enforce the signature (unsigned POST = 400)"
-for p in payments/v1/webhooks/stripe seller/v1/webhooks/stripe-connect seller/v1/webhooks/stripe-billing; do
+for p in payments/v1/webhooks/stripe seller/v1/webhooks/stripe-connect; do
   expect "POST /$p" "400" "$(code -X POST "https://$API/$p" -H 'Content-Type: application/json' -d '{}')"
 done
 echo "== $ENV: operational paths are NOT public (edge denies, expect 404)"
@@ -37,7 +37,8 @@ for h in "$API" "$AUTH"; do
     expect "https://$h/$p" "404" "$(code "https://$h/$p")"
   done
 done
-for p in bookings/modules fulfilment/modules identity/modules payments/modules/payments identity/mcp; do
+# seller/v1/webhooks/stripe-billing: removed (no Stripe Billing; plan fees are card-only), must not be routed.
+for p in bookings/modules fulfilment/modules identity/modules payments/modules/payments identity/mcp seller/v1/webhooks/stripe-billing; do
   expect "https://$API/$p" "404" "$(code "https://$API/$p")"
 done
 expect "actuator is not public https://$API/actuator/prometheus" "404 401 403" "$(code "https://$API/actuator/prometheus")"

@@ -65,7 +65,6 @@ STRIPE_SECRET_KEY|cluster|1|sktest|sk_test_ or rk_test_ (TEST mode only)
 STRIPE_PUBLISHABLE_KEY|cluster|1|pktest|pk_test_
 STRIPE_WEBHOOK_SECRET|cluster|1|whsec|whsec_ value of the payments endpoint
 STRIPE_CONNECT_WEBHOOK_SECRET|cluster|1|whsec|whsec_ value of the Connect endpoint
-STRIPE_BILLING_WEBHOOK_SECRET|cluster|0|whsec|optional (bank-debit plan fees)
 RESEND_API_KEY|cluster|1|nonblank|Resend API key
 RESEND_WEBHOOK_SECRET|cluster|1|whsec|whsec_ value of the Resend webhook
 OPENROUTER_API_KEY|cluster|1|nonblank|OpenRouter key (set its spend limit in the dashboard)
@@ -182,13 +181,12 @@ stage_check() {
   ok "$n_ok value(s) present and well formed"
 
   # relations between values
-  local a b c
+  local a b
   a="$(envfile_get "$ENV_FILE" CLOUDFLARE_DEPLOY_TOKEN)"; b="$(envfile_get "$ENV_FILE" CLOUDFLARE_INFRA_TOKEN)"
   if [[ ( "$group" == all || "$group" == github || "$group" == tofu ) && -n "$a" && "$a" == "$b" ]]; then bad "CLOUDFLARE_DEPLOY_TOKEN equals CLOUDFLARE_INFRA_TOKEN: use two tokens (the GitHub one must be the weaker)"; fi
   if [[ "$group" == all || "$group" == cluster ]]; then
-    a="$(envfile_get "$ENV_FILE" STRIPE_WEBHOOK_SECRET)"; b="$(envfile_get "$ENV_FILE" STRIPE_CONNECT_WEBHOOK_SECRET)"; c="$(envfile_get "$ENV_FILE" STRIPE_BILLING_WEBHOOK_SECRET)"
+    a="$(envfile_get "$ENV_FILE" STRIPE_WEBHOOK_SECRET)"; b="$(envfile_get "$ENV_FILE" STRIPE_CONNECT_WEBHOOK_SECRET)"
     [[ -n "$a" && "$a" == "$b" ]] && bad "STRIPE_WEBHOOK_SECRET equals STRIPE_CONNECT_WEBHOOK_SECRET: each endpoint has its own whsec_"
-    [[ -n "$c" && ( "$c" == "$a" || "$c" == "$b" ) ]] && bad "STRIPE_BILLING_WEBHOOK_SECRET equals another webhook secret"
     a="$(envfile_get "$ENV_FILE" EXTERNAL_PG_SSLMODE)"
     case "$a" in verify-ca|verify-full)
       [[ -r "$(envfile_get "$ENV_FILE" EXTERNAL_PG_CA_FILE)" ]] || bad "EXTERNAL_PG_SSLMODE=$a needs EXTERNAL_PG_CA_FILE (readable PEM)" ;; esac

@@ -233,12 +233,12 @@ service_keys() {
     orders)           out+=("${common[@]}" "ORDERS_CLIENT_SECRET=$(gen ORDERS_CLIENT_SECRET)" "TEMPORAL_TARGET=$TEMPORAL_TARGET" "TEMPORAL_NAMESPACE=afrotransact" "TEMPORAL_TLS_CERT=" "TEMPORAL_TLS_KEY=" "HANDOVER_CODE_KEY=$(gen HANDOVER_CODE_KEY)" "PAY_LINK_KEY=$(gen PAY_LINK_KEY)" ${FGA_TOKEN:+"FGA_API_TOKEN=$FGA_TOKEN"}) ;;
     # Stripe webhook secrets (one whsec_ per Stripe endpoint; docs/runbooks/stripe-webhooks.md). A changed value reaches the pod only
     # after the services action AND a restart: kubectl -n $NS rollout restart deploy/payments (STRIPE_WEBHOOK_SECRET) or deploy/seller
-    # (STRIPE_CONNECT_WEBHOOK_SECRET: required for sellers; STRIPE_BILLING_WEBHOOK_SECRET: optional, bank-debit plan fees only).
+    # (STRIPE_CONNECT_WEBHOOK_SECRET: required for sellers). Two Stripe endpoints only: no Stripe Billing, plan fees are card-only.
     payments)         out+=("${common[@]}" "STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}" "STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}" ${FGA_TOKEN:+"FGA_API_TOKEN=$FGA_TOKEN"} "PAYMENTS_CLIENT_SECRET=$(gen PAYMENTS_CLIENT_SECRET)") ;;
     promise)          out+=("REDIS_URL=$REDIS_URL") ;;
     retail)           out+=("${common[@]}" "RETAIL_CLIENT_SECRET=$(gen RETAIL_CLIENT_SECRET)") ;;
     search)           out+=("KAFKA_BOOTSTRAP=$KAFKA" "SEARCH_PROVIDER=meilisearch" "MEILISEARCH_URL=http://meilisearch.data.svc.cluster.local:7700" "MEILISEARCH_API_KEY=$MEILI_KEY" "ES_URLS=http://elasticsearch.invalid:9200" "ES_API_KEY=" "ADS_TOKEN_KEY=$(gen ADS_TOKEN_KEY)" "SEARCH_CLIENT_SECRET=$(gen SEARCH_CLIENT_SECRET)") ;;
-    seller)           out+=("${common[@]}" "STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}" "STRIPE_CONNECT_WEBHOOK_SECRET=${STRIPE_CONNECT_WEBHOOK_SECRET:-}" "STRIPE_BILLING_WEBHOOK_SECRET=${STRIPE_BILLING_WEBHOOK_SECRET:-}" "FIELD_ENCRYPTION_KEY=$(gen FIELD_ENCRYPTION_KEY)") ;;
+    seller)           out+=("${common[@]}" "STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}" "STRIPE_CONNECT_WEBHOOK_SECRET=${STRIPE_CONNECT_WEBHOOK_SECRET:-}" "FIELD_ENCRYPTION_KEY=$(gen FIELD_ENCRYPTION_KEY)") ;;
     tax-returns)      out+=("${common[@]}" "TAX_RETURNS_CLIENT_SECRET=$(gen TAX_RETURNS_CLIENT_SECRET)") ;;
     trust-ops)        out+=("${common[@]}" "TRUSTOPS_CLIENT_SECRET=$(gen TRUSTOPS_CLIENT_SECRET)") ;;
     *)                die "no secret keys defined for $svc (add it to secrets.sh)" ;;

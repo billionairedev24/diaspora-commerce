@@ -57,12 +57,6 @@ spec:
         - type: URLRewrite
           urlRewrite: {path: {type: ReplacePrefixMatch, replacePrefixMatch: /v1/webhooks/stripe-connect}}
       backendRefs: [{name: seller, port: 80}]
-    # seller Stripe webhook, plan-fee PaymentIntent results (STRIPE_BILLING_WEBHOOK_SECRET): this exact path only, signature-verified by the service
-    - matches: [{path: {type: PathPrefix, value: /seller/v1/webhooks/stripe-billing}}]
-      filters:
-        - type: URLRewrite
-          urlRewrite: {path: {type: ReplacePrefixMatch, replacePrefixMatch: /v1/webhooks/stripe-billing}}
-      backendRefs: [{name: seller, port: 80}]
     # DENY operational paths under every published prefix (security audit F3): the longest matching prefix wins, so these beat the
     # service prefix above. /bff/healthz stays reachable on purpose (external uptime checks); every other healthz is denied.
     - matches:
