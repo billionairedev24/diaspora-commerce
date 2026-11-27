@@ -1174,6 +1174,24 @@ paths:
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/disputes:
+    get:
+      tags: [Plans & billing]
+      operationId: listStaffPlanFeeDisputes
+      security: [{sessionCookie: []}]
+      summary: "Plan-fee disputes (chargebacks, ACH unauthorised returns), newest first"
+      description: |
+        Needs VIEW on Plans & billing. outcome OPEN (the work queue), WON or LOST; empty for all. A LOST dispute reopened the
+        invoice and restarted dunning; a WON one changed nothing.
+      parameters:
+        - {name: outcome, in: query, required: false, schema: {type: string, enum: [OPEN, WON, LOST]}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/StaffPlanFeeDispute'}}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/billing/reason-codes:
     get:
       tags: [Plans & billing]
@@ -1367,6 +1385,51 @@ paths:
         content: {application/json: {schema: {$ref: '#/components/schemas/StaffWaiveRequest'}}}
       responses:
         '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/StaffBillingGrant'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/orgs/{orgId}/invoices/{invoiceId}/refunds:
+    post:
+      tags: [Plans & billing]
+      operationId: refundStaffPlanFee
+      security: [{sessionCookie: []}]
+      summary: "Refund a plan fee, full or partial, with a reason (billing:adjust)"
+      description: |
+        Needs EDIT on Plans & billing and `billing:adjust`. seller `POST /v1/orgs/{orgId}/billing/invoices/{invoiceId}/refunds`
+        refunds through Stripe (the Idempotency-Key makes a retry return the first refund), records a credit on the invoice
+        and audits the staff member, reason code and note. 422 when the amount is more than what is left of the payment.
+      parameters:
+        - {$ref: '#/components/parameters/BillingOrgId'}
+        - {$ref: '#/components/parameters/BillingInvoiceId'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffPlanFeeRefundRequest'}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPlanFeeRefund'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/orgs/{orgId}/invoices/{invoiceId}/adjustments:
+    get:
+      tags: [Plans & billing]
+      operationId: getStaffInvoiceAdjustments
+      security: [{sessionCookie: []}]
+      summary: "Refunds (credits) and disputes of one plan invoice"
+      description: Needs VIEW on Plans & billing. The seller service validates and authorises again.
+      parameters:
+        - {$ref: '#/components/parameters/BillingOrgId'}
+        - {$ref: '#/components/parameters/BillingInvoiceId'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffInvoiceAdjustments'}}}}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
@@ -9074,6 +9137,51 @@ components:
         until: {type: [string, 'null'], format: date-time}
         reasonCode: {type: string}
         note: {type: [string, 'null'], maxLength: 500}
+    StaffPlanFeeRefundRequest:
+      type: object
+      required: [amountCents, reasonCode]
+      properties:
+        amountCents: {type: integer, format: int64, minimum: 1, description: 1 to what is left of the payment}
+        reasonCode: {type: string}
+        note: {type: [string, 'null'], maxLength: 500, description: Required with reasonCode OTHER}
+    StaffPlanFeeRefund:
+      type: object
+      required: [id, invoiceId, amountCents, status, origin, createdAt]
+      properties:
+        id: {type: string, format: uuid}
+        invoiceId: {type: string}
+        orgId: {type: string}
+        amountCents: {type: integer, format: int64}
+        status: {type: string, enum: [PENDING, SUCCEEDED, FAILED]}
+        origin: {type: string, enum: [STAFF, DASHBOARD], description: 'DASHBOARD = refunded in the Stripe dashboard (reconciled)'}
+        reasonCode: {type: [string, 'null']}
+        note: {type: [string, 'null']}
+        requestedBy: {type: [string, 'null']}
+        stripeRefundId: {type: [string, 'null']}
+        createdAt: {type: string, format: date-time}
+    StaffPlanFeeDispute:
+      type: object
+      required: [id, stripeDisputeId, invoiceId, orgId, amountCents, outcome, createdAt]
+      properties:
+        id: {type: string, format: uuid}
+        stripeDisputeId: {type: string}
+        invoiceId: {type: string}
+        orgId: {type: string}
+        amountCents: {type: integer, format: int64}
+        reason: {type: [string, 'null']}
+        stripeStatus: {type: string}
+        outcome: {type: string, enum: [OPEN, WON, LOST]}
+        fundsWithdrawn: {type: boolean}
+        createdAt: {type: string, format: date-time}
+        closedAt: {type: [string, 'null'], format: date-time}
+    StaffInvoiceAdjustments:
+      type: object
+      required: [invoiceId, refundedCents, refunds, disputes]
+      properties:
+        invoiceId: {type: string}
+        refundedCents: {type: integer, format: int64}
+        refunds: {type: array, items: {$ref: '#/components/schemas/StaffPlanFeeRefund'}}
+        disputes: {type: array, items: {$ref: '#/components/schemas/StaffPlanFeeDispute'}}
     StaffWaiveRequest:
       type: object
       required: [reasonCode]

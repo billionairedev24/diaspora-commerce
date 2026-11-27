@@ -2781,6 +2781,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/billing/invoices/{invoiceId}/confirm-payment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm a plan charge your bank asks you to approve (3-D Secure) — owner and finance only
+         * @description seller `POST /v1/orgs/{orgId}/billing/invoices/{invoiceId}/confirm-payment`. For an invoice with actionRequired:
+         *     the PaymentIntent's client secret and payment method; Seller Center calls stripe.confirmCardPayment and the bank
+         *     shows its check. The invoice settles when Stripe's event reaches seller (through the platform webhook). 409 when no
+         *     payment waits.
+         */
+        post: operations["confirmPlanPayment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/billing/invoices/{invoiceId}/document": {
         parameters: {
             query?: never;
@@ -6772,6 +6795,10 @@ export interface components {
             waivedMinor: number;
             /** @description The seller can fix the payment method and retry */
             canRetry: boolean;
+            /** @description Your bank asks you to confirm a charge (3-D Secure): show Confirm payment */
+            actionRequired?: boolean;
+            /** @description A bank debit (up to 4 business days) or card charge is in progress; lastError says which */
+            paymentInProgress?: boolean;
         };
         /**
          * @description EARNINGS_FIRST: "Pay your plan from your sales" — each invoice is taken from pending earnings and the card pays only what they don't cover. CARD: "Charge my card" — plan fees stay a separate card expense.
@@ -6976,6 +7003,17 @@ export interface components {
             bankName?: string;
             accountType?: string;
             makeDefault?: boolean;
+            /** @description The confirmed SetupIntent (seti_…): seller reads whether a US bank account is verified (Financial Connections) or waits for microdeposits, and its ACH mandate */
+            setupIntentId?: string;
+        };
+        PlanPaymentConfirmation: {
+            invoiceId: string;
+            /** @description For stripe.confirmCardPayment; null when the payment already succeeded */
+            clientSecret: string | null;
+            paymentMethodId: string | null;
+            publishableKey: string;
+            /** @enum {string} */
+            status: "SUCCEEDED" | "PROCESSING" | "REQUIRES_ACTION" | "FAILED";
         };
         BillingView: {
             /** @description How the plan is paid (S298); null when it can't be read */
@@ -11874,6 +11912,34 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Invoice"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    confirmPlanPayment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoiceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What Stripe.js needs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanPaymentConfirmation"];
                 };
             };
             401: components["responses"]["Problem"];

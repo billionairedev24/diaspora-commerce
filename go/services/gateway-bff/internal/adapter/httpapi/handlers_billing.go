@@ -17,11 +17,17 @@ func (h *handlersImpl) registerSellerBilling(route func(pattern string, fn http.
 	route("POST /v1/seller/billing/payment-methods", h.addBillingMethod)
 	route("PUT /v1/seller/billing/plan-fee-collection", h.setPlanFeeCollection)
 	route("POST /v1/seller/billing/invoices/{invoiceId}/retry", h.retryInvoice)
+	route("POST /v1/seller/billing/invoices/{invoiceId}/confirm-payment", h.confirmPlanPayment)
 	route("GET /v1/seller/billing/invoices/{invoiceId}/document", h.invoiceDocument)
 }
 
 func (h *handlersImpl) retryInvoice(w http.ResponseWriter, r *http.Request) {
 	v, err := h.s.SellerMoney.RetryInvoice(r.Context(), callerFrom(r.Context()), r.PathValue("invoiceId"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) confirmPlanPayment(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerMoney.ConfirmPlanPayment(r.Context(), callerFrom(r.Context()), r.PathValue("invoiceId"))
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

@@ -443,6 +443,10 @@ func TestSellerContractConformance(t *testing.T) {
 	mustStatus(t, b.do("POST", "/v1/seller/billing/payment-methods", map[string]any{"stripePaymentMethodId": "pm_card_visa", "kind": "CARD",
 		"brand": "Visa", "last4": "4242", "expMonth": 12, "expYear": 2030}), 201)
 	mustStatus(t, b.do("POST", "/v1/seller/billing/payment-methods", map[string]any{"stripePaymentMethodId": "card_1", "kind": "CASH"}), 422)
+	// US bank debit (ACH) is a plan payment method; a charge the bank asks about is confirmed with Stripe.js.
+	mustStatus(t, b.do("POST", "/v1/seller/billing/payment-methods", map[string]any{"stripePaymentMethodId": "pm_ach_1", "kind": "US_BANK_ACCOUNT",
+		"bankName": "STRIPE TEST BANK", "last4": "6789", "setupIntentId": "seti_1"}), 201)
+	mustStatus(t, b.do("POST", "/v1/seller/billing/invoices/inv_1/confirm-payment", nil), 200)
 	// Team.
 	mustStatus(t, b.do("GET", "/v1/seller/team", nil), 200)
 	invited := b.do("POST", "/v1/seller/team/invitations", map[string]any{"email": "kemi@example.com", "roleKey": "seller.fulfilment"})

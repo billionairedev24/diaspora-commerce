@@ -531,6 +531,10 @@ type SellerInvoice struct {
 	PaidFromSalesCents  int64 `json:"paidFromSalesCents"`
 	PaidByCardCents     int64 `json:"paidByCardCents"`
 	WaivedCents         int64 `json:"waivedCents"`
+	// ActionRequired: a charge waits for the seller to confirm it (3-D Secure); PaymentInProgress: a bank debit (up to
+	// 4 business days) or card charge is in flight.
+	ActionRequired    bool `json:"actionRequired"`
+	PaymentInProgress bool `json:"paymentInProgress"`
 }
 
 // SellerInvoiceLine is seller's InvoiceLine.

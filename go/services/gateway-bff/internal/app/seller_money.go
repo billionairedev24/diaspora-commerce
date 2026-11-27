@@ -30,6 +30,8 @@ type SellerMoneyService interface {
 	AddPaymentMethod(ctx context.Context, c *domain.Caller, in domain.AddBillingPaymentMethod) (domain.BillingPaymentMethod, error)
 	// SetPlanFeeCollection chooses how the plan is paid (S298): from sales first or always by card (owner / finance).
 	SetPlanFeeCollection(ctx context.Context, c *domain.Caller, mode string) (domain.PlanFeeCollectionView, error)
+	// ConfirmPlanPayment returns what Stripe.js needs to confirm a plan charge that needs 3-D Secure (owner / finance).
+	ConfirmPlanPayment(ctx context.Context, c *domain.Caller, invoiceID string) (domain.PlanPaymentConfirmation, error)
 	// RetryInvoice collects an unpaid invoice again after the payment method was fixed (owner / finance).
 	RetryInvoice(ctx context.Context, c *domain.Caller, invoiceID string) (domain.Invoice, error)
 	// InvoiceDocument is the printable invoice (HTML; the browser's Print makes the PDF).
@@ -294,7 +296,8 @@ func invoiceOf(in port.SellerInvoice) domain.Invoice {
 		CreatedAt: in.CreatedAt, PaidAt: in.PaidAt, NextAttemptAt: in.NextAttemptAt, LastError: strPtr(in.LastError), Lines: lines,
 		PaidFromCreditMinor: max(0, in.PaidFromCreditCents), PaidFromSalesMinor: max(0, in.PaidFromSalesCents),
 		PaidByCardMinor: max(0, in.PaidByCardCents), WaivedMinor: max(0, in.WaivedCents),
-		CanRetry: status == "UNCOLLECTIBLE" || (status == "OPEN" && in.Attempts > 0)}
+		CanRetry:       status == "UNCOLLECTIBLE" || (status == "OPEN" && in.Attempts > 0 && !in.ActionRequired && !in.PaymentInProgress),
+		ActionRequired: in.ActionRequired, PaymentInProgress: in.PaymentInProgress}
 }
 
 func (s *sellerMoneyImpl) billingView(b port.SellerBilling, plans []port.SellerPlan, invoices []port.SellerInvoice, fees *port.SellerPlanFeeCollection, role string) domain.BillingView {
@@ -398,6 +401,23 @@ func (s *sellerMoneyImpl) RetryInvoice(ctx context.Context, c *domain.Caller, in
 		return domain.Invoice{}, mapErr("seller", err)
 	}
 	return invoiceOf(in), nil
+}
+
+func (s *sellerMoneyImpl) ConfirmPlanPayment(ctx context.Context, c *domain.Caller, invoiceID string) (domain.PlanPaymentConfirmation, error) {
+	sc, err := s.r.require(ctx, c, "", "billing", domain.LevelView)
+	if err != nil {
+		return domain.PlanPaymentConfirmation{}, err
+	}
+	if !isOwnerOrFinance(sc.org.Role) {
+		return domain.PlanPaymentConfirmation{}, domain.NewProblem(http.StatusForbidden, domain.CodeForbidden, "Owner or finance only",
+			"Only the owner or a finance member can confirm a payment.")
+	}
+	in, err := s.r.d.Sellers.ConfirmPlanPayment(ctx, c.BearerToken, sc.org.ID, invoiceID)
+	if err != nil {
+		return domain.PlanPaymentConfirmation{}, mapErr("seller", err)
+	}
+	return domain.PlanPaymentConfirmation{InvoiceID: in.InvoiceID, ClientSecret: strPtr(in.ClientSecret),
+		PaymentMethodID: strPtr(in.PaymentMethodID), PublishableKey: s.r.d.PublishableKey, Status: in.Status}, nil
 }
 
 func (s *sellerMoneyImpl) InvoiceDocument(ctx context.Context, c *domain.Caller, invoiceID string) (domain.FileDownload, error) {
@@ -578,7 +598,8 @@ func (s *sellerMoneyImpl) AddPaymentMethod(ctx context.Context, c *domain.Caller
 	}
 	pm, err := s.r.d.Sellers.AddPaymentMethod(ctx, c.BearerToken, sc.org.ID, port.SellerPaymentMethodInput{
 		StripePaymentMethodID: in.StripePaymentMethodID, Kind: kind, Brand: strings.ToLower(in.Brand), Last4: in.Last4,
-		ExpMonth: in.ExpMonth, ExpYear: in.ExpYear, BankName: in.BankName, AccountType: in.AccountType, MakeDefault: in.MakeDefault})
+		ExpMonth: in.ExpMonth, ExpYear: in.ExpYear, BankName: in.BankName, AccountType: in.AccountType, MakeDefault: in.MakeDefault,
+		SetupIntentID: in.SetupIntentID})
 	if err != nil {
 		return domain.BillingPaymentMethod{}, mapErr("seller", err)
 	}

@@ -67,6 +67,14 @@ func (s *sellerServiceImpl) RetryInvoice(ctx context.Context, bearer, orgID, inv
 	return out, err
 }
 
+func (s *sellerServiceImpl) ConfirmPlanPayment(ctx context.Context, bearer, orgID, invoiceID string) (port.SellerPaymentConfirmation, error) {
+	var out port.SellerPaymentConfirmation
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost,
+		Path: orgPath(orgID, "/billing/invoices/"+url.PathEscape(invoiceID)+"/confirm-payment"), Bearer: bearer, UserBearer: true,
+		RetryUnsafe: true}, &out)
+	return out, err
+}
+
 func (s *sellerServiceImpl) InvoiceDocument(ctx context.Context, bearer, orgID, invoiceID string) ([]byte, error) {
 	res, err := call(ctx, s.c, httpclient.Request{Path: orgPath(orgID, "/billing/invoices/"+url.PathEscape(invoiceID)+"/document"), Bearer: bearer, UserBearer: true,
 		Header: http.Header{"Accept": {"text/html"}}}, nil)
