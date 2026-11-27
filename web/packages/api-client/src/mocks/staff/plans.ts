@@ -14,6 +14,8 @@ import {
   type StaffBillingInvoice,
   type StaffBillingPanel,
   type StaffBillingSettings,
+  type StaffPlanFeeDispute,
+  type StaffPlanFeeRefund,
   type StaffChargeGate,
   type StaffEarningsCollection,
   type StaffPlan,
@@ -52,6 +54,9 @@ interface MockBillingOrg {
   /** Reward metrics the preview evaluates. */
   facts: Record<RewardMetric, number>;
   invoices: StaffBillingInvoice[];
+  /** Plan-fee refunds (credits on the invoice) and disputes. */
+  refunds?: StaffPlanFeeRefund[];
+  disputes?: StaffPlanFeeDispute[];
 }
 
 export interface MockPlansState {
@@ -599,6 +604,38 @@ export function planHandlers(W: string, deps: PreorderHandlerDeps) {
       if (inv.status !== 'open') throw problem(409, 'seller.invoice-not-open', 'Invoice not open', 'Only an open invoice can be waived.');
       return adjust(ctx, o, 'WAIVE_INVOICE', { invoiceId: inv.id }, `Invoice ${inv.number ?? inv.id} waived`, () => { Object.assign(inv, { status: 'paid', waivedCents: inv.amountDueCents, amountPaidCents: inv.amountDueCents, paidAt: ctx.now.toISOString(), lastError: null, nextAttemptAt: null, payments: [{ source: 'WAIVER' as const, amountCents: inv.amountDueCents, status: 'APPLIED' as const, note: null, createdAt: ctx.now.toISOString() }] }); });
     }, 201)),
+    http.post(`${B}/orgs/:orgId/invoices/:invoiceId/refunds`, route(async (ctx, p) => {
+      need(ctx, 'billing:adjust');
+      const o = orgOf(ctx, p.orgId);
+      const inv = o.invoices.find((i) => i.id === p.invoiceId);
+      if (!inv) throw problem(404, 'NOT_FOUND', 'Not found', 'No such invoice.');
+      const b = await json(ctx.request.clone(), z.object({ amountCents: z.number().int(), reasonCode: z.string().nullish(), note: z.string().max(500).nullish() }));
+      if (!b.reasonCode || !REASON_CODES.some((r) => r.code === b.reasonCode)) throw invalid({ reasonCode: 'Choose a reason' });
+      if (b.reasonCode === 'OTHER' && !b.note?.trim()) throw invalid({ note: 'Explain the reason' });
+      const key = ctx.request.headers.get('Idempotency-Key') ?? '';
+      const refunds = (o.refunds ??= []);
+      const replay = refunds.find((r) => r.stripeRefundId === `re_${key}`);
+      if (key && replay) return replay;
+      const left = inv.paidByCardCents - refunds.filter((r) => r.invoiceId === inv.id && r.status !== 'FAILED').reduce((n, r) => n + r.amountCents, 0);
+      if (b.amountCents < 1 || b.amountCents > left) throw problem(422, 'seller.invalid-refund', 'Invalid refund', `1 to ${left} cents (what is left of the payment)`, { amountCents: `Up to ${usd(left)}` });
+      const r: StaffPlanFeeRefund = { id: id(ctx, 'ref'), invoiceId: inv.id, orgId: o.orgId, amountCents: b.amountCents, status: 'SUCCEEDED', origin: 'STAFF', reasonCode: b.reasonCode,
+        note: b.note?.trim() || null, requestedBy: ctx.action.actorId, stripeRefundId: `re_${key || id(ctx, 'k')}`, createdAt: ctx.now.toISOString() };
+      refunds.push(r);
+      audit(ctx, 'billing.refund', inv.id, `${usd(r.amountCents)} of invoice ${inv.number ?? inv.id} refunded (${b.reasonCode})`);
+      return r;
+    }, 201)),
+    http.get(`${B}/orgs/:orgId/invoices/:invoiceId/adjustments`, route((ctx, p) => {
+      view(ctx);
+      const o = orgOf(ctx, p.orgId);
+      const refunds = (o.refunds ?? []).filter((r) => r.invoiceId === p.invoiceId);
+      return { invoiceId: String(p.invoiceId), refundedCents: refunds.filter((r) => r.status === 'SUCCEEDED').reduce((n, r) => n + r.amountCents, 0), refunds,
+        disputes: (o.disputes ?? []).filter((d) => d.invoiceId === p.invoiceId) };
+    })),
+    http.get(`${B}/disputes`, route((ctx) => {
+      view(ctx);
+      const outcome = new URL(ctx.request.url).searchParams.get('outcome');
+      return st(ctx).orgs.flatMap((o) => o.disputes ?? []).filter((d) => !outcome || d.outcome === outcome).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    })),
     http.put(`${B}/orgs/:orgId/plan-fee-collection`, route(async (ctx, p) => {
       need(ctx, 'billing:adjust');
       const o = orgOf(ctx, p.orgId);

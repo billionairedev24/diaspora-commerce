@@ -8,6 +8,7 @@ import {
   type StaffEarningsCollection,
   type StaffPlanAssignment,
   type StaffPlanFeeCollection,
+  type StaffPlanFeeDispute,
   type StaffPlanFeeMode,
   staffPlanKeys,
   staffPlanQueries
@@ -119,6 +120,84 @@ function AdjustDialog({ orgId, action, onClose, t }: { orgId: string; action: Ac
         </div>
       </form>
     </Dialog>
+  );
+}
+
+/**
+ * Refund a plan fee (full or partial) through Stripe, audited with a reason code; it is a credit on the invoice and never
+ * reopens it. The Idempotency-Key is kept for retries of the same click.
+ */
+function RefundDialog({ orgId, invoice, onClose, t }: { orgId: string; invoice: StaffBillingInvoice | null; onClose: () => void; t: T }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [key] = useState(idempotencyKey);
+  const [amount, setAmount] = useState(invoice ? (invoice.paidByCardCents / 100).toFixed(2) : '');
+  const [reason, setReason] = useState('');
+  const [note, setNote] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const refund = useMutation({
+    mutationFn: () => {
+      if (!invoice) throw new Error('no invoice');
+      const n = centsOf(amount);
+      if (n === null || Number.isNaN(n) || n < 1) throw new Error(t('st.plans.badAmount'));
+      return plansApi().refundPlanFee(orgId, invoice.id, n, { reasonCode: reason, note: note.trim() || null }, key);
+    },
+    onSuccess: (r) => {
+      void qc.invalidateQueries({ queryKey: staffPlanKeys.panel(orgId) });
+      toast.show(t('st.plans.refund.done', { amount: money(r.amountCents) }));
+      onClose();
+    },
+    onError: (e) => setErrors(e instanceof Error && !('status' in e) ? { _: e.message } : errorsOf(e))
+  });
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    setErrors({});
+    refund.mutate();
+  };
+  return (
+    <Dialog open={!!invoice} onOpenChange={(o) => !o && onClose()} title={t('st.plans.refund.title', { number: invoice?.number ?? invoice?.id ?? '' })}
+      description={t('st.plans.refund.help')} width={480} closeLabel={t('st.plans.close')}>
+      <form noValidate onSubmit={submit} className="flex flex-col gap-2">
+        <TextField id="refund-amount" label={t('st.plans.refund.amount')} inputMode="decimal" value={amount} error={errors.amountCents} onChange={(e) => setAmount(e.currentTarget.value)} />
+        <ReasonFields idPrefix="refund" reason={reason} note={note} onReason={setReason} onNote={setNote} errors={errors} />
+        {errors._ ? <p role="alert" className="m-0 text-sm text-danger">{errors._}</p> : null}
+        <div className="flex justify-end gap-2">
+          <Button variant="neutral" onClick={onClose}>{t('st.plans.cancel')}</Button>
+          <Button type="submit" loading={refund.isPending}>{t('st.plans.refund.submit')}</Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+/** Plan-fee disputes (chargebacks, ACH unauthorised returns): OPEN is staff's queue; LOST reopened the invoice. */
+export function PlanFeeDisputesPanel() {
+  const t = useT();
+  const params = useSearchParams();
+  const [outcome, setOutcome] = useState<'OPEN' | 'WON' | 'LOST' | ''>('OPEN');
+  const q = useQuery(staffPlanQueries.disputes(plansApi(), outcome));
+  const state = useTableState({ searchParams: params, prefix: 'pfd', syncUrl: false });
+  const columns = useMemo<ColumnDef<StaffPlanFeeDispute>[]>(() => [
+    { id: 'createdAt', accessorFn: (d) => d.createdAt, header: t('st.plans.col.date'), size: 130, meta: { kind: 'date' }, cell: ({ row }) => shortDate(row.original.createdAt) },
+    { id: 'orgId', accessorFn: (d) => d.orgId, header: t('st.plans.disputes.org'), size: 160, meta: { kind: 'mono' } },
+    { id: 'invoiceId', accessorFn: (d) => d.invoiceId, header: t('st.plans.col.invoice'), size: 180, meta: { kind: 'mono' } },
+    { id: 'amountCents', accessorFn: (d) => d.amountCents, header: t('st.plans.col.amount'), size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.amountCents) },
+    { id: 'reason', accessorFn: (d) => d.reason ?? '', header: t('st.plans.disputes.reason'), size: 150, cell: ({ row }) => humanize(row.original.reason ?? '') },
+    { id: 'outcome', accessorFn: (d) => d.outcome, header: t('st.plans.col.status'), size: 120, meta: { kind: 'status' },
+      cell: ({ row }) => <StatusPill tone={row.original.outcome === 'OPEN' ? 'warn' : row.original.outcome === 'WON' ? 'good' : 'bad'}>{t(`st.plans.disputes.outcome.${row.original.outcome}`)}</StatusPill> },
+    { id: 'fundsWithdrawn', accessorFn: (d) => (d.fundsWithdrawn ? 'yes' : 'no'), header: t('st.plans.disputes.withdrawn'), size: 130,
+      cell: ({ row }) => (row.original.fundsWithdrawn ? t('st.plans.disputes.withdrawnYes') : '—') }
+  ], [t]);
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="m-0 text-sm text-muted">{t('st.plans.disputes.help')}</p>
+      <Select id="dispute-outcome" label={t('st.plans.disputes.show')} value={outcome} onChange={(e) => setOutcome(e.currentTarget.value as typeof outcome)}
+        options={(['OPEN', 'WON', 'LOST', ''] as const).map((o) => ({ value: o, label: o ? t(`st.plans.disputes.outcome.${o}`) : t('st.plans.disputes.all') }))} />
+      {q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : (
+        <DataTable<StaffPlanFeeDispute> id="staff.plans.disputes" label={t('st.plans.disputes.title')} columns={columns} data={q.data ?? []} getRowId={(d) => d.id}
+          rowLabel={(d) => d.stripeDisputeId} state={state} mode="client" loading={q.isPending} fetching={q.isFetching} empty={t('st.plans.disputes.none')} />
+      )}
+    </div>
   );
 }
 
@@ -265,6 +344,7 @@ export function SellerBillingPanel() {
   const [action, setAction] = useState<Action | null>(null);
   const [actionSeq, setActionSeq] = useState(0);
   const [planFeeOpen, setPlanFeeOpen] = useState(false);
+  const [refunding, setRefunding] = useState<StaffBillingInvoice | null>(null);
   const panel = useQuery(staffPlanQueries.panel(plansApi(), orgId));
   const invoiceState = useTableState({ searchParams: params, prefix: 'sinv', syncUrl: false });
   const grantState = useTableState({ searchParams: params, prefix: 'sgr', syncUrl: false });
@@ -290,7 +370,10 @@ export function SellerBillingPanel() {
       header: t('st.plans.col.actions'),
       name: (i) => i.number ?? i.id,
       label: (i) => t('st.rows.actionsFor', { name: i.number ?? i.id }),
-      items: (i) => [adjust && i.status === 'open' && { label: t('st.plans.waive'), onSelect: () => open({ kind: 'waive', invoice: i }) }]
+      items: (i) => [
+        adjust && i.status === 'open' && { label: t('st.plans.waive'), onSelect: () => open({ kind: 'waive', invoice: i }) },
+        adjust && i.status === 'paid' && i.paidByCardCents > 0 && { label: t('st.plans.refund.action'), onSelect: () => setRefunding(i) }
+      ]
     })
   ], [t, adjust]);
   const grantCols = useMemo(() => grantColumns(t, false), [t]);
@@ -362,6 +445,7 @@ export function SellerBillingPanel() {
         <NegotiatePlanDialog orgId={p.orgId} orgName={sellerName(t, p.orgName)} kind={p.kind} open={planDealOpen} onClose={() => setPlanDealOpen(false)} t={t} />
       ) : null}
       <AdjustDialog key={actionSeq} orgId={orgId} action={action} onClose={() => setAction(null)} t={t} />
+      {refunding ? <RefundDialog key={refunding.id} orgId={orgId} invoice={refunding} onClose={() => setRefunding(null)} t={t} /> : null}
       {p?.planFeeCollection && planFeeOpen ? (
         <PlanFeeDialog orgId={orgId} orgName={sellerName(t, p.orgName)} current={p.planFeeCollection} open={planFeeOpen} onClose={() => setPlanFeeOpen(false)} t={t} />
       ) : null}
