@@ -2978,6 +2978,27 @@ paths:
         '409': {$ref: '#/components/responses/Problem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/billing/invoices/{invoiceId}/confirm-payment:
+    post:
+      tags: [Money]
+      operationId: confirmPlanPayment
+      security: [{sessionCookie: []}]
+      summary: Confirm a plan charge your bank asks you to approve (3-D Secure) — owner and finance only
+      description: |
+        seller `POST /v1/orgs/{orgId}/billing/invoices/{invoiceId}/confirm-payment`. For an invoice with actionRequired:
+        the PaymentIntent's client secret and payment method; Seller Center calls stripe.confirmCardPayment and the bank
+        shows its check. The invoice settles when Stripe's event reaches seller (through the platform webhook). 409 when no
+        payment waits.
+      parameters:
+        - {name: invoiceId, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: What Stripe.js needs, content: {application/json: {schema: {$ref: '#/components/schemas/PlanPaymentConfirmation'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/seller/billing/invoices/{invoiceId}/document:
     get:
       tags: [Money]
@@ -6809,6 +6830,8 @@ components:
         paidByCardMinor: {type: integer, format: int64, description: 'Paid (or, while open, due) by card or bank: the rest'}
         waivedMinor: {type: integer, format: int64, description: Forgiven by staff}
         canRetry: {type: boolean, description: The seller can fix the payment method and retry}
+        actionRequired: {type: boolean, description: 'Your bank asks you to confirm a charge (3-D Secure): show Confirm payment'}
+        paymentInProgress: {type: boolean, description: 'A bank debit (up to 4 business days) or card charge is in progress; lastError says which'}
     PlanFeeCollectionMode:
       type: string
       enum: [EARNINGS_FIRST, CARD]
@@ -6967,6 +6990,16 @@ components:
         bankName: {type: string}
         accountType: {type: string}
         makeDefault: {type: boolean}
+        setupIntentId: {type: string, description: 'The confirmed SetupIntent (seti_…): seller reads whether a US bank account is verified (Financial Connections) or waits for microdeposits, and its ACH mandate'}
+    PlanPaymentConfirmation:
+      type: object
+      required: [invoiceId, clientSecret, paymentMethodId, publishableKey, status]
+      properties:
+        invoiceId: {type: string}
+        clientSecret: {type: [string, 'null'], description: 'For stripe.confirmCardPayment; null when the payment already succeeded'}
+        paymentMethodId: {type: [string, 'null']}
+        publishableKey: {type: string}
+        status: {type: string, enum: [SUCCEEDED, PROCESSING, REQUIRES_ACTION, FAILED]}
     BillingView:
       type: object
       required: [subscription, plans, paymentMethods, invoices, canManage, planFeeCollection]

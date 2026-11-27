@@ -966,6 +966,20 @@ type Invoice struct {
 	WaivedMinor         int64 `json:"waivedMinor"`
 	// CanRetry is true for an invoice that failed every attempt: the seller can fix the payment method and retry.
 	CanRetry bool `json:"canRetry"`
+	// ActionRequired: the seller must confirm a charge their bank asks about (3-D Secure): Confirm payment.
+	ActionRequired bool `json:"actionRequired"`
+	// PaymentInProgress: a bank debit (up to 4 business days) or card charge is in flight; LastError says which.
+	PaymentInProgress bool `json:"paymentInProgress"`
+}
+
+// PlanPaymentConfirmation is what Stripe.js confirmCardPayment needs for a plan charge that needs 3-D Secure. ClientSecret is
+// null when the payment already succeeded.
+type PlanPaymentConfirmation struct {
+	InvoiceID       string  `json:"invoiceId"`
+	ClientSecret    *string `json:"clientSecret"`
+	PaymentMethodID *string `json:"paymentMethodId"`
+	PublishableKey  string  `json:"publishableKey"`
+	Status          string  `json:"status"`
 }
 
 // InvoiceLine is one line of an invoice: the plan, usage, a coupon or what a charge condition waived.
@@ -1167,6 +1181,8 @@ type AddBillingPaymentMethod struct {
 	BankName              string `json:"bankName"`
 	AccountType           string `json:"accountType"`
 	MakeDefault           bool   `json:"makeDefault"`
+	// SetupIntentID is the confirmed SetupIntent: for a US bank account seller reads verification and the ACH mandate.
+	SetupIntentID string `json:"setupIntentId"`
 }
 
 // ChangePlanResult is the plan change outcome.

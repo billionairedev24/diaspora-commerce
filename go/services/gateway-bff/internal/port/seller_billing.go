@@ -27,6 +27,9 @@ type SellerBillingClient interface {
 	// RetryInvoice is seller POST /v1/orgs/{orgId}/billing/invoices/{invoiceId}/retry (owner / finance): collects an
 	// unpaid invoice again after the payment method was fixed.
 	RetryInvoice(ctx context.Context, bearer, orgID, invoiceID string) (SellerInvoice, error)
+	// ConfirmPlanPayment is seller POST /v1/orgs/{orgId}/billing/invoices/{invoiceId}/confirm-payment (owner / finance):
+	// the client secret and payment method of a plan charge that needs 3-D Secure, for Stripe.js confirmCardPayment.
+	ConfirmPlanPayment(ctx context.Context, bearer, orgID, invoiceID string) (SellerPaymentConfirmation, error)
 	// InvoiceDocument is seller GET /v1/orgs/{orgId}/billing/invoices/{invoiceId}/document: a printable HTML invoice.
 	InvoiceDocument(ctx context.Context, bearer, orgID, invoiceID string) ([]byte, error)
 }
@@ -113,6 +116,15 @@ type SellerSetupIntent struct {
 }
 
 // SellerPaymentMethodInput is seller's AddPaymentMethodRequest (tokenised by Stripe.js; display fields only).
+// SellerPaymentConfirmation is seller's PaymentConfirmation.
+type SellerPaymentConfirmation struct {
+	InvoiceID       string `json:"invoiceId"`
+	PaymentIntentID string `json:"paymentIntentId"`
+	ClientSecret    string `json:"clientSecret"`
+	PaymentMethodID string `json:"paymentMethodId"`
+	Status          string `json:"status"`
+}
+
 type SellerPaymentMethodInput struct {
 	StripePaymentMethodID string `json:"stripePaymentMethodId"`
 	Kind                  string `json:"kind"`
@@ -123,4 +135,5 @@ type SellerPaymentMethodInput struct {
 	BankName              string `json:"bankName,omitempty"`
 	AccountType           string `json:"accountType,omitempty"`
 	MakeDefault           bool   `json:"makeDefault"`
+	SetupIntentID         string `json:"setupIntentId,omitempty"`
 }

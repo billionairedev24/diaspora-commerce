@@ -94,6 +94,15 @@ var StaffPlanOps = []StaffPlanOp{
 	{Name: "waiveInvoice", Route: "POST /v1/staff/billing/orgs/{orgId}/invoices/{invoiceId}/waive", Method: http.MethodPost,
 		Path: "/v1/orgs/{orgId}/billing/invoices/{invoiceId}/waive", Permission: domain.PermBillingAdjust,
 		Status: http.StatusCreated, Body: true},
+	// Plan-fee payments after the charge: refunds (credits on the invoice, Stripe idempotency key from Idempotency-Key),
+	// an invoice's refunds and disputes, and the plan-fee disputes to work on.
+	{Name: "refundPlanFee", Route: "POST /v1/staff/billing/orgs/{orgId}/invoices/{invoiceId}/refunds", Method: http.MethodPost,
+		Path: "/v1/orgs/{orgId}/billing/invoices/{invoiceId}/refunds", Permission: domain.PermBillingAdjust,
+		Status: http.StatusCreated, Body: true},
+	{Name: "invoiceAdjustments", Route: "GET /v1/staff/billing/orgs/{orgId}/invoices/{invoiceId}/adjustments",
+		Method: http.MethodGet, Path: "/v1/orgs/{orgId}/billing/invoices/{invoiceId}/adjustments"},
+	{Name: "planFeeDisputes", Route: "GET /v1/staff/billing/disputes", Method: http.MethodGet, Path: "/v1/billing/disputes",
+		Query: []string{"outcome"}},
 	// S306: staff move an organisation to a plan (including an invite-only one) with a reason.
 	{Name: "assignStaffPlan", Route: "POST /v1/staff/billing/orgs/{orgId}/plan", Method: http.MethodPost,
 		Path: "/v1/orgs/{orgId}/billing/staff-plan", Permission: domain.PermBillingAdjust, Body: true},

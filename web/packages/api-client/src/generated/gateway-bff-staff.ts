@@ -909,6 +909,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/billing/disputes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Plan-fee disputes (chargebacks, ACH unauthorised returns), newest first
+         * @description Needs VIEW on Plans & billing. outcome OPEN (the work queue), WON or LOST; empty for all. A LOST dispute reopened the
+         *     invoice and restarted dunning; a WON one changed nothing.
+         */
+        get: operations["listStaffPlanFeeDisputes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/billing/reason-codes": {
         parameters: {
             query?: never;
@@ -1103,6 +1124,48 @@ export interface paths {
          * @description Needs EDIT on Plans & billing and `billing:adjust`. The seller service validates and authorises again.
          */
         post: operations["waiveStaffBillingInvoice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/orgs/{orgId}/invoices/{invoiceId}/refunds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refund a plan fee, full or partial, with a reason (billing:adjust)
+         * @description Needs EDIT on Plans & billing and `billing:adjust`. seller `POST /v1/orgs/{orgId}/billing/invoices/{invoiceId}/refunds`
+         *     refunds through Stripe (the Idempotency-Key makes a retry return the first refund), records a credit on the invoice
+         *     and audits the staff member, reason code and note. 422 when the amount is more than what is left of the payment.
+         */
+        post: operations["refundStaffPlanFee"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/orgs/{orgId}/invoices/{invoiceId}/adjustments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Refunds (credits) and disputes of one plan invoice
+         * @description Needs VIEW on Plans & billing. The seller service validates and authorises again.
+         */
+        get: operations["getStaffInvoiceAdjustments"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -8489,6 +8552,62 @@ export interface components {
             reasonCode: string;
             note?: string | null;
         };
+        StaffPlanFeeRefundRequest: {
+            /**
+             * Format: int64
+             * @description 1 to what is left of the payment
+             */
+            amountCents: number;
+            reasonCode: string;
+            /** @description Required with reasonCode OTHER */
+            note?: string | null;
+        };
+        StaffPlanFeeRefund: {
+            /** Format: uuid */
+            id: string;
+            invoiceId: string;
+            orgId?: string;
+            /** Format: int64 */
+            amountCents: number;
+            /** @enum {string} */
+            status: "PENDING" | "SUCCEEDED" | "FAILED";
+            /**
+             * @description DASHBOARD = refunded in the Stripe dashboard (reconciled)
+             * @enum {string}
+             */
+            origin: "STAFF" | "DASHBOARD";
+            reasonCode?: string | null;
+            note?: string | null;
+            requestedBy?: string | null;
+            stripeRefundId?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        StaffPlanFeeDispute: {
+            /** Format: uuid */
+            id: string;
+            stripeDisputeId: string;
+            invoiceId: string;
+            orgId: string;
+            /** Format: int64 */
+            amountCents: number;
+            reason?: string | null;
+            stripeStatus?: string;
+            /** @enum {string} */
+            outcome: "OPEN" | "WON" | "LOST";
+            fundsWithdrawn?: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            closedAt?: string | null;
+        };
+        StaffInvoiceAdjustments: {
+            invoiceId: string;
+            /** Format: int64 */
+            refundedCents: number;
+            refunds: components["schemas"]["StaffPlanFeeRefund"][];
+            disputes: components["schemas"]["StaffPlanFeeDispute"][];
+        };
         StaffWaiveRequest: {
             reasonCode: string;
             note?: string | null;
@@ -13752,6 +13871,33 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
+    listStaffPlanFeeDisputes: {
+        parameters: {
+            query?: {
+                outcome?: "OPEN" | "WON" | "LOST";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlanFeeDispute"][];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
     listStaffBillingReasonCodes: {
         parameters: {
             query?: never;
@@ -14072,6 +14218,73 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StaffBillingGrant"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    refundStaffPlanFee: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                orgId: components["parameters"]["BillingOrgId"];
+                invoiceId: components["parameters"]["BillingInvoiceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffPlanFeeRefundRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlanFeeRefund"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffInvoiceAdjustments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["BillingOrgId"];
+                invoiceId: components["parameters"]["BillingInvoiceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffInvoiceAdjustments"];
                 };
             };
             401: components["responses"]["Problem"];
