@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CataloguePanel } from '@/components/plans/CataloguePanel';
 import { FeatureMatrixPanel } from '@/components/plans/FeatureMatrixPanel';
 import { RewardsPanel } from '@/components/plans/RewardsPanel';
-import { SellerBillingPanel } from '@/components/plans/SellerBillingPanel';
+import { PlanFeeDisputesPanel, SellerBillingPanel } from '@/components/plans/SellerBillingPanel';
 import { SettingsPanel } from '@/components/plans/SettingsPanel';
 import { TrialsPanel } from '@/components/plans/TrialsPanel';
 
@@ -201,13 +201,56 @@ describe('Plans & billing (S292–S297)', { timeout: 30_000 }, () => {
     expect(getStaffDb().plans.grants[0]).toMatchObject({ type: 'CREDIT', reasonCode: 'GOODWILL', creditCents: 2500 });
 
     const invoices = screen.getByRole('table', { name: 'Invoices' });
-    await user.click(within(invoices).getByRole('button', { name: /^Actions for / }));
+    await user.click(within(invoices).getByRole('button', { name: 'Actions for AT-ADES2' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Waive' }));
     const waive = await screen.findByRole('dialog', { name: /Waive invoice/ });
     await user.selectOptions(within(waive).getByLabelText('Reason'), 'BILLING_ERROR');
     await user.click(within(waive).getByRole('button', { name: 'Apply' }));
-    await waitFor(() => expect(within(invoices).queryByRole('button', { name: /^Actions for / })).not.toBeInTheDocument());
+    await waitFor(() => expect(getStaffDb().plans.orgs.find((o) => o.orgId === 'org-ades-kitchen')?.invoices.find((i) => i.id === 'inv_ades2')?.status).toBe('paid'));
     expect(within(screen.getByRole('table', { name: 'Rewards and adjustments' })).getAllByRole('row').length).toBeGreaterThan(2);
+  });
+
+  it('refunds part of a paid plan fee with a reason, never more than was paid', async () => {
+    const user = userEvent.setup();
+    await renderScreen(<SellerBillingPanel />);
+    await user.type(screen.getByRole('searchbox'), 'ade');
+    await user.click(await screen.findByRole('button', { name: /Ade’s Kitchen/ }));
+    const invoices = await screen.findByRole('table', { name: 'Invoices' });
+    await user.click(within(invoices).getByRole('button', { name: 'Actions for AT-ADES1' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Refund' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Refund invoice AT-ADES1' });
+    const amount = within(dialog).getByLabelText('Refund ($)');
+    expect(amount).toHaveValue('14.00');
+    await user.clear(amount);
+    await user.type(amount, '20');
+    await waitFor(() => expect(within(dialog).getAllByRole('option').length).toBeGreaterThan(2));
+    await user.selectOptions(within(dialog).getByLabelText('Reason'), 'GOODWILL');
+    await user.click(within(dialog).getByRole('button', { name: 'Refund' }));
+    expect(await within(dialog).findByText('Up to $14')).toBeInTheDocument();
+    await user.clear(amount);
+    await user.type(amount, '5');
+    await user.click(within(dialog).getByRole('button', { name: 'Refund' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Refund invoice AT-ADES1' })).not.toBeInTheDocument());
+    expect(getStaffDb().plans.orgs.find((o) => o.orgId === 'org-ades-kitchen')?.refunds).toMatchObject([{ amountCents: 500, reasonCode: 'GOODWILL', origin: 'STAFF' }]);
+  });
+
+  it('lists open plan-fee disputes for staff to work on', async () => {
+    const ade = getStaffDb().plans.orgs.find((o) => o.orgId === 'org-ades-kitchen');
+    if (!ade) throw new Error('seeded');
+    ade.disputes = [
+      { id: 'd1', stripeDisputeId: 'dp_open', invoiceId: 'inv_ades1', orgId: ade.orgId, amountCents: 1400, reason: 'fraudulent', stripeStatus: 'needs_response', outcome: 'OPEN',
+        fundsWithdrawn: true, createdAt: '2026-10-09T10:00:00Z', closedAt: null },
+      { id: 'd2', stripeDisputeId: 'dp_lost', invoiceId: 'inv_ades1', orgId: ade.orgId, amountCents: 1400, reason: 'unrecognized', stripeStatus: 'lost', outcome: 'LOST',
+        fundsWithdrawn: true, createdAt: '2026-10-01T10:00:00Z', closedAt: '2026-10-05T10:00:00Z' }
+    ];
+    const user = userEvent.setup();
+    await renderScreen(<PlanFeeDisputesPanel />);
+    const table = await screen.findByRole('table', { name: 'Plan-fee disputes' });
+    await waitFor(() => expect(within(table).getAllByRole('row')).toHaveLength(2));
+    expect(within(table).getByText('Open')).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText('Show'), '');
+    await waitFor(() => expect(within(table).getAllByRole('row')).toHaveLength(3));
+    expect(within(table).getByText('Lost')).toBeInTheDocument();
   });
 
   it('lists the plans staff assigned in the seller billing panel (S306)', async () => {

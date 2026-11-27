@@ -204,6 +204,7 @@ interface InvoiceActions {
   busy: string | null;
   onDownload: (i: Invoice) => void;
   onRetry: (i: Invoice) => void;
+  onConfirm: (i: Invoice) => void;
 }
 
 const invoiceColumns = (t: T, a: InvoiceActions): ColumnDef<Invoice>[] => [
@@ -215,17 +216,29 @@ const invoiceColumns = (t: T, a: InvoiceActions): ColumnDef<Invoice>[] => [
     id: 'paidWith', accessorFn: (i) => paidWith(i, t), header: t('sc.billing.col.paidWith'), size: 300, enableSorting: false,
     cell: ({ row }) => <span className={cx('text-sm', row.original.paidFromSalesMinor > 0 && 'font-semibold')}>{paidWith(row.original, t)}</span>
   },
-  { id: 'status', accessorFn: (i) => i.status, header: t('sc.billing.col.status'), size: 120, meta: { kind: 'status' }, cell: ({ row }) => <StatusPill tone={toneOf(row.original.status)}>{row.original.status.toLowerCase()}</StatusPill> },
+  {
+    id: 'status', accessorFn: (i) => invoiceStatus(i), header: t('sc.billing.col.status'), size: 170, meta: { kind: 'status' },
+    cell: ({ row }) => {
+      const i = row.original;
+      if (i.actionRequired) return <StatusPill tone="warn">{t('sc.billing.status.actionNeeded')}</StatusPill>;
+      if (i.paymentInProgress) return <StatusPill tone="info">{t('sc.billing.status.inProgress')}</StatusPill>;
+      return <StatusPill tone={toneOf(i.status)}>{i.status.toLowerCase()}</StatusPill>;
+    }
+  },
   rowActionsColumn<Invoice>({
     header: t('sc.billing.col.download'),
     name: (i) => i.number,
     label: (i) => t('sc.rows.actionsFor', { name: i.number }),
     items: (i) => [
       { label: t('sc.billing.downloadInvoice'), disabled: a.busy === i.id, onSelect: () => a.onDownload(i) },
+      i.actionRequired && a.canManage && { label: t('sc.billing.confirmPayment'), disabled: a.busy === `confirm:${i.id}`, onSelect: () => a.onConfirm(i) },
       i.canRetry && a.canManage && { label: t('sc.billing.retryPayment'), disabled: a.busy === `retry:${i.id}`, onSelect: () => a.onRetry(i) }
     ]
   })
 ];
+
+/** The status shown and exported: "action needed" (3-D Secure), "in progress" (bank debit, card processing) or the invoice status. */
+const invoiceStatus = (i: Invoice): string => (i.actionRequired ? 'action needed' : i.paymentInProgress ? 'in progress' : i.status.toLowerCase());
 
 /** "Credit $5.00 · Your sales $90.00 · Card $21.15": what settled the invoice, in the order it is taken (S298). */
 export function paidWith(i: Invoice, t: T): string {
@@ -331,6 +344,7 @@ interface CollectedMethod {
   expYear?: number;
   bankName?: string;
   accountType?: string;
+  setupIntentId?: string;
 }
 
 const brandOf = (n: string): string => (/^4/.test(n) ? 'visa' : /^(5[1-5]|2[2-7])/.test(n) ? 'mastercard' : /^3[47]/.test(n) ? 'amex' : /^6(011|5)/.test(n) ? 'discover' : '');
@@ -397,7 +411,8 @@ function AddPaymentMethodDialog({ open, onClose, t }: { open: boolean; onClose: 
     const confirmed = await cur.s.confirmSetup({ clientSecret: intent.clientSecret, confirmParams: { payment_method: pm.id, return_url: window.location.href }, redirect: 'if_required' });
     if (confirmed.error) return confirmed.error.message ?? t('sc.billing.add.failed');
     if (pm.us_bank_account) {
-      return { stripePaymentMethodId: pm.id, kind: 'US_BANK_ACCOUNT', last4: pm.us_bank_account.last4 ?? '0000', bankName: pm.us_bank_account.bank_name, accountType: pm.us_bank_account.account_type };
+      // The SetupIntent tells seller whether the account is verified (Financial Connections) or waits for microdeposits, and holds the ACH mandate.
+      return { stripePaymentMethodId: pm.id, kind: 'US_BANK_ACCOUNT', last4: pm.us_bank_account.last4 ?? '0000', bankName: pm.us_bank_account.bank_name, accountType: pm.us_bank_account.account_type, setupIntentId: confirmed.setupIntent?.id ?? intent.setupIntentId };
     }
     return { stripePaymentMethodId: pm.id, kind: 'CARD', brand: pm.card?.brand, last4: pm.card?.last4 ?? '0000', expMonth: pm.card?.exp_month, expYear: pm.card?.exp_year };
   };
@@ -420,6 +435,7 @@ function AddPaymentMethodDialog({ open, onClose, t }: { open: boolean; onClose: 
       <div className="flex flex-col gap-3">
         {!intent && !error ? <Spinner /> : null}
         {intent && live ? <div ref={box} data-testid="payment-element" /> : null}
+        {intent && live ? <p className="m-0 text-xs text-muted">{t('sc.billing.add.bankNote')}</p> : null}
         {intent && !live ? (
           <div className="flex flex-col gap-2 rounded-md border border-dashed border-gold-500 bg-gold-50 p-4" role="group" aria-label={t('sc.billing.add.localTitle')}>
             <p className="m-0 inline-flex items-center gap-2 text-sm">
@@ -488,6 +504,24 @@ export function BillingView() {
     },
     onError: (e) => toast.show(problemMessage(e), 'error')
   });
+  // 3-D Secure off-session: the bank's check in Stripe.js, then Stripe's event (through the platform webhook) settles the invoice.
+  const confirm = useMutation({
+    mutationFn: async (i: Invoice) => {
+      const c = await api.confirmPlanPayment(i.id);
+      if (!c.clientSecret) return 'paid' as const;
+      const s = await getStripePayments(c.publishableKey);
+      const r = await s.confirmCardPayment(c.clientSecret, c.paymentMethodId ? { payment_method: c.paymentMethodId } : undefined);
+      if (r.error) throw new Error(r.error.message ?? t('sc.billing.confirm.failed'));
+      return 'confirmed' as const;
+    },
+    onMutate: (i) => setInvoiceBusy(`confirm:${i.id}`),
+    onSettled: () => setInvoiceBusy(null),
+    onSuccess: (r) => {
+      void qc.invalidateQueries({ queryKey: sellerKeys.billing(orgId) });
+      toast.show(r === 'paid' ? t('sc.billing.retry.paid') : t('sc.billing.confirm.done'));
+    },
+    onError: (e) => toast.show(e instanceof Error && !('status' in e) ? e.message : problemMessage(e), 'error')
+  });
   const downloadInvoice = useMutation({
     mutationFn: (i: Invoice) => api.downloadInvoice(i.id),
     onMutate: (i) => setInvoiceBusy(i.id),
@@ -508,6 +542,8 @@ export function BillingView() {
   const earned = rewards.data?.earned ?? [];
   // S299: applied low-sales relief moved the next charge.
   const unpaid = invoices.find((i) => i.canRetry);
+  const needsAction = invoices.find((i) => i.actionRequired);
+  const inProgress = invoices.find((i) => i.paymentInProgress);
   const relief = earned.find((e) => e.comparison === 'LESS_THAN' && e.status === 'APPLIED' && e.nextChargeAt);
   return (
     <ModulePage module="billing" readOnlyNote={false}>
@@ -578,14 +614,25 @@ export function BillingView() {
         state={earnedState} mode="client" loading={rewards.isPending} fetching={rewards.isFetching} empty={t('sc.billing.noEarned')} />
 
       <h2 className="m-0 text-lg font-semibold">{t('sc.billing.invoices')}</h2>
-      {unpaid ? (
+      {needsAction ? (
+        <Notice tone="warning" title={t('sc.billing.actionTitle', { number: needsAction.number })}>
+          {t('sc.billing.actionDetail')}{' '}
+          {canManage ? (
+            <Button size="sm" loading={invoiceBusy === `confirm:${needsAction.id}`} onClick={() => confirm.mutate(needsAction)}>{t('sc.billing.confirmPayment')}</Button>
+          ) : null}
+        </Notice>
+      ) : null}
+      {inProgress && !needsAction ? (
+        <Notice tone="info" title={inProgress.lastError ?? t('sc.billing.status.inProgress')}>{t('sc.billing.inProgressDetail')}</Notice>
+      ) : null}
+      {unpaid && !needsAction ? (
         <Notice tone="danger" title={t('sc.billing.unpaidTitle', { number: unpaid.number })}>
           {unpaid.lastError ?? t('sc.billing.unpaidDetail')}{' '}
           {unpaid.nextAttemptAt ? t('sc.billing.unpaidNext', { date: shortDate(unpaid.nextAttemptAt) }) : ''}
         </Notice>
       ) : null}
       <p className="m-0 text-xs text-muted">{t('sc.billing.invoiceOrder')}</p>
-      <DataTable<Invoice> id="seller.invoices" label={t('sc.billing.invoices')} columns={invoiceColumns(t, { canManage, busy: invoiceBusy, onDownload: (i) => downloadInvoice.mutate(i), onRetry: (i) => retry.mutate(i) })} data={invoices} getRowId={(i) => i.id} rowLabel={(i) => i.number}
+      <DataTable<Invoice> id="seller.invoices" label={t('sc.billing.invoices')} columns={invoiceColumns(t, { canManage, busy: invoiceBusy, onDownload: (i) => downloadInvoice.mutate(i), onRetry: (i) => retry.mutate(i), onConfirm: (i) => confirm.mutate(i) })} data={invoices} getRowId={(i) => i.id} rowLabel={(i) => i.number}
         state={invoiceState} mode="client" fetching={q.isFetching} empty={t('sc.billing.noInvoices')} onExport={exportDataset} pollExport={pollExport} />
 
       <ChangePlanDialog target={target} onClose={() => setTarget(null)} t={t} />

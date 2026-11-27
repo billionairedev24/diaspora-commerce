@@ -2136,9 +2136,22 @@ export const InvoiceSchema = z.object({
   paidFromSalesMinor: z.number().int(),
   paidByCardMinor: z.number().int(),
   waivedMinor: z.number().int(),
-  canRetry: z.boolean()
+  canRetry: z.boolean(),
+  /** Your bank asks you to confirm a charge (3-D Secure): show Confirm payment. */
+  actionRequired: z.boolean().optional().default(false),
+  /** A bank debit (up to 4 business days) or card charge is in progress; lastError says which. */
+  paymentInProgress: z.boolean().optional().default(false)
 });
 export type Invoice = z.infer<typeof InvoiceSchema>;
+/** POST /v1/seller/billing/invoices/{id}/confirm-payment: what stripe.confirmCardPayment needs (clientSecret null = already paid). */
+export const PlanPaymentConfirmationSchema = z.object({
+  invoiceId: z.string(),
+  clientSecret: nullableString,
+  paymentMethodId: nullableString,
+  publishableKey: z.string(),
+  status: z.enum(['SUCCEEDED', 'PROCESSING', 'REQUIRES_ACTION', 'FAILED'])
+});
+export type PlanPaymentConfirmation = z.infer<typeof PlanPaymentConfirmationSchema>;
 /** A condition staff put on plan charges, with the seller's progress. */
 export const ChargeGateSchema = z.object({
   mode: z.enum(['START_AFTER', 'WAIVE_WHILE', 'WAIVE_UNTIL']),
@@ -2281,6 +2294,8 @@ export interface AddBillingPaymentMethodInput {
   bankName?: string;
   accountType?: string;
   makeDefault?: boolean;
+  /** The confirmed SetupIntent: seller reads whether a bank account is verified and its ACH mandate. */
+  setupIntentId?: string;
 }
 
 /* ── Team ──────────────────────────────────────────────── */
