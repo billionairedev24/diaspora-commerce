@@ -32,7 +32,9 @@ class ListenersDeadLetterTest {
     static Stream<Arguments> listeners() {
         return Stream.of(
                 Arguments.of(IdentityRoleEventListener.class, "identity.role.granted", "onMessage", true, "some.other.event"),
-                Arguments.of(RewardMetricsEventListener.class, "booking.completed", "onMessage", true, "some.other.event")
+                Arguments.of(RewardMetricsEventListener.class, "booking.completed", "onMessage", true, "some.other.event"),
+                Arguments.of(PlanFeeEventListener.class, "payments.plan_fee.stripe_event", "onMessage", false,
+                        "payments.captured")
         );
     }
 

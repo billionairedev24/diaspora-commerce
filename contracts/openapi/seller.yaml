@@ -461,6 +461,28 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Application'
+  /v1/billing/disputes:
+    get:
+      tags:
+      - Plan-fee payments
+      summary: 'Plan-fee disputes (staff: seller:billing, billing:adjust or plans:manage)'
+      description: outcome OPEN (default view), WON or LOST; empty for all. Newest first, at most 200.
+      operationId: planFeeDisputes
+      parameters:
+      - name: outcome
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlanFeeDispute'
   /v1/billing/grants:
     get:
       tags:
@@ -1709,6 +1731,93 @@ paths:
             text/html:
               schema:
                 type: string
+  /v1/orgs/{orgId}/billing/invoices/{invoiceId}/confirm-payment:
+    post:
+      tags:
+      - Plan-fee payments
+      summary: Confirm a plan charge your bank asks you to approve (owner / finance)
+      description: 'For an invoice with actionRequired: returns the PaymentIntent''s client secret and payment method for Stripe.js confirmCardPayment. 409 seller.no-action-needed when nothing waits.'
+      operationId: confirmPlanPayment
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: invoiceId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PaymentConfirmation'
+        '409':
+          description: seller.no-action-needed
+  /v1/orgs/{orgId}/billing/invoices/{invoiceId}/adjustments:
+    get:
+      tags:
+      - Plan-fee payments
+      summary: Refunds and disputes of an invoice (owner / finance, or staff)
+      operationId: invoiceAdjustments
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: invoiceId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/InvoiceAdjustments'
+  /v1/orgs/{orgId}/billing/invoices/{invoiceId}/refunds:
+    post:
+      tags:
+      - Plan-fee payments
+      summary: Refund a plan fee, full or partial (billing:adjust)
+      description: Refunds through Stripe (idempotency key from the Idempotency-Key header, so a retry returns the first refund) and records a credit on the invoice; audited with the staff member, reason code and note. 422 seller.invalid-refund (amount, reason), 409 seller.nothing-to-refund.
+      operationId: refundPlanFee
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: invoiceId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanFeeRefundRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanFeeRefund'
   /v1/orgs/{orgId}/billing/invoices/{invoiceId}/waive:
     post:
       tags:
@@ -1787,7 +1896,7 @@ paths:
     post:
       tags:
       - Plans & billing
-      summary: Add a card (owner); plan fees are paid by card, a bank account is refused (422)
+      summary: Add a card or bank account (owner)
       operationId: addPaymentMethod
       parameters:
       - name: orgId
@@ -2102,7 +2211,7 @@ paths:
     post:
       tags:
       - Plans & billing
-      summary: 'Start adding a card (owner): Stripe SetupIntent, card only'
+      summary: 'Start adding a card or bank account (owner): Stripe SetupIntent'
       description: Confirm the clientSecret with Stripe.js (Payment Element) or the mobile PaymentSheet, then register the
         resulting pm_… with POST /billing/payment-methods.
       operationId: createSetupIntent
@@ -4459,7 +4568,8 @@ components:
             $ref: '#/components/schemas/Owner'
     PlanStep:
       type: object
-      description: 'Step ''plan''. Cards are tokenised client-side (pm_…); only brand, last 4 and expiry are stored. Plan fees are paid by card: US_BANK_ACCOUNT is refused (422).'
+      description: Step 'plan'. Cards are tokenised client-side (pm_…); only brand, last 4 and expiry are stored. US_BANK_ACCOUNT
+        charges the payout bank by ACH.
       properties:
         planCode:
           type: string
@@ -5394,7 +5504,7 @@ components:
           $ref: '#/components/schemas/Billing'
     AddPaymentMethodRequest:
       type: object
-      description: 'A card tokenised client-side by Stripe.js; only display fields are stored. Plan fees are paid by card: US_BANK_ACCOUNT is refused (422).'
+      description: Tokenised client-side by Stripe.js (card) or Financial Connections (bank); only display fields are stored
       properties:
         stripePaymentMethodId:
           type: string
@@ -5421,6 +5531,9 @@ components:
           type: string
         makeDefault:
           type: boolean
+        setupIntentId:
+          type: string
+          description: 'The confirmed SetupIntent (seti_…): for a US bank account it tells whether the account is verified (Financial Connections) or waits for microdeposits, and carries the ACH mandate'
       required:
       - kind
       - stripePaymentMethodId
@@ -6990,6 +7103,71 @@ components:
           type: integer
           format: int64
           description: 'Paid (or, while open, due) by card or bank: the rest'
+        actionRequired:
+          type: boolean
+          description: 'A charge waits for the seller to confirm it (3-D Secure): show Confirm payment (POST …/invoices/{id}/confirm-payment)'
+        paymentInProgress:
+          type: boolean
+          description: A bank debit or card charge is in progress; lastError says which ("Bank debit in progress (up to 4 business days)")
+    PaymentConfirmation:
+      type: object
+      description: 'Confirm with Stripe.js confirmCardPayment(clientSecret, {payment_method}); the invoice settles when Stripe''s event arrives. clientSecret is null when the payment already succeeded'
+      properties:
+        invoiceId: {type: string}
+        paymentIntentId: {type: string}
+        clientSecret: {type: [string, 'null']}
+        paymentMethodId: {type: [string, 'null']}
+        status: {type: string, enum: [SUCCEEDED, PROCESSING, REQUIRES_ACTION, FAILED]}
+    PlanFeeRefund:
+      type: object
+      description: 'A refund of a plan fee: a credit on the invoice'
+      properties:
+        id: {type: string, format: uuid}
+        invoiceId: {type: string}
+        orgId: {type: string}
+        amountCents: {type: integer, format: int64}
+        status: {type: string, enum: [PENDING, SUCCEEDED, FAILED]}
+        origin: {type: string, enum: [STAFF, DASHBOARD]}
+        reasonCode: {type: [string, 'null']}
+        note: {type: [string, 'null']}
+        requestedBy: {type: [string, 'null']}
+        stripeRefundId: {type: [string, 'null']}
+        createdAt: {type: string, format: date-time}
+    PlanFeeDispute:
+      type: object
+      description: 'A dispute (chargeback, ACH unauthorised return) on a plan fee'
+      properties:
+        id: {type: string, format: uuid}
+        stripeDisputeId: {type: string}
+        invoiceId: {type: string}
+        orgId: {type: string}
+        amountCents: {type: integer, format: int64}
+        reason: {type: [string, 'null']}
+        stripeStatus: {type: string}
+        outcome: {type: string, enum: [OPEN, WON, LOST]}
+        fundsWithdrawn: {type: boolean}
+        createdAt: {type: string, format: date-time}
+        closedAt: {type: [string, 'null'], format: date-time}
+    InvoiceAdjustments:
+      type: object
+      description: Refunds (credits) and disputes of one invoice
+      properties:
+        invoiceId: {type: string}
+        refundedCents: {type: integer, format: int64}
+        refunds:
+          type: array
+          items: {$ref: '#/components/schemas/PlanFeeRefund'}
+        disputes:
+          type: array
+          items: {$ref: '#/components/schemas/PlanFeeDispute'}
+    PlanFeeRefundRequest:
+      type: object
+      description: Full or partial refund; reasonCode from the adjustment reason codes (OTHER needs a note)
+      required: [amountCents, reasonCode]
+      properties:
+        amountCents: {type: integer, format: int64, description: 1 to what is left of the payment}
+        reasonCode: {type: string}
+        note: {type: [string, 'null']}
     InvoiceLine:
       type: object
       description: Plan, proration or metered usage line (S206)

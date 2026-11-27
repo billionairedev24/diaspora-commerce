@@ -45,10 +45,16 @@ channels:
       sellerSellingRuleChanged: {$ref: '#/components/messages/sellerSellingRuleChanged'}
   sellerSubscriptionEvents:
     address: at.seller-subscription.events
-    description: Plan subscriptions on Stripe Billing, and the rewards and staff adjustments applied to them (key = org id).
+    description: >-
+      Plan subscriptions (AfroTransact's own billing, no Stripe Billing), the rewards and staff adjustments applied to
+      them, and plan-fee payments after the charge (3-D Secure, disputes, refunds) (key = org id).
     messages:
       sellerSubscriptionChanged: {$ref: '#/components/messages/sellerSubscriptionChanged'}
       sellerBillingGrantApplied: {$ref: '#/components/messages/sellerBillingGrantApplied'}
+      sellerBillingPaymentActionRequired: {$ref: '#/components/messages/sellerBillingPaymentActionRequired'}
+      sellerBillingDisputeOpened: {$ref: '#/components/messages/sellerBillingDisputeOpened'}
+      sellerBillingDisputeClosed: {$ref: '#/components/messages/sellerBillingDisputeClosed'}
+      sellerBillingRefunded: {$ref: '#/components/messages/sellerBillingRefunded'}
 operations:
   publishSellerApplicationEvents:
     action: send
@@ -109,6 +115,19 @@ operations:
       limits and finance consume them. seller.billing.grant_applied (S296-S297): a reward rule or a staff adjustment
       (credit, free days, discount, waived invoice, trial change) was applied at Stripe; notifications-service emails
       the organisation's owners (seller.billing.reward_earned / seller.billing.credit_granted).
+      seller.billing.payment_action_required: a plan charge needs 3-D Secure; notifications emails the owners
+      (seller.billing.payment_action_required) to Confirm payment in Plan & billing. seller.billing.dispute_opened /
+      dispute_closed / refunded: disputes and refunds of plan fees (staff console, audit).
+  receiveSellerPlanFeeStripeEvents:
+    action: receive
+    channel: {$ref: '#/channels/paymentsPaymentEvents'}
+    summary: >-
+      seller-service (consumer group seller-service, listener seller-plan-fee-payments) applies
+      payments.plan_fee.stripe_event: the outcome of plan-fee PaymentIntents (bank debits in up to 4 business days,
+      3-D Secure confirmations, late returns), refunds made in the Stripe dashboard, disputes and verified bank accounts
+      (setup_intent.succeeded with the ACH mandate). De-duplicated on stripeEventId in the same transaction (inbox
+      stripe_webhook_event, endpoint PAYMENTS). Other payments events are ignored. Seller has no Stripe webhook for plan
+      fees: Stripe has two endpoints, payments and seller Connect.
   receiveSellerRewardMetrics:
     action: receive
     channel: {$ref: '#/channels/ordersOrderEvents'}
@@ -288,6 +307,26 @@ components:
       name: seller.subscription.changed
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/SellerSubscriptionChanged'}
+    sellerBillingPaymentActionRequired:
+      name: seller.billing.payment_action_required
+      title: A plan charge needs the seller to confirm it (3-D Secure off-session)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/SellerBillingPaymentActionRequired'}
+    sellerBillingDisputeOpened:
+      name: seller.billing.dispute_opened
+      title: A dispute was opened on a plan fee (staff console)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/SellerBillingPlanFeeAdjustment'}
+    sellerBillingDisputeClosed:
+      name: seller.billing.dispute_closed
+      title: A plan-fee dispute closed as WON or LOST (LOST reopened the invoice)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/SellerBillingPlanFeeAdjustment'}
+    sellerBillingRefunded:
+      name: seller.billing.refunded
+      title: A plan fee was refunded by staff or in the Stripe dashboard (a credit on the invoice)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/SellerBillingPlanFeeAdjustment'}
     sellerBillingGrantApplied:
       name: seller.billing.grant_applied
       title: A reward or staff billing adjustment was applied at Stripe
@@ -500,6 +539,29 @@ components:
         currentPeriodEnd: {type: [string, 'null'], format: date-time}
         cancelAtPeriodEnd: {type: boolean}
         dunning: {type: string, enum: [NONE, RETRYING, FINAL_ATTEMPT_FAILED]}
+        occurredAt: {type: string, format: date-time}
+    SellerBillingPaymentActionRequired:
+      type: object
+      required: [orgId, invoiceId, amountCents, currency]
+      properties:
+        orgId: {type: string}
+        invoiceId: {type: string}
+        invoiceNumber: {type: [string, 'null']}
+        amountCents: {type: integer, format: int64}
+        currency: {type: string}
+        confirmBy: {type: string, format: date-time, description: 'After this the charge counts as a failed attempt'}
+        occurredAt: {type: string, format: date-time}
+    SellerBillingPlanFeeAdjustment:
+      type: object
+      required: [orgId, invoiceId, kind, amountCents, status]
+      properties:
+        orgId: {type: string}
+        invoiceId: {type: string}
+        kind: {type: string, enum: [DISPUTE, REFUND]}
+        reference: {type: [string, 'null'], description: 'Stripe dispute or refund id (charge id for a dashboard refund)'}
+        amountCents: {type: integer, format: int64}
+        status: {type: string, description: 'dispute: OPEN, WON, LOST; refund: PENDING, SUCCEEDED, FAILED'}
+        origin: {type: [string, 'null'], description: 'refund: STAFF or DASHBOARD; dispute: Stripe reason'}
         occurredAt: {type: string, format: date-time}
     SellerBillingGrantApplied:
       type: object

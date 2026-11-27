@@ -1,7 +1,7 @@
 package com.afrotransact.seller.application;
 
 /**
- * A Stripe SetupIntent (card only) for adding a card to the organisation's billing (S103): Seller Center
+ * A Stripe SetupIntent for adding a card or US bank account to the organisation's billing (S103): Seller Center
  * confirms it with Stripe.js (or the mobile PaymentSheet) and then registers the resulting {@code pm_…} with
  * {@code POST /v1/orgs/{orgId}/billing/payment-methods}.
  */

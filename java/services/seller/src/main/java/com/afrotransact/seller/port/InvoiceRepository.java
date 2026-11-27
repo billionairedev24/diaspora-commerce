@@ -36,6 +36,15 @@ public interface InvoiceRepository {
     /** Moves a payment to APPLIED, FAILED or REVERSED. */
     void setPaymentStatus(UUID paymentId, String status, String note);
 
+    /** The card / bank payment with this reference (a PaymentIntent id), any status. */
+    Optional<InvoicePayment> findPaymentByReference(String reference);
+
+    /**
+     * paid → open after a settled payment was taken back (a late bank-debit return, a lost dispute): paid_at cleared,
+     * the attempts kept so dunning continues.
+     */
+    void reopenPaid(String invoiceId, Instant at);
+
     /** Recomputes {@code amount_paid_cents} from the applied payments. */
     void refreshPaid(String invoiceId, Instant at);
 

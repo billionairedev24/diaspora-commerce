@@ -65,6 +65,20 @@ class JdbcPaymentMethodRepository implements PaymentMethodRepository {
                 .update();
     }
 
+    @Override
+    public void markVerified(String stripePaymentMethodId, String mandateId) {
+        jdbc.sql("update payment_method set verified = true, stripe_mandate_id = coalesce(:m, stripe_mandate_id) "
+                + "where stripe_payment_method_id = :pm").param("m", mandateId).param("pm", stripePaymentMethodId)
+                .update();
+    }
+
+    @Override
+    public Optional<String> mandate(String orgId, String stripePaymentMethodId) {
+        return jdbc.sql("select stripe_mandate_id from payment_method where org_id = :o and "
+                        + "stripe_payment_method_id = :pm and stripe_mandate_id is not null")
+                .param("o", orgId).param("pm", stripePaymentMethodId).query(String.class).optional();
+    }
+
     private static PaymentMethod map(ResultSet rs, int n) throws SQLException {
         return new PaymentMethod(rs.getObject("id", UUID.class), rs.getString("org_id"),
                 rs.getString("stripe_payment_method_id"), PaymentMethodKind.valueOf(rs.getString("kind")),

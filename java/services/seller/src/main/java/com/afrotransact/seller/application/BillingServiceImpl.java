@@ -23,6 +23,7 @@ import com.afrotransact.seller.domain.Invoice;
 import com.afrotransact.seller.domain.Organisation;
 import com.afrotransact.seller.domain.PaymentMethod;
 import com.afrotransact.seller.domain.PaymentMethodKind;
+import com.afrotransact.seller.domain.PayoutSection;
 import com.afrotransact.seller.domain.Plan;
 import com.afrotransact.seller.domain.PlanChange;
 import com.afrotransact.seller.domain.PlanPricing;
@@ -274,11 +275,20 @@ class BillingServiceImpl implements BillingService {
         validate(cmd);
         subs.lock(orgId).orElseThrow(() -> noSubscription(orgId));
         boolean makeDefault = cmd.makeDefault() || methods.list(orgId).isEmpty();
+        // A US bank account is verified once its SetupIntent succeeded (Financial Connections at once, or after the
+        // seller confirms the microdeposits: setup_intent.succeeded then arrives through payments); the mandate the
+        // seller accepted online is kept with it.
+        PlanPaymentsGateway.SetupResult setup = cmd.kind() == PaymentMethodKind.US_BANK_ACCOUNT
+                && cmd.setupIntentId() != null && cmd.setupIntentId().startsWith("seti_")
+                ? payments.setupIntent(cmd.setupIntentId()) : null;
+        boolean verified = cmd.kind() == PaymentMethodKind.CARD || setup != null && "succeeded".equals(setup.status());
         PaymentMethod pm = new PaymentMethod(UUID.randomUUID(), orgId, cmd.stripePaymentMethodId(), cmd.kind(),
                 cmd.brand() == null ? null : cmd.brand().toLowerCase(Locale.ROOT), cmd.last4(), cmd.expMonth(),
-                cmd.expYear(), cmd.bankName(), cmd.accountType(), cmd.kind() == PaymentMethodKind.CARD, false, false,
-                Instant.now(clock));
+                cmd.expYear(), cmd.bankName(), cmd.accountType(), verified, false, false, Instant.now(clock));
         methods.insert(pm);
+        if (setup != null && setup.mandateId() != null && verified) {
+            methods.markVerified(cmd.stripePaymentMethodId(), setup.mandateId());
+        }
         if (makeDefault) {
             methods.makeDefault(orgId, pm.id());
         }
@@ -576,12 +586,16 @@ class BillingServiceImpl implements BillingService {
         subs.insert(Subscription.selected(orgId, p.planCode(), chosen.version(), cadence, p.paymentMethodKind(), now));
         // How the plan is paid (S298): the Plan step's choice, else the platform default for new sellers.
         planFees.initialise(orgId, p.planFeeCollection(), app.applicantUserId());
-        // Plan fees are paid by card (or from earnings): only a card from the Plan step becomes the plan's payment
-        // method; an application saved with a bank debit before that rule gets none and is asked for a card.
-        if (p.stripePaymentMethodId() != null && p.paymentMethodKind() == PaymentMethodKind.CARD) {
-            PaymentMethod pm = new PaymentMethod(UUID.randomUUID(), orgId, p.stripePaymentMethodId(),
-                    PaymentMethodKind.CARD, p.cardBrand() == null ? null : p.cardBrand().toLowerCase(Locale.ROOT),
-                    p.cardLast4(), p.cardExpMonth(), p.cardExpYear(), null, null, true, false, false, now);
+        if (p.stripePaymentMethodId() != null) {
+            PayoutSection bank = app.data().payouts();
+            PaymentMethod pm = p.paymentMethodKind() == PaymentMethodKind.CARD
+                    ? new PaymentMethod(UUID.randomUUID(), orgId, p.stripePaymentMethodId(), PaymentMethodKind.CARD,
+                    p.cardBrand() == null ? null : p.cardBrand().toLowerCase(Locale.ROOT), p.cardLast4(),
+                    p.cardExpMonth(), p.cardExpYear(), null, null, true, false, false, now)
+                    : new PaymentMethod(UUID.randomUUID(), orgId, p.stripePaymentMethodId(),
+                    PaymentMethodKind.US_BANK_ACCOUNT, null, bank == null ? null : bank.accountLast4(), null, null,
+                    bank == null ? null : bank.bankName(), bank == null ? null : bank.accountType(),
+                    bank != null && bank.externalAccountLinked(), true, false, now);
             methods.insert(pm);
             methods.makeDefault(orgId, pm.id());
         }
@@ -672,25 +686,26 @@ class BillingServiceImpl implements BillingService {
                     Map.of("stripePaymentMethodId", "Invalid"));
         }
         if (cmd.kind() == null) {
-            throw new SellerRuleViolation("seller.invalid-payment-method", "Add a card", Map.of("kind", "Required"));
-        }
-        if (cmd.kind() != PaymentMethodKind.CARD) {
-            // Plan fees are paid by card or from earnings only; a bank debit (ACH) is never a plan payment method.
-            throw new SellerRuleViolation("seller.invalid-payment-method", "Plan fees are paid by card",
-                    Map.of("kind", "Card only"));
+            throw new SellerRuleViolation("seller.invalid-payment-method", "Card or bank account?",
+                    Map.of("kind", "Required"));
         }
         if (cmd.last4() == null || !cmd.last4().matches("\\d{4}")) {
             throw new SellerRuleViolation("seller.invalid-payment-method", "Last 4 digits required",
                     Map.of("last4", "Invalid"));
         }
-        if (cmd.brand() == null || !DefaultApplicationRules.CARD_BRANDS.contains(cmd.brand().toLowerCase(Locale.ROOT))) {
-            throw new SellerRuleViolation("seller.invalid-payment-method", "Unsupported card brand",
-                    Map.of("brand", "Visa, Mastercard, American Express or Discover"));
-        }
-        if (cmd.expMonth() == null || cmd.expYear() == null || cmd.expMonth() < 1 || cmd.expMonth() > 12
-                || YearMonth.of(cmd.expYear(), cmd.expMonth()).isBefore(YearMonth.from(LocalDate.now(clock)))) {
-            throw new SellerRuleViolation("seller.invalid-payment-method", "This card has expired",
-                    Map.of("expiry", "Expired or invalid"));
+        if (cmd.kind() == PaymentMethodKind.CARD) {
+            if (cmd.brand() == null || !DefaultApplicationRules.CARD_BRANDS.contains(cmd.brand().toLowerCase(Locale.ROOT))) {
+                throw new SellerRuleViolation("seller.invalid-payment-method", "Unsupported card brand",
+                        Map.of("brand", "Visa, Mastercard, American Express or Discover"));
+            }
+            if (cmd.expMonth() == null || cmd.expYear() == null || cmd.expMonth() < 1 || cmd.expMonth() > 12
+                    || YearMonth.of(cmd.expYear(), cmd.expMonth()).isBefore(YearMonth.from(LocalDate.now(clock)))) {
+                throw new SellerRuleViolation("seller.invalid-payment-method", "This card has expired",
+                        Map.of("expiry", "Expired or invalid"));
+            }
+        } else if (cmd.bankName() == null || cmd.bankName().isBlank()) {
+            throw new SellerRuleViolation("seller.invalid-payment-method", "Bank name required",
+                    Map.of("bankName", "Required"));
         }
     }
 

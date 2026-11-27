@@ -306,17 +306,129 @@ class InvoiceCollectionServiceImplTest {
     }
 
     @Test
-    void aSavedBankAccountIsNeverDebitedForPlanFees() {
-        PaymentMethod bank = new PaymentMethod(UUID.randomUUID(), "org_1", "pm_ach_1",
-                PaymentMethodKind.US_BANK_ACCOUNT, null, "6789", null, null, "Chase", "checking", true, true, true,
-                NOW);
-        when(methods.list("org_1")).thenReturn(List.of(bank));
+    void aBankDebitIsInProgressForUpToFourBusinessDaysAndTheWebhookDecides() {
+        when(methods.list("org_1")).thenReturn(List.of(bank(true)));
         Invoice open = invoice(3900, 0, List.of());
         when(invoices.lock("inv_1")).thenReturn(Optional.of(open));
+        when(gateway.charge(any(), eq("pm_ach_1"), anyLong(), any(), any(), any(), any())).thenReturn(
+                new PlanPaymentsGateway.Charge(PlanPaymentsGateway.Status.PROCESSING, "pi_ach", null, null));
+
+        assertThat(service.collect("inv_1")).isEqualTo(InvoiceCollectionService.Outcome.PENDING);
+        verify(invoices).recordAttempt("inv_1", 0, NOW.plus(InvoiceCollectionServiceImpl.BANK_DEBIT_WAIT),
+                "Bank debit in progress (up to 4 business days)", NOW);
+    }
+
+    @Test
+    void anUnverifiedBankAccountIsNotDebited() {
+        when(methods.list("org_1")).thenReturn(List.of(bank(false)));
+        when(invoices.lock("inv_1")).thenReturn(Optional.of(invoice(3900, 0, List.of())));
 
         assertThat(service.collect("inv_1")).isEqualTo(InvoiceCollectionService.Outcome.RETRY);
         verify(gateway, never()).charge(any(), any(), anyLong(), any(), any(), any(), any());
-        verify(invoices).recordAttempt(eq("inv_1"), eq(1), any(), contains("paid by card"), eq(NOW));
+        verify(invoices).recordAttempt(eq("inv_1"), eq(1), any(), contains("not verified"), eq(NOW));
+    }
+
+    @Test
+    void aChargeThatNeedsThreeDSecureWaitsForTheSellerAndTellsTheOwners() {
+        Invoice open = invoice(3900, 0, List.of());
+        when(invoices.lock("inv_1")).thenReturn(Optional.of(open));
+        when(gateway.charge(any(), any(), anyLong(), any(), any(), any(), any())).thenReturn(new PlanPaymentsGateway
+                .Charge(PlanPaymentsGateway.Status.REQUIRES_ACTION, "pi_3ds", "authentication_required", "Confirm"));
+
+        assertThat(service.collect("inv_1")).isEqualTo(InvoiceCollectionService.Outcome.PENDING);
+        ArgumentCaptor<InvoicePayment> p = ArgumentCaptor.forClass(InvoicePayment.class);
+        verify(invoices).addPayment(p.capture());
+        assertThat(p.getValue().status()).isEqualTo(InvoicePayment.ACTION_REQUIRED);
+        verify(invoices).recordAttempt(eq("inv_1"), eq(0), eq(NOW.plus(InvoiceCollectionServiceImpl.ACTION_WAIT)),
+                contains("Confirm payment"), eq(NOW));
+        verify(events).publish(eq(SellerEvents.BILLING_PAYMENT_ACTION_REQUIRED), any(), eq("org_1"), any());
+        verify(subs, never()).update(any());
+    }
+
+    @Test
+    void aChargeAwaitingConfirmationIsNeverChargedAgainAndCountsAsAFailureOnlyAfterItsWait() {
+        InvoicePayment waiting = payment(PaymentSource.CARD, 3900, InvoicePayment.ACTION_REQUIRED);
+        Invoice open = invoice(3900, 0, List.of(waiting));
+        when(invoices.lock("inv_1")).thenReturn(Optional.of(open));
+        when(gateway.paymentStatus(waiting.reference())).thenReturn(new PlanPaymentsGateway.Charge(
+                PlanPaymentsGateway.Status.REQUIRES_ACTION, waiting.reference(), "authentication_required", null));
+
+        assertThat(service.collect("inv_1")).isEqualTo(InvoiceCollectionService.Outcome.RETRY);
+        verify(invoices).setPaymentStatus(waiting.id(), InvoicePayment.FAILED, "Not confirmed in time");
+        verify(gateway, never()).charge(any(), any(), anyLong(), any(), any(), any(), any());
+    }
+
+    @Test
+    void processingThenSucceededSettlesTheInvoice() {
+        InvoicePayment pending = payment(PaymentSource.CARD, 3900, InvoicePayment.PENDING);
+        Invoice settled = invoice(3900, 3900, List.of(payment(PaymentSource.CARD, 3900, InvoicePayment.APPLIED)));
+        when(invoices.findPaymentByReference("pi_ach")).thenReturn(Optional.of(pending));
+        when(invoices.lock("inv_1")).thenReturn(Optional.of(invoice(3900, 0, List.of(pending))),
+                Optional.of(settled));
+        when(invoices.findById("inv_1")).thenReturn(Optional.of(paidInvoice()));
+
+        assertThat(service.onPaymentIntentResult("pi_ach", true, null, null)).isTrue();
+        verify(invoices).setPaymentStatus(pending.id(), InvoicePayment.APPLIED, null);
+        verify(invoices).markPaid("inv_1", NOW);
+    }
+
+    @Test
+    void processingThenFailedIsAFailedAttemptAndDunningStarts() {
+        InvoicePayment pending = payment(PaymentSource.CARD, 3900, InvoicePayment.PENDING);
+        when(invoices.findPaymentByReference("pi_ach")).thenReturn(Optional.of(pending));
+        when(invoices.lock("inv_1")).thenReturn(Optional.of(invoice(3900, 0, List.of(
+                payment(PaymentSource.CARD, 3900, InvoicePayment.FAILED)))));
+
+        assertThat(service.onPaymentIntentResult("pi_ach", false, "insufficient_funds", "Not enough money")).isTrue();
+        verify(invoices).setPaymentStatus(pending.id(), InvoicePayment.FAILED, "Not enough money");
+        verify(invoices).recordAttempt("inv_1", 1, NOW.plus(InvoiceCollectionServiceImpl.RETRY_AFTER.get(0)),
+                "Not enough money", NOW);
+        ArgumentCaptor<Subscription> next = ArgumentCaptor.forClass(Subscription.class);
+        verify(subs).update(next.capture());
+        assertThat(next.getValue().status()).isEqualTo(SubscriptionStatus.PAST_DUE);
+    }
+
+    @Test
+    void aLateBankReturnAfterSuccessReopensTheInvoiceAndRestartsDunning() {
+        InvoicePayment applied = payment(PaymentSource.CARD, 3900, InvoicePayment.APPLIED);
+        when(invoices.findPaymentByReference("pi_ach")).thenReturn(Optional.of(applied));
+        when(invoices.lock("inv_1")).thenReturn(Optional.of(invoice(3900, 0, List.of(
+                payment(PaymentSource.CARD, 3900, InvoicePayment.REVERSED)))));
+
+        assertThat(service.onPaymentIntentResult("pi_ach", false, "account_closed", "The account is closed")).isTrue();
+        verify(invoices).setPaymentStatus(eq(applied.id()), eq(InvoicePayment.REVERSED), contains("returned"));
+        verify(invoices).reopenPaid("inv_1", NOW);
+        verify(invoices).recordAttempt(eq("inv_1"), eq(1), eq(NOW.plus(InvoiceCollectionServiceImpl.RETRY_AFTER.get(0))),
+                contains("returned"), eq(NOW));
+    }
+
+    @Test
+    void requiresActionThenConfirmedSettles() {
+        InvoicePayment waiting = payment(PaymentSource.CARD, 3900, InvoicePayment.ACTION_REQUIRED);
+        when(invoices.findPaymentByReference("pi_3ds")).thenReturn(Optional.of(waiting));
+        assertThat(service.onProcessing("pi_3ds")).isTrue();
+        verify(invoices).setPaymentStatus(waiting.id(), InvoicePayment.PENDING, null);
+
+        Invoice settled = invoice(3900, 3900, List.of(payment(PaymentSource.CARD, 3900, InvoicePayment.APPLIED)));
+        when(invoices.lock("inv_1")).thenReturn(Optional.of(invoice(3900, 0, List.of(waiting))), Optional.of(settled));
+        when(invoices.findById("inv_1")).thenReturn(Optional.of(paidInvoice()));
+        assertThat(service.onPaymentIntentResult("pi_3ds", true, null, null)).isTrue();
+        verify(invoices).setPaymentStatus(waiting.id(), InvoicePayment.APPLIED, null);
+        verify(invoices).markPaid("inv_1", NOW);
+    }
+
+    @Test
+    void aRepeatedSuccessChangesNothingAndAnUnknownIntentIsReported() {
+        InvoicePayment applied = payment(PaymentSource.CARD, 3900, InvoicePayment.APPLIED);
+        when(invoices.findPaymentByReference("pi_done")).thenReturn(Optional.of(applied));
+        assertThat(service.onPaymentIntentResult("pi_done", true, null, null)).isTrue();
+        verify(invoices, never()).setPaymentStatus(any(), any(), any());
+        assertThat(service.onPaymentIntentResult("pi_unknown", true, null, null)).isFalse();
+    }
+
+    private static PaymentMethod bank(boolean verified) {
+        return new PaymentMethod(UUID.randomUUID(), "org_1", "pm_ach_1", PaymentMethodKind.US_BANK_ACCOUNT, null,
+                "6789", null, null, "Chase", "checking", verified, false, true, NOW);
     }
 
     private static Invoice invoice(long due, long paid, List<InvoicePayment> payments) {
