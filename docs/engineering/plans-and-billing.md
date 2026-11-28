@@ -4,7 +4,7 @@ AfroTransact owns the seller and provider **plan catalogue, trials, credits and 
 console › Plans & billing, Seller Center › Plan & billing), and bills plans with **its own invoices**. Stripe Billing is
 removed. Upgrades prorate immediately; downgrades and cadence changes apply at renewal. Invoices are listed and
 printable (HTML printed to PDF by the browser). FBA storage, ads spend and AI credits are metered into invoice lines.
-Collection runs credit, then earnings opt-in, then card, with retry and dunning.
+Collection runs credit, then earnings opt-in, then the saved card or US bank account (ACH), with retry and dunning.
 
 > Parts of this guide below still describe the earlier Stripe Billing design (Stripe sync, Prices, `invoice.created`
 > timing). Where they conflict with the paragraph above, the own-billing design wins; they are being rewritten.
@@ -20,6 +20,29 @@ Stories S292–S299 (epic E14). Code: `java/services/seller` (domain `Plan*`, `T
 `V70__plan_catalog_trials_rewards.sql`, `V71__plan_fee_collection.sql`,
 `V72__reward_rule_comparison_and_window_end.sql`; payments `PlanFeeService`,
 `V14__plan_fee_withholdings.sql`.
+
+## Plan-fee payments: card, US bank debit, 3-D Secure, refunds, disputes
+
+Plan fees are plain PaymentIntents on the platform account (`metadata.purpose=plan_fee`, `invoice_id`), off-session, allowing
+`card` and `us_bank_account`; a card or bank account is saved with a SetupIntent (`purpose=seller_billing`; Financial
+Connections instant verification, microdeposits as the fallback, the online ACH mandate stored as
+`payment_method.stripe_mandate_id`). **Seller has no Stripe webhook for plan fees**: Stripe has two endpoints (payments and
+seller Connect). Their events arrive at payments (`/payments/v1/webhooks/stripe`), which publishes
+`payments.plan_fee.stripe_event` (at.payment.events, outbox) and does not treat them as orders; seller's
+`PlanFeeEventListener` → `PlanFeePaymentService.apply` de-duplicates on the Stripe event id (`stripe_webhook_event`,
+endpoint `PAYMENTS`) in the same transaction.
+
+| Path | What happens |
+|---|---|
+| Card succeeds | `invoice_payment` APPLIED at once; the invoice is paid |
+| Bank debit | PENDING, "Bank debit in progress (up to 4 business days)"; `payment_intent.succeeded` pays, `payment_failed` is a failed attempt (retry 1, 3, 5, 7 days); the job reads the PaymentIntent itself only after 7 days (lost-event backstop) |
+| Late ACH return | `payment_failed` after a success: the payment is REVERSED, the invoice reopens, dunning restarts |
+| 3-D Secure off-session | ACTION_REQUIRED, "Action needed", `seller.billing.payment_action_required` (email + push to the owners); Seller Center **Confirm payment** → `stripe.confirmCardPayment`; settled by the event; unconfirmed after 3 days → a failed attempt and a new PaymentIntent next time |
+| Refund | staff (billing:adjust) full or partial with a reason (`invoice_refund`, Stripe idempotency key from Idempotency-Key); `charge.refunded` settles it and records dashboard refunds; a credit, the invoice stays paid |
+| Dispute | `invoice_dispute` (staff console > Plans & billing > Plan-fee disputes); lost → the payment is reversed and dunning restarts, won → closed |
+
+Migration `V94__plan_fee_payment_events.sql`. Code: payments `PlanFeeEventForwarder`; seller `InvoiceCollectionServiceImpl`,
+`PlanFeePaymentServiceImpl`, `PlanFeePaymentController`, `StripePlanPaymentsAdapter`.
 
 ## Routes dropped from the seller contract
 

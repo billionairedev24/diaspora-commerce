@@ -12,8 +12,8 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * Verifies {@code Stripe-Signature} with stripe-java ({@link Webhook#constructEvent}: HMAC-SHA256 over
  * {@code t.payload}, 5-minute tolerance) against the Connect endpoint's secret, then parses the event body. The seller
- * module has no other Stripe webhook: plan fees are charged by card and their outcome is read back from the
- * PaymentIntent (InvoiceCollectionService), not delivered by a webhook.
+ * module has no other Stripe webhook: plan-fee events (card, US bank debit) arrive at payments' endpoint and reach seller
+ * as payments.plan_fee.stripe_event (PlanFeeEventListener).
  */
 public class StripeWebhookAdapter implements StripeWebhookParser {
 

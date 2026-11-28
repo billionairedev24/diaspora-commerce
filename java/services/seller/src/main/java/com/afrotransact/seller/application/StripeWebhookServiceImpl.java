@@ -11,8 +11,8 @@ import org.springframework.transaction.support.TransactionOperations;
 /**
  * Verifies the signature first (outside any transaction), then claims the event id in the inbox and applies the
  * event in the same transaction, so a crash re-delivers and a duplicate delivery is a no-op. Connect events go to
- * compliance. There is no billing webhook: plan-fee charges are card PaymentIntents whose outcome
- * InvoiceCollectionService reads back from Stripe.
+ * compliance. There is no billing webhook: plan-fee events reach seller from payments' endpoint
+ * (PlanFeeEventListener, PlanFeePaymentService).
  */
 @Service
 class StripeWebhookServiceImpl implements StripeWebhookService {

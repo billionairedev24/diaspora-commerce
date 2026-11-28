@@ -4,7 +4,7 @@
 Stripe can only reach a service through the edge. The Gateway API overlays (infra/k8s/platform/edge/overlays/<env>/routes.yaml)
 must each route the two webhooks to the
 right service, with the prefix rewritten to the service's own path, and must expose nothing else of seller (there is
-no plan-fee "stripe-billing" webhook: plan fees are card-only and read back from the PaymentIntent):
+no plan-fee "stripe-billing" webhook: plan-fee events arrive at the payments endpoint and are handed to seller):
 
     /payments/v1/webhooks              -> payments /v1/webhooks            (STRIPE_WEBHOOK_SECRET)
     /seller/v1/webhooks/stripe-connect -> seller   /v1/webhooks/stripe-connect  (STRIPE_CONNECT_WEBHOOK_SECRET)
