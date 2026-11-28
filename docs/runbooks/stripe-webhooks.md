@@ -182,7 +182,7 @@ To apply a new or changed secret (the same steps as [ovh-production.md](ovh-prod
 3. **Restart the service that reads it.** A running pod keeps the value it started with:
    ```bash
    kubectl -n afrotransact-$ENV rollout restart deploy/payments   # STRIPE_WEBHOOK_SECRET
-   kubectl -n afrotransact-$ENV rollout restart deploy/seller     # STRIPE_CONNECT_WEBHOOK_SECRET, STRIPE_BILLING_WEBHOOK_SECRET
+   kubectl -n afrotransact-$ENV rollout restart deploy/seller     # STRIPE_CONNECT_WEBHOOK_SECRET
    ```
 
 The public routes are in `infra/k8s/platform/edge/overlays/<env>/routes.yaml`.
