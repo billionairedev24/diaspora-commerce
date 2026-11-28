@@ -13,7 +13,15 @@
 #     statement: "…"
 #     expired_at: 2026-12-31
 
-vulnerabilities: []
+vulnerabilities:
+  - id: CVE-2026-84782
+    statement: >-
+      libssl3 3.0.20 in the pinned distroless cc-debian12:nonroot runtime base of afrotransact-core (fixed in Debian
+      3.0.22-1~deb12u2). Not reachable: core is Java and TLS is the JDK's own JSSE; no module loads native OpenSSL
+      (no netty-tcnative, conscrypt or wildfly-openssl). Upstream distroless had not been rebuilt on 2026-11-28 (the
+      nonroot digest equals our pin). Fix: bump the digest in java/Dockerfile as soon as gcr.io publishes a rebuild,
+      then delete this entry. Owner: platform.
+    expired_at: 2026-12-12
 misconfigurations:
   - id: AZU-0057
     # Paths are relative to the scan root: the repository (`trivy fs .`) or infra/ (`trivy config infra`).
