@@ -5,7 +5,8 @@ output "cloud" {
 }
 
 output "cluster" {
-  description = "Cluster name, endpoint and the command to fetch credentials."
+  description = "Cluster name, endpoint and the command to fetch credentials. Sensitive because a cluster module marks part of it; read it with: tofu output -json cluster"
+  sensitive   = true
   value = {
     name               = local.p.cluster.cluster_name
     endpoint           = local.p.cluster.cluster_endpoint
