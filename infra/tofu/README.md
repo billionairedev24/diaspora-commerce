@@ -94,7 +94,7 @@ tofu apply plan.out
 
 After the first apply (full runbook in `docs/runbooks/ovh-production.md`):
 
-1. Download the kubeconfig (`tofu output cluster` prints the hint), set the cluster up (Argo CD, secrets).
+1. Download the kubeconfig (`tofu output -json cluster` prints the hint), set the cluster up (Argo CD, secrets).
 2. Create the databases, roles and extensions on Layerbase **before any service starts**:
    `PGHOST=<layerbase host> PGUSER=<admin> PGPASSWORD=... infra/tofu/scripts/postgres-bootstrap.sh`
    (19 databases; `postgis` in `geo` and `fulfilment`, `btree_gist` in `bookings`, created as the admin because the service roles

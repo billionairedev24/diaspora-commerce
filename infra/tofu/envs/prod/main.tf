@@ -153,7 +153,7 @@ resource "terraform_data" "database_location" {
   lifecycle {
     precondition {
       condition     = local.size.managed_data || var.region == local.layerbase_regions[var.layerbase_region][var.cloud]
-      error_message = "With external data (Layerbase) the region must match layerbase_region (${var.layerbase_region}): that is ${local.layerbase_regions[var.layerbase_region][var.cloud] == "" ? "not available on " : local.layerbase_regions[var.layerbase_region][var.cloud] + " on "}${var.cloud}, but region is ${var.region}."
+      error_message = "With external data (Layerbase) the region must match layerbase_region (${var.layerbase_region}): that is ${local.layerbase_regions[var.layerbase_region][var.cloud] == "" ? "not available on " : "${local.layerbase_regions[var.layerbase_region][var.cloud]} on "}${var.cloud}, but region is ${var.region}."
     }
   }
 }
