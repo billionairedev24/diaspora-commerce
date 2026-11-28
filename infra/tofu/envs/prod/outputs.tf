@@ -15,7 +15,7 @@ output "cluster" {
 }
 
 output "budget" {
-  description = "Monthly cloud budget of this environment (S182; docs/engineering/cloud-cost.md, "Budget alerts")."
+  description = "Monthly cloud budget of this environment (S182; docs/engineering/cloud-cost.md, section Budget alerts)."
   value = {
     name         = local.p.budget.budget_name
     limit        = local.sizing.monthly_budget
