@@ -128,7 +128,7 @@ at:
       orders-topic: ${ORDER_EVENTS_TOPIC:at.order.events}
       bookings-topic: ${BOOKINGS_EVENTS_TOPIC:at.bookings.events}
       offers-topic: ${OFFERS_EVENTS_TOPIC:at.offers.events}
-    # S292–S297: plans, trials, credits and rewards are ours; Stripe Billing executes the charges.
+    # S292–S297: plans, trials, credits, invoices and dunning are ours (no Stripe Billing); plan fees are PaymentIntents.
     billing:
       # Reconcile the plan catalogue with Stripe at startup (adopt make stripe-setup prices, create missing ones).
       sync-on-startup: ${PLAN_SYNC_ON_STARTUP:true}

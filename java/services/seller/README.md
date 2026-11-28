@@ -157,13 +157,19 @@ subscription; failures are retried by a job). Billing page (owner / finance read
 | `GET/POST …/billing/payment-methods`, `POST …/{id}/default`, `DELETE …/{id}` | default can't be removed (`409 seller.default-payment-method`) |
 | `GET …/billing/invoices` | our own invoices (lines, payments, dunning state) |
 | `GET …/billing/invoices/{invoiceId}/document` | owner / finance: printable HTML invoice (Print, Save as PDF); plan invoices are our own, there is no Stripe PDF (`404 seller.invoice-not-found`) |
-| `GET …/billing/plan/preview?planCode=&cadence=` | owner / finance: what `POST …/billing/plan` would do — `IMMEDIATE_UPGRADE` with `amountDueNowCents` from Stripe's invoice preview (`proration_behavior=always_invoice`; 0 during a trial or from a free plan with a trial), or `AT_RENEWAL` with `effectiveAt` = the renewal; nothing changes |
+| `GET …/billing/plan/preview?planCode=&cadence=` | owner / finance: what `POST …/billing/plan` would do — `IMMEDIATE_UPGRADE` with `amountDueNowCents` computed by seller itself (the unused part of the period, no Stripe call; 0 during a trial or from a free plan with a trial), or `AT_RENEWAL` with `effectiveAt` = the renewal; nothing changes |
 | `POST …/billing/setup-intents` | owner: a Stripe SetupIntent (`usage=off_session`) on the organisation's customer (created on first use) → `{customerId, setupIntentId, clientSecret}`; Seller Center confirms it with the Payment Element, then registers the `pm_…` with `POST …/billing/payment-methods` |
 
-`POST /v1/webhooks/stripe-billing` (secret `STRIPE_BILLING_WEBHOOK_SECRET`): only `payment_intent.succeeded` and
-`payment_intent.payment_failed` of plan-fee PaymentIntents (metadata `purpose=plan_fee`) that were still processing when
-charged (bank debit, S298); other events are acknowledged and ignored. Stripe Billing itself is removed; see
-`docs/runbooks/stripe-webhooks.md`. Publicly routed as `/seller/v1/webhooks/stripe-billing`.
+**Plan-fee payments after the charge (no seller Stripe webhook for them).** Plan fees are PaymentIntents on the platform
+account (card or US bank debit, `metadata.purpose=plan_fee`); their Stripe events reach payments' endpoint
+(`/payments/v1/webhooks/stripe`), which hands them to seller as `payments.plan_fee.stripe_event` (Kafka at.payment.events);
+`PlanFeeEventListener` applies each once per Stripe event id: a bank debit is in progress for up to 4 business days and
+settles or fails by event, a late return or a lost dispute reopens the invoice and restarts dunning, a 3-D Secure charge is
+Action needed until the seller confirms it (`POST …/billing/invoices/{invoiceId}/confirm-payment` → client secret for
+`stripe.confirmCardPayment`), `charge.refunded` reconciles refunds, `setup_intent.succeeded` verifies a microdeposit bank
+account and stores its ACH mandate. Staff: `POST …/billing/invoices/{invoiceId}/refunds` (billing:adjust, full or partial,
+reason, Idempotency-Key = Stripe idempotency key), `GET …/billing/invoices/{invoiceId}/adjustments`, `GET /v1/billing/disputes`.
+See `docs/runbooks/stripe-webhooks.md`.
 
 **How the plan is paid (S298).** `GET/PUT /v1/orgs/{orgId}/billing/plan-fee-collection` (owner / finance):
 `EARNINGS_FIRST` ("Pay your plan from your sales": payments withholds each renewal invoice from earnings, the card
@@ -295,7 +301,7 @@ while it is down).
 
 `application.yml` + `application-{local,dev,uat,prod}.yml`. Secrets only from env: `DB_URL`, `DB_USER`,
 `DB_PASSWORD`, `KAFKA_BOOTSTRAP`, `STRIPE_SECRET_KEY`, `STRIPE_CONNECT_WEBHOOK_SECRET`,
-`STRIPE_BILLING_WEBHOOK_SECRET`, `FIELD_ENCRYPTION_KEY` (base64 32 bytes; `FIELD_ENCRYPTION_KEY_ID`, default `k1`).
+`FIELD_ENCRYPTION_KEY` (base64 32 bytes; `FIELD_ENCRYPTION_KEY_ID`, default `k1`).
 Other: `AUTH_ISSUER_URL`, `SELLER_LIVE_COUNTRIES` (`US`), `MEDIA_BASE_URL`, `MEDIA_SERVICE_TOKEN`, `GEO_URL`, `GEO_TIMEOUT`,
 `PICKUP_MAX_RADIUS_MILES` (25),
 `SELLER_JOBS_ENABLED`, `REMINDER_CRON`, `PLAN_CHANGE_CRON`, `ACTIVATION_RETRY_INTERVAL`,

@@ -37,7 +37,7 @@ for h in "$API" "$AUTH"; do
     expect "https://$h/$p" "404" "$(code "https://$h/$p")"
   done
 done
-# seller/v1/webhooks/stripe-billing: removed (no Stripe Billing; plan fees are card-only), must not be routed.
+# seller/v1/webhooks/stripe-billing: removed (no Stripe Billing; plan-fee events use the payments endpoint), must not be routed.
 for p in bookings/modules fulfilment/modules identity/modules payments/modules/payments identity/mcp seller/v1/webhooks/stripe-billing; do
   expect "https://$API/$p" "404" "$(code "https://$API/$p")"
 done

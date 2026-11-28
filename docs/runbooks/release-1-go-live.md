@@ -34,7 +34,7 @@ cd <worktree of origin/release-1>
 | 1 | **GitHub: make `release-1` the default branch.** Settings > General > Default branch | 1 min, but do it first | github.com/billionairedev24/diaspora-commerce/settings | Argo CD generators read `HEAD`; scheduled workflows and `workflow_dispatch` use the default branch's copy |
 | 2 | **OVH US account + one Public Cloud project per env** (`uat` now, `prod` later), API credentials for tofu, ask about the monthly `b3-16` price and the free MKS plan in `US-EAST-VA-1` | hours to days (verification) | us.ovhcloud.com, `https://api.us.ovhcloud.com/createToken/` (rights `GET/POST/PUT/DELETE /cloud/project/<id>/*`, `GET /me`) | `OVH_APPLICATION_KEY`, `OVH_APPLICATION_SECRET`, `OVH_CONSUMER_KEY` (shell only) |
 | 3 | **Layerbase: one Postgres server per env** (never shared: the role and database names are fixed) with 4 databases, admin with CREATEROLE/CREATEDB; **one Valkey per env**. PostGIS and btree_gist are confirmed available (owner). Ask in writing: `max_connections` (need >= 150, plan says 500), TLS/CA, `CONNECTION LIMIT` on roles, Valkey `maxmemory-policy` | hours to a day | layerbase.com | Postgres admin: `EXTERNAL_PG_HOST`, `EXTERNAL_PG_ADMIN_USER`, `EXTERNAL_PG_ADMIN_PASSWORD`; Valkey: `EXTERNAL_REDIS_URL` (`rediss://...`) |
-| 4 | **Stripe** (test mode for uat, live for prod): enable Connect, create keys and the three webhook endpoints AFTER the first deploy (section 6) | 1 h; **live-mode activation can take days** (business verification), start it now for prod | dashboard.stripe.com | `STRIPE_SECRET_KEY` (restricted key), `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_CONNECT_WEBHOOK_SECRET`, `STRIPE_BILLING_WEBHOOK_SECRET` (optional) |
+| 4 | **Stripe** (test mode for uat, live for prod): enable Connect, create keys and the two webhook endpoints AFTER the first deploy (section 6) | 1 h; **live-mode activation can take days** (business verification), start it now for prod | dashboard.stripe.com | `STRIPE_SECRET_KEY` (restricted key), `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_CONNECT_WEBHOOK_SECRET` |
 | 5 | **Resend** (email: OVH blocks SMTP; there is no SendGrid or Twilio in the launch path): verify the domain `afrotransact.com` (DNS records TXT/CNAME at Cloudflare), API key, webhook | DNS propagation 1 h | resend.com, `docs/runbooks/resend-email.md` | `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`; no Resend = no sign-up codes, no staff MFA email |
 | 6 | **Cloudflare**: zone `afrotransact.com` is already active (nameservers at Cloudflare). Create the API token, R2 (2 buckets per env, 2 tokens), the Tunnel is made by tofu (section 5) | 1 h | dash.cloudflare.com | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` (GitHub environment secrets), `R2_*` (5 names) |
 | 7 | **GitHub**: environments `uat` and `prod` (prod: required reviewers, deployment branch `release-1`), variables `CLOUD=ovh`, `REGISTRY_URL=ghcr.io/billionairedev24/diaspora-commerce`; secrets `GITOPS_APP_ID`, `GITOPS_APP_PRIVATE_KEY`; Actions > General > **Allow GitHub Actions to create and approve pull requests**; branch ruleset on `release-1` (required checks in release-1-deploy.md section 10b); repo variable `STORYBOOK_HOST=vercel` | 30 min | repo Settings | the GitOps app must be a bypass actor (it commits the image pins) |
@@ -222,14 +222,13 @@ Not verified: a `docker build` with the in-Docker Maven/Go compile path (needs n
 3. **Stripe, end to end** (mode: **test for uat, live for prod**; click paths and screenshots are in [stripe-webhooks.md](stripe-webhooks.md); this is the order):
    1. Account: dashboard.stripe.com, toggle Test mode (uat). For prod: activate the account (business details, bank account, identity): lead time days.
    2. **Connect**: Settings > Connect > Get started. **Our code uses Connect with sellers as connected accounts, with the platform liable for negative balances and Stripe collecting verification** (see `java/services/seller`, `docs/engineering/payments-idempotency.md`, "Seller accounts and liability"); payouts are separate payouts from the platform to the seller (events `transfer.reversed`, `payout.paid`, `payout.failed`). Prod: complete the platform profile, branding (name, icon, colours, support email/URL), Connect onboarding branding, payout schedule and statement descriptor under Settings > Connect and Settings > Business.
-   3. Payment methods: Settings > Payment methods: enable cards (and US bank debit only if plan fees by ACH are wanted; that is what endpoint 3 is for). Turn on Radar defaults (Radar > Rules: block high-risk, 3D Secure when requested).
+   3. Payment methods: Settings > Payment methods: enable cards and **US bank account (ACH Direct Debit)**: seller plan fees are paid by card, US bank debit or from earnings (the plan SetupIntent offers card and us_bank_account with Financial Connections instant verification and microdeposits as the fallback; the Payment Element shows the online mandate). Financial Connections needs the platform's business details in live mode. Turn on Radar defaults (Radar > Rules: block high-risk, 3D Secure when requested).
    4. Tax: **our tax design is `TAX_PROVIDER=RULES`** (own rate table, no Stripe Tax or Avalara at launch; `docs/runbooks/tax-provider-cutover.md` is the later cut-over). Do **not** enable Stripe Tax for this go-live. Checkout fails unless tax-returns profiles are `ACTIVE` (`ORDERS_TAX_FALLBACK_TO_TABLE=false`): load the tax data per `CheckoutTaxEstimate.md`.
    5. Keys (Developers > API keys): create a **restricted key** (names of permissions to grant: PaymentIntents Write, Charges Read, Refunds Write, Customers Write, PaymentMethods Write, SetupIntents Write, Transfers Write, Payouts Read, Balance Read, Accounts Write (Connect), Account Links Write, Persons Read, External Accounts Read, Disputes Read, Webhook Endpoints Read) into `STRIPE_SECRET_KEY`; publishable key into `STRIPE_PUBLISHABLE_KEY`. Run `make stripe-setup` from a laptop with the key in `.local/secrets.env` to check Connect and the key mode (uat: the key must be a test key; payments refuses live keys outside prod).
    6. **API version**: leave the account's default for the endpoints (snapshot payload); the SDK pins its own version. Do not pick an older one.
-   7. **Webhook endpoints (create AFTER the first deploy, the route must answer)**: three, Snapshot payload:
-      * `https://api-$SUFFIX.afrotransact.com/payments/v1/webhooks/stripe` (prod: `https://api.afrotransact.com/...`), Your account, 15 events: `payment_intent.succeeded`, `payment_intent.amount_capturable_updated`, `payment_intent.payment_failed`, `payment_intent.requires_action`, `payment_intent.canceled`, `charge.refunded`, `charge.dispute.created`, `charge.dispute.closed`, `transfer.reversed`, `payout.paid`, `payout.failed`, `setup_intent.succeeded`, `setup_intent.requires_action`, `payment_method.attached`, `payment_method.detached` -> secret name `STRIPE_WEBHOOK_SECRET`
+   7. **Webhook endpoints (create AFTER the first deploy, the route must answer)**: exactly two, Snapshot payload (there is no plan-fee / "billing" endpoint: no Stripe Billing; seller plan-fee events arrive at the payments endpoint and are handed to seller):
+      * `https://api-$SUFFIX.afrotransact.com/payments/v1/webhooks/stripe` (prod: `https://api.afrotransact.com/...`), Your account, 17 events: `payment_intent.succeeded`, `payment_intent.amount_capturable_updated`, `payment_intent.payment_failed`, `payment_intent.requires_action`, `payment_intent.canceled`, `payment_intent.processing`, `charge.refunded`, `charge.dispute.created`, `charge.dispute.closed`, `charge.dispute.funds_withdrawn`, `transfer.reversed`, `payout.paid`, `payout.failed`, `setup_intent.succeeded`, `setup_intent.requires_action`, `payment_method.attached`, `payment_method.detached` -> secret name `STRIPE_WEBHOOK_SECRET`
       * `.../seller/v1/webhooks/stripe-connect`, **Connected accounts**, 9 events: `account.updated`, `capability.updated`, `person.created`, `person.updated`, `account.external_account.created`, `account.external_account.updated`, `account.external_account.deleted`, `payout.failed`, `account.application.deauthorized` -> `STRIPE_CONNECT_WEBHOOK_SECRET`
-      * `.../seller/v1/webhooks/stripe-billing`, Your account, 2 events: `payment_intent.succeeded`, `payment_intent.payment_failed` -> `STRIPE_BILLING_WEBHOOK_SECRET` (optional)
       (derived from `StripeWebhookAdapter` / `StripeWebhookServiceImpl` in `java/services/payments` and `java/services/seller`.)
    8. Put each `whsec_` into `secrets.local.env`, re-run `./secrets.sh services`, re-encrypt, `apply.sh`, then `kubectl -n afrotransact-$ENV rollout restart deploy/afrotransact-core` (the secret is read at start).
    9. **Verify**: unsigned POST must be 400 (`ENV=$ENV tools/smoke/go-live.sh` does it). With the Stripe CLI: `stripe listen --forward-to https://api-$SUFFIX.afrotransact.com/payments/v1/webhooks/stripe --events payment_intent.succeeded` and `stripe trigger payment_intent.succeeded` (test mode only), or Dashboard > Webhooks > the endpoint > Send test event: expect `2xx`. A real test order with card `4242 4242 4242 4242` must move to paid.
@@ -263,7 +262,7 @@ Not verified: a `docker build` with the in-Docker Maven/Go compile path (needs n
 
 1. Offline gate (section 4.2) green for **both** `uat` and `prod`.
 2. Images built for the head sha, signed, pulled by the cluster (`kubectl -n afrotransact-uat get pods -o jsonpath='{..image}'` shows `@sha256:`).
-3. `ENV=uat tools/smoke/go-live.sh` exits 0 (web, api, auth, three webhook routes 400, route denies 404, CORS, noindex).
+3. `ENV=uat tools/smoke/go-live.sh` exits 0 (web, api, auth, two webhook routes 400, route denies 404, CORS, noindex).
 4. Probes: core readiness UP with 14 modules, `at_module_up` 14 + 7, no CrashLoop, startup under 60 s (`kubectl get pod -w`).
 5. **Resource headroom**: `kubectl top node` after 30 minutes; node memory requests < 70 %; core RSS < 1.8 GiB (`CoreMemoryNearCap` quiet); `kubectl describe node | grep -A12 "Allocated resources"`.
 6. **Stripe test order end to end**: sign up, add address, buy a product with `4242 4242 4242 4242`, the order becomes paid (webhook 2xx in the Stripe dashboard), refund it, onboard a test seller (Connect Express-style onboarding with Stripe test data), payout events recorded.
@@ -276,6 +275,42 @@ Not verified: a `docker build` with the in-Docker Maven/Go compile path (needs n
 13. AI cap: `AI_GLOBAL_DAILY_COST_USD=2.00`, `AI_GLOBAL_DAILY_COST_MAX_USD=20.00`, `AI_CALLER_DAILY_COST_USD=0.50`, `AI_SPEND_CAP_CACHE_SECONDS` default 10 (in `java/apps/core/deploy/helm/values.yaml`); one Lola message works and the daily usage row is below USD 2. `DRIVER_APP_ENABLED` is unset (false): the staff console shows driver modules as dormant.
 14. Connection budget: `select usename, count(*) from pg_stat_activity group by 1` on `core` and `go` stays under each role's limit; total <= 80 steady.
 15. Alerts: the `env=uat` alerts are silent by design; trigger one test alert in prod's Grafana contact point before prod goes live.
+
+### 8.1 Seller plan fees in UAT (Stripe TEST mode only; tick each with the date)
+
+Use a test seller on a paid plan (Plans & billing in Seller Center; staff console > Plans & billing > Seller billing to see
+the invoice and to end the trial with a trial change of 0 days). Stripe test values only, never real ones. Each line: the
+invoice state in Seller Center, the event delivery `2xx` on the payments endpoint in the Stripe dashboard, and the outcome
+of `payments.plan_fee.stripe_event` in seller's logs (`kubectl -n afrotransact-uat logs deploy/afrotransact-core | grep -i
+plan`).
+
+1. **Card succeeds**: card `4242 4242 4242 4242` as the default, end the trial: the invoice is paid at once
+   (`payment_intent.succeeded`).
+2. **Card declined**: card `4000 0000 0000 0341` (attaches, then declines): the invoice stays open, the seller is past due,
+   lastError "Your card was declined", next attempt in 1 day; Retry payment after switching to 4242 pays it.
+3. **3-D Secure off-session**: card `4000 0025 0000 3155`: the invoice shows **Action needed**, the owner gets the "Confirm
+   your plan payment" email, **Confirm payment** opens the bank's check (Complete), the invoice becomes paid when
+   `payment_intent.succeeded` arrives. Failing the check leaves it in Action needed; after 3 days it counts as a failed
+   attempt.
+4. **Bank debit succeeds**: add a US bank account with routing `110000000`, account `000123456789` (or Financial
+   Connections' test institution): verified at once, mandate accepted in the Payment Element; the invoice shows **Payment
+   in progress / Bank debit in progress (up to 4 business days)**, then paid on `payment_intent.succeeded` (test mode
+   settles in minutes).
+5. **Bank debit fails**: account `000111111116`: `payment_intent.payment_failed` arrives, the invoice is open with a failed
+   attempt and the seller is past due.
+6. **Account closed**: account `000111111113`: the debit fails with `account_closed`; same as 5, with the bank's message.
+7. **Late return** (after success): with a paid ACH invoice, send `payment_intent.payment_failed` for its PaymentIntent
+   (Stripe CLI `stripe events resend` of a failure, or a test-clock return where available; UNVERIFIED in test mode): the
+   invoice reopens and dunning restarts.
+8. **Refund**: staff console > Seller billing > Refund on a paid invoice: partial (for example $5), then the rest; a second
+   click of the same dialog returns the same refund; more than is left is refused. A refund made in the Stripe dashboard
+   appears as a DASHBOARD refund after `charge.refunded`. The invoice stays paid.
+9. **Dispute**: pay with card `4000 0000 0000 0259` (disputed as fraudulent): Plan & billing > **Plan-fee disputes** lists it
+   as Open; submit the winning evidence text `winning_evidence` in the Stripe dashboard -> Won (nothing else changes); with
+   `losing_evidence` -> Lost, the invoice reopens and the seller is past due again.
+10. **Duplicate delivery**: resend one plan-fee event from the dashboard: payments answers `200` duplicate, seller's outcome
+    is `duplicate`, nothing changes twice.
+11. Nothing reaches `/seller/v1/webhooks/stripe-billing` (404) and no Stripe destination points at it.
 
 ## 9. PROD: repeat sections 4-7 with the section 3 values, then
 
@@ -513,7 +548,7 @@ Nothing is `Done` until it has been checked where it runs.
 ### 19.5 Payments and money
 
 - [ ] **blocker** `OWNER · Open` Stripe cutover on the **same account** done per [v1-to-v2-migration.md](v1-to-v2-migration.md): inventory, test-mode rehearsal, freeze
-  window, three v2 webhook endpoints (payments, seller Connect, seller plan fees) created fresh by the owner with the SDK API version and
+  window, two v2 webhook endpoints (payments, seller Connect) created fresh by the owner with the SDK API version and
   separate secrets, v1's endpoints stopped and deleted at the freeze step (not before; their URLs and events are written down
   first), the connected-account decision above applied, customer ids and saved cards migrated by the owner. v1 captures immediately,
   so no authorised-but-uncaptured v1 PaymentIntents are expected; keep a one-line check that none exist. v1 has no Stripe Billing

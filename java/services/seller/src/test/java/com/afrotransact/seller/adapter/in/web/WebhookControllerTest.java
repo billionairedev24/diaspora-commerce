@@ -27,8 +27,8 @@ import tools.jackson.databind.json.JsonMapper;
  * The seller module's only Stripe webhook (Connect, docs/runbooks/stripe-webhooks.md), without a database or Docker: the
  * real signature check (stripe-java, 5-minute tolerance) behind the real controller and error advice. Unsigned and badly
  * signed requests answer 400 (never 404: that is the runbook's route check), a correctly signed event is acknowledged.
- * The plan-fee ("stripe-billing") webhook is gone: plan fees are card-only and read back from the PaymentIntent. Inbox
- * and handlers are covered by ComplianceWebhookIT.
+ * The plan-fee ("stripe-billing") webhook is gone: plan-fee events arrive at payments' endpoint and reach seller over Kafka
+ * (PlanFeeEventListener). Inbox and handlers are covered by ComplianceWebhookIT.
  */
 class WebhookControllerTest {
 

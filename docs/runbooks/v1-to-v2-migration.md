@@ -218,14 +218,13 @@ Still open (needed from the owner, with the connected-account decision above):
 
 ## Facts from v2's code that shape the plan
 
-- **Three webhook endpoints, three secrets** (from `WebhookController` in payments and seller, and the edge routes in
+- **Two webhook endpoints, two secrets** (from `WebhookController` in payments and seller, and the edge routes in
   `infra/k8s/platform/edge/overlays/prod/routes.yaml`). Prod host is `https://api.afrotransact.com`.
 
   | # | URL | Service | Secret variable | Stripe "Events from" | Event types handled (from code) |
   |---|---|---|---|---|---|
-  | 1 | `https://api.afrotransact.com/payments/v1/webhooks/stripe` | payments | `STRIPE_WEBHOOK_SECRET` | Your account | `payment_intent.succeeded`, `payment_intent.amount_capturable_updated`, `payment_intent.payment_failed`, `payment_intent.requires_action`, `payment_intent.canceled`, `charge.refunded`, `charge.dispute.created`, `charge.dispute.closed`, `transfer.reversed`, `payout.paid`, `payout.failed`, `setup_intent.succeeded`, `setup_intent.requires_action`, `payment_method.attached`, `payment_method.detached` (`StripeEventHandlers.SUPPORTED`) |
+  | 1 | `https://api.afrotransact.com/payments/v1/webhooks/stripe` | payments | `STRIPE_WEBHOOK_SECRET` | Your account | `payment_intent.succeeded`, `payment_intent.amount_capturable_updated`, `payment_intent.payment_failed`, `payment_intent.requires_action`, `payment_intent.canceled`, `payment_intent.processing`, `charge.refunded`, `charge.dispute.created`, `charge.dispute.closed`, `charge.dispute.funds_withdrawn`, `transfer.reversed`, `payout.paid`, `payout.failed`, `setup_intent.succeeded`, `setup_intent.requires_action`, `payment_method.attached`, `payment_method.detached` (`StripeEventHandlers.SUPPORTED`) |
   | 2 | `https://api.afrotransact.com/seller/v1/webhooks/stripe-connect` | seller | `STRIPE_CONNECT_WEBHOOK_SECRET` | Connected accounts | `account.updated`, `capability.updated`, `person.created`, `person.updated`, `account.external_account.created`, `account.external_account.updated`, `account.external_account.deleted`, `payout.failed`, `account.application.deauthorized` |
-  | 3 | `https://api.afrotransact.com/seller/v1/webhooks/stripe-billing` | seller | `STRIPE_BILLING_WEBHOOK_SECRET` | Your account | `payment_intent.succeeded`, `payment_intent.payment_failed`, only for PaymentIntents whose metadata says `purpose=plan_fee`; everything else gets `200` and is ignored. Needed only if sellers pay their plan by US bank debit. |
 
   Every other event type is stored or ignored with `200`. Use **Snapshot** payloads (not Thin). Each endpoint has its own
   secret; never reuse one. The platform account is the same, so these are **new endpoints** next to v1's, not edits of v1's.
@@ -246,8 +245,8 @@ Still open (needed from the owner, with the connected-account decision above):
   `payments.customer_payment_method`. `customer_id` is the identity user id as text. When a customer has no row, v2 creates a
   **new Stripe Customer** at first use (`WalletSync.ensureCustomer`), so unmapped users get a second customer and lose
   their saved cards.
-- **Seller plan fees** are v2's own PaymentIntents (metadata `purpose=plan_fee`), not Stripe Billing. v1 has no Stripe Billing
-  subscriptions, so nothing needs cancelling.
+- **Seller plan fees** are v2's own PaymentIntents (metadata `purpose=plan_fee`, card or US bank debit), not Stripe Billing,
+  or are taken from earnings; their events use the payments endpoint (no webhook of their own). v1 has no Stripe Billing subscriptions, so nothing needs cancelling.
 
 ## 1. Inventory v1 (T-14 to T-7 days, read-only)
 
@@ -314,19 +313,19 @@ Test mode has its own keys, webhook endpoints and connected accounts, so it neve
 Stripe wiring; the data copy is rehearsed separately (data runbook Parts 2 to 5).
 
 1. Deploy v2 to **UAT** (`release-1-go-live.md`, the dry run) with test keys:
-   `STRIPE_SECRET_KEY` (`sk_test_`), `STRIPE_PUBLISHABLE_KEY`, and three new test webhook secrets.
-2. Create the three test-mode endpoints (Workbench steps in [stripe-webhooks.md](stripe-webhooks.md) section 4), or with the CLI:
+   `STRIPE_SECRET_KEY` (`sk_test_`), `STRIPE_PUBLISHABLE_KEY`, and two new test webhook secrets.
+2. Create the two test-mode endpoints (Workbench steps in [stripe-webhooks.md](stripe-webhooks.md) section 4), or with the CLI:
 
    ```bash
    stripe webhook_endpoints create \
      --url "https://api.test.afrotransact.com/payments/v1/webhooks/stripe" \
      --api-version 2026-09-30.endive \
      -d "enabled_events[]"=payment_intent.succeeded \
-     -d "enabled_events[]"=charge.refunded   # ... all 15 events from the table above
+     -d "enabled_events[]"=charge.refunded   # ... all 17 events from the table above
    # Connect endpoint: add  -d connect=true
    ```
 
-   Copy each returned `secret` straight into the secret store. Check the three routes answer `400` unsigned
+   Copy each returned `secret` straight into the secret store. Check the two routes answer `400` unsigned
    (stripe-webhooks.md section 2) and `2xx` to **Send test event**.
 3. Forward and trigger events locally if you prefer: `stripe listen --forward-to localhost:8103/v1/webhooks/stripe` (use the
    service's local port from `infra/local/PORTS.md`) and `stripe trigger payment_intent.succeeded`. Triggered events refer to
@@ -425,10 +424,9 @@ must not both act on an event. The owner creates v2's endpoints **fresh** (new U
 endpoints at the freeze step, not before**. Creating v2's endpoints early **disabled** and enabling them after the data load
 keeps v2 quiet until it is ready.
 
-1. **T-3 days** (before the freeze): create v2's three **live** endpoints with the API version above and **disabled**
-   (`-d disabled=true` on create or update). Put the three new secrets in the production secret store as
-   `STRIPE_WEBHOOK_SECRET`, `STRIPE_CONNECT_WEBHOOK_SECRET`, `STRIPE_BILLING_WEBHOOK_SECRET` (skip the third if sellers pay
-   plans by card only; empty makes the route answer `400`). Roll payments and seller so they load the secrets.
+1. **T-3 days** (before the freeze): create v2's two **live** endpoints with the API version above and **disabled**
+   (`-d disabled=true` on create or update). Put the two new secrets in the production secret store as
+   `STRIPE_WEBHOOK_SECRET` and `STRIPE_CONNECT_WEBHOOK_SECRET`. Roll payments and seller so they load the secrets.
 
    ```bash
    stripe webhook_endpoints create --api-key "$STRIPE_LIVE_KEY" \
@@ -437,13 +435,13 @@ keeps v2 quiet until it is ready.
      -d "enabled_events[]"=payment_intent.succeeded    # ... the full list per endpoint
    ```
 
-   Disabled endpoints get no events, so v2 sees nothing yet. Confirm the three URLs answer `400` unsigned
+   Disabled endpoints get no events, so v2 sees nothing yet. Confirm the two URLs answer `400` unsigned
    (`stripe-webhooks.md` section 2); a signed test cannot be sent to a disabled endpoint, so the first proof is step 4.
 2. **At T-0 (the freeze step), after section 4:** first copy each v1 endpoint's URL, event list, API version and Connect flag
    into the sheet, then stop and delete v1's endpoints (`stripe webhook_endpoints delete we_V1XXXX`, or the dashboard).
    **Not before the freeze**: v1 is still serving customers until then. Anything not v1's stays enabled. Deleting removes the
    rollback shortcut, so the sheet is how v1's endpoints are recreated (section 11).
-3. **After the data load and verification (section 5):** enable v2's three endpoints (`-d disabled=false`).
+3. **After the data load and verification (section 5):** enable v2's two endpoints (`-d disabled=false`).
 4. **Prove them:** in Workbench use **Send test event** on each endpoint and expect `2xx`. Then make one real small payment and
    a refund (go-live smoke, section 8) and confirm the event was delivered and applied (payments `stripe_event` row, order
    status). Stripe's dashboard shows each delivery and the response code.
@@ -454,7 +452,7 @@ keeps v2 quiet until it is ready.
 
 Which event does what in v2, in one line each, so you know what you are enabling: the payments endpoint confirms payments,
 refunds, disputes and payouts and keeps saved cards in step; the Connect endpoint keeps each seller's verification and
-payout holds in step; the billing endpoint settles plan-fee bank debits.
+payout holds in step; plan-fee bank debits settle through the payments endpoint (handed to seller).
 
 ## 8. Go-live smoke test (inside the freeze, after the endpoints are on)
 
@@ -509,7 +507,7 @@ money that v1 does not know about.
 
 **Before the point of no return (v1 still has all data):**
 
-1. Disable v2's three webhook endpoints (`-d disabled=true`).
+1. Disable v2's two webhook endpoints (`-d disabled=true`).
 2. Recreate v1's webhook endpoints from the sheet (URL, events, API version). They are new endpoints with **new signing
    secrets**, so put the new secrets into v1's configuration and restart v1 before taking it out of maintenance. Re-deliver
    any events from the gap (section 7 step 5).
@@ -540,7 +538,7 @@ Inventory and rehearsal
 - [ ] Freeze minutes measured; window set with 50 percent margin.
 
 Stripe
-- [ ] **blocker** v2 live endpoints created fresh (disabled until the data load) with the SDK API version and three distinct secrets in the secret store.
+- [ ] **blocker** v2 live endpoints created fresh (disabled until the data load) with the SDK API version and two distinct secrets in the secret store.
 - [ ] **blocker** v1 endpoint list (URL, events, API version) recorded in the sheet before deletion at the freeze; nothing else depends on them.
 - [ ] **blocker** Every connected account maps to a v2 org and has a `payments.connected_account` row; types are compatible
   with v2's flows (charge, transfer, refund with reversal, health sync) or have been re-onboarded.

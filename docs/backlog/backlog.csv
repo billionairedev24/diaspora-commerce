@@ -2414,3 +2414,33 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - NOT_FOUND shows a plain message and never blocks saving
 - uat and prod geo refuse to start without a Google key
 - No UI string says unverified","E22","","High","5","geo go web mobile","geo","In Review"
+"S644","Story","Plan-fee Stripe events through the payments endpoint; remove the seller stripe-billing webhook","We do not use Stripe Billing. Stripe has exactly two endpoints: payments (/payments/v1/webhooks/stripe) and seller Connect. Plan-fee events (metadata purpose=plan_fee, SetupIntents purpose=seller_billing) arrive at payments, are never treated as orders and are handed to seller as payments.plan_fee.stripe_event (outbox, at.payment.events); seller applies each once per Stripe event id.","- POST /v1/webhooks/stripe-billing, its route, PUBLIC_POSTS entry and STRIPE_BILLING_WEBHOOK_SECRET are gone (secrets.sh, examples, uat-env, Helm, inventory)
+- payments forwards the 10 plan-fee event types (PlanFeeEventForwarderTest), charges/disputes matched through the intent
+- seller de-duplicates on the Stripe event id (PlanFeePaymentServiceImplTest, PlanFeePaymentsIT)
+- payments endpoint list is 17 events in stripe-webhooks.md, go-live and v1-to-v2
+- go-live smoke checks two webhook routes (400) and the removed path (404)
+- UAT: plan-fee events delivered 2xx on the payments endpoint (go-live 8.1)","E14","","High","5","billing stripe java","billing","In Review"
+"S645","Story","Plan fees by US bank debit (ACH)","Sellers may pay plan fees by card, US bank debit or from earnings. Bank accounts are saved with a SetupIntent (Financial Connections instant verification, microdeposit fallback, online mandate stored); a debit is processing for up to 4 business days and settles by webhook; late returns reopen the invoice and restart dunning.","- SetupIntent and PaymentIntent allow card and us_bank_account (StripePlanPaymentsAdapterTest)
+- registration reads the SetupIntent: verified + mandate; microdeposit accounts verified by setup_intent.succeeded
+- unverified bank accounts are not debited
+- invoice shows Bank debit in progress (up to 4 business days) in Seller Center
+- processing->succeeded and processing->failed (unit + IT)
+- a failure after success reverses the payment, reopens the invoice and restarts dunning (unit + PlanFeePaymentsIT)
+- UAT with test accounts 000123456789 / 000111111116 / 000111111113 (go-live 8.1)","E14","","High","8","billing stripe java web","billing","In Review"
+"S646","Story","Confirm a plan charge that needs 3-D Secure off-session","An off-session plan charge that needs authentication is not a decline: the invoice is Action needed, the owners are emailed, Seller Center offers Confirm payment (stripe.confirmCardPayment with the PaymentIntent client secret) and the invoice settles when the webhook confirms.","- authentication_required -> payment ACTION_REQUIRED, invoice open, no new charge while it waits
+- seller.billing.payment_action_required -> email + push template seller.billing.payment_action_required
+- POST .../confirm-payment returns client secret + payment method (owner/finance; BFF route)
+- requires_action -> confirmed -> paid (unit + IT); unconfirmed after 3 days counts as a failed attempt
+- Seller Center Action needed notice and Confirm payment (billing-plan-payments.test.tsx)
+- UAT with 4000002500003155 (go-live 8.1)","E14","","High","5","billing stripe java web notifications","billing","In Review"
+"S647","Story","Disputes on plan fees","Chargebacks and ACH unauthorised returns on plan fees are recorded on the invoice, listed for staff, and decided: lost reopens the amount and restarts dunning, won closes the dispute.","- charge.dispute.created / funds_withdrawn / closed recorded in invoice_dispute
+- lost reverses the payment, reopens the invoice, restarts dunning; won changes nothing (unit + PlanFeePaymentsIT)
+- staff console Plans & billing > Plan-fee disputes (open, won, lost; BFF GET /v1/staff/billing/disputes)
+- seller.billing.dispute_opened / dispute_closed published
+- UAT with 4000000000000259 winning_evidence / losing_evidence (go-live 8.1)","E14","","Medium","5","billing stripe java web","billing","In Review"
+"S648","Story","Refunds of plan fees from the staff console","Staff with billing:adjust refund a plan fee in full or in part with a reason; the refund goes through Stripe with an idempotency key and is a credit on the invoice; refunds made in the Stripe dashboard are reconciled from charge.refunded.","- POST .../invoices/{invoiceId}/refunds: billing:adjust, reason code (OTHER needs a note), audited requester, Idempotency-Key = Stripe key, a retry returns the first refund
+- never more than what is left of the payment (422)
+- charge.refunded settles pending refunds and records dashboard refunds
+- the invoice stays paid; GET .../adjustments lists refunds and disputes
+- staff console Refund dialog (plans-billing.test.tsx), BFF route test
+- UAT partial then full refund, dashboard refund (go-live 8.1)","E14","","Medium","5","billing stripe java web","billing","In Review"

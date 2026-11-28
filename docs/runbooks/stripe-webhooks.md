@@ -1,6 +1,6 @@
 # Stripe webhooks: set-up, verification and troubleshooting
 
-THE reference for the three Stripe webhook endpoints of AfroTransact: why each exists, how to create it in the Stripe
+THE reference for the two Stripe webhook endpoints of AfroTransact: why each exists, how to create it in the Stripe
 dashboard (both the current **Workbench** layout and the older **Developers > Webhooks** layout), which events to select,
 where the signing secret goes, how to check that it works, and what to do when it does not. It covers UAT
 (`https://api-uat.afrotransact.com` is the example host everywhere below), PROD (`https://api.afrotransact.com`) and your laptop.
@@ -16,24 +16,38 @@ event carries a `Stripe-Signature` header; the service recomputes the signature 
 (`whsec_...`) and answers `400` when it does not match. So an endpoint needs two things: a **route** (Stripe can reach
 the service) and the **secret** (the service can verify it).
 
-There are three endpoints, one per signing secret. Stripe gives every endpoint its own secret, so one endpoint = one
+There are exactly two endpoints, one per signing secret. Stripe gives every endpoint its own secret, so one endpoint = one
 variable. Never put one secret into two variables.
 
 | # | Endpoint (public URL) | Service | Secret variable | What it does | What breaks without it |
 |---|---|---|---|---|---|
-| 1 | `/payments/v1/webhooks/stripe` | payments | `STRIPE_WEBHOOK_SECRET` | Payment, refund, dispute, payout and saved-payment-method events of the **platform** account. | **Payments never confirm**: an order stays "payment pending", refunds, disputes and payouts are not recorded, saved cards do not appear. Required. |
+| 1 | `/payments/v1/webhooks/stripe` | payments | `STRIPE_WEBHOOK_SECRET` | Payment, refund, dispute, payout and saved-payment-method events of the **platform** account, **including seller plan fees** (card or US bank debit; handed to seller). | **Payments never confirm**: an order stays "payment pending", refunds, disputes and payouts are not recorded, saved cards do not appear. Required. |
 | 2 | `/seller/v1/webhooks/stripe-connect` | seller | `STRIPE_CONNECT_WEBHOOK_SECRET` | Events of **connected accounts** (the sellers): verification status, capabilities, payout bank, failed payouts, disconnects. Drives the compliance status, reminders and payout holds. | Seller onboarding never completes (status stuck on "verifying"), payout holds and listing hiding do not react to Stripe. Required for sellers. |
-| 3 | `/seller/v1/webhooks/stripe-billing` | seller | `STRIPE_BILLING_WEBHOOK_SECRET` | The outcome of **plan-fee PaymentIntents** that were still processing when we charged (a US bank debit settles days later). | Only those plan fees: an invoice paid by bank debit stays "processing" until the retry job notices. **Optional** for a test environment that pays plan fees by card only. |
 
-**About "billing".** Stripe Billing (Stripe subscriptions and invoices) was replaced by our own billing: our own
-invoices, charged with PaymentIntents. The endpoint name is historical. The code (`StripeWebhookAdapter`,
-`StripeWebhookServiceImpl`) acts on exactly two events there, `payment_intent.succeeded` and
-`payment_intent.payment_failed`, and only for PaymentIntents whose metadata says `purpose=plan_fee`. It ignores every
-other event type with a `200`. The old `invoice.*`, `credit_note.*` and `customer.subscription.*` events are **not**
-handled any more: do not select them.
+**Seller plan fees go through endpoint 1; there is no "billing" endpoint.** We do not use Stripe Billing (no Stripe
+subscriptions, invoices or prices): plans, invoices and dunning are our own. Plan fees are paid by **card, US bank debit
+(ACH) or from the seller's earnings**, with plain PaymentIntents on the platform account (`metadata.purpose=plan_fee`) and
+SetupIntents to save the card or bank account (`metadata.purpose=seller_billing`). Their events arrive at endpoint 1;
+payments recognises them (a charge or dispute without the purpose is matched through its PaymentIntent), never treats them
+as orders, and hands each one to seller as `payments.plan_fee.stripe_event` (Kafka `at.payment.events`, transactional
+outbox); seller applies it once per Stripe event id. What they do:
 
-The platform webhook (1) and the seller webhooks (2, 3) are separate on purpose: different services, different secrets,
-different Stripe "Listen to" scope.
+| Event (plan fee) | Effect in seller |
+|---|---|
+| `payment_intent.processing` | a bank debit in flight ("Bank debit in progress (up to 4 business days)"), or a confirmed 3-D Secure charge |
+| `payment_intent.succeeded` | the invoice is paid; dunning ends |
+| `payment_intent.payment_failed`, `payment_intent.canceled` | a failed attempt under the dunning schedule; **after** a success (a late ACH return) the payment is reversed, the invoice reopens and dunning restarts |
+| `payment_intent.requires_action` | "Action needed": the owners are emailed and confirm it in Plan & billing (3-D Secure) |
+| `charge.refunded` | staff refunds settle; a refund made in the Stripe dashboard is recorded as a credit on the invoice |
+| `charge.dispute.created`, `charge.dispute.funds_withdrawn`, `charge.dispute.closed` | listed for staff (Plans & billing > Plan-fee disputes); lost reopens the invoice and restarts dunning, won closes it |
+| `setup_intent.succeeded` | a bank account verified by microdeposits becomes usable; its online ACH mandate is stored |
+
+The former seller endpoint `/seller/v1/webhooks/stripe-billing` (`STRIPE_BILLING_WEBHOOK_SECRET`) is **removed**. If an
+older Stripe account still has that "plan fees" destination, **delete it** (it now gets `404`). Do not create endpoints for
+`invoice.*`, `credit_note.*` or `customer.subscription.*`.
+
+The platform webhook (1) and the seller Connect webhook (2) are separate on purpose: different services, different
+secrets, different Stripe "Listen to" scope.
 
 ## 2. Quick route check (no Stripe needed)
 
@@ -41,12 +55,12 @@ An **unsigned** `POST` must answer **400** (route exists, signature enforced). `
 means the service is down, a certificate error means TLS is not ready.
 
 ```bash
-for p in payments/v1/webhooks/stripe seller/v1/webhooks/stripe-connect seller/v1/webhooks/stripe-billing; do
+for p in payments/v1/webhooks/stripe seller/v1/webhooks/stripe-connect; do
   printf '%s -> ' "$p"
   curl -s -o /dev/null -w '%{http_code}\n' -X POST "https://api-uat.afrotransact.com/$p" \
     -H 'Content-Type: application/json' -d '{}'
 done
-# expected: three times 400
+# expected: twice 400 (and seller/v1/webhooks/stripe-billing answers 404: it is removed)
 ```
 
 `ENV=uat tools/smoke/go-live.sh` (or `ENV=prod`) runs the same check, read-only.
@@ -72,7 +86,7 @@ without a secret answers `400` too). That is proven by a **Send test event** ret
 5. **Check it from your laptop:** `make stripe-setup` reads `.local/secrets.env` (or the environment), verifies that the key is a
    test key and matches the publishable key, that Connect is enabled, and that Stripe accepts the seller account settings
    (it creates and deletes a throwaway test account). Fix whatever it reports before creating webhooks.
-6. **The server exists and the three URLs answer 400** (section 2). You can only create the endpoints after the first
+6. **The server exists and the two URLs answer 400** (section 2). You can only create the endpoints after the first
    deploy because Stripe may validate that the URL is reachable and you need the final domain.
 
 ## 4. Create the endpoints
@@ -97,7 +111,7 @@ URL: `https://api-uat.afrotransact.com/payments/v1/webhooks/stripe` (real enviro
 | Listen to / Events from | **Your account** |
 | Payload style | **Snapshot** (NOT *Thin*) |
 | API version | the default shown (the account's version); do not pick an older one |
-| Events (15) | `payment_intent.succeeded`, `payment_intent.amount_capturable_updated`, `payment_intent.payment_failed`, `payment_intent.requires_action`, `payment_intent.canceled`, `charge.refunded`, `charge.dispute.created`, `charge.dispute.closed`, `transfer.reversed`, `payout.paid`, `payout.failed`, `setup_intent.succeeded`, `setup_intent.requires_action`, `payment_method.attached`, `payment_method.detached` |
+| Events (17) | `payment_intent.succeeded`, `payment_intent.amount_capturable_updated`, `payment_intent.payment_failed`, `payment_intent.requires_action`, `payment_intent.canceled`, `payment_intent.processing`, `charge.refunded`, `charge.dispute.created`, `charge.dispute.closed`, `charge.dispute.funds_withdrawn`, `transfer.reversed`, `payout.paid`, `payout.failed`, `setup_intent.succeeded`, `setup_intent.requires_action`, `payment_method.attached`, `payment_method.detached` |
 
 **Workbench:** Developers > **Webhooks** tab > **Add destination** > *Events from*: **Your account** > *Payload style*:
 **Snapshot** > *API version*: leave the default > **Select events**: use the search box, tick each event above (the dialog also
@@ -130,24 +144,10 @@ URL: `https://api-uat.afrotransact.com/seller/v1/webhooks/stripe-connect` (real:
 `account.application.deauthorized` is the event a connected account sends when it disconnects from the platform; it is
 listed under connected-account events, so use the search box if you cannot find it in the group tree.
 
-### 4.3 Endpoint 3: seller plan-fee webhook (`STRIPE_BILLING_WEBHOOK_SECRET`), optional
+### There is no third endpoint
 
-Create it if sellers may pay their plan by **US bank debit** (a PaymentIntent that is `processing` for days). Skip it for a
-test environment that uses cards only; `STRIPE_BILLING_WEBHOOK_SECRET` may then stay empty and the endpoint answers `400`
-to everything, which is harmless.
-
-URL: `https://api-uat.afrotransact.com/seller/v1/webhooks/stripe-billing` (real: `https://api.<base>/seller/v1/webhooks/stripe-billing`).
-
-| Setting | Value |
-|---|---|
-| Listen to / Events from | **Your account** |
-| Payload style | **Snapshot** |
-| API version | the default shown |
-| Events (2) | `payment_intent.succeeded`, `payment_intent.payment_failed` |
-
-Click path as in 4.1 with these settings; name it `afrotransact-seller-plan-fees`. Endpoint 1 listens to the same two
-event types: that is correct and intended. Stripe sends each event to every endpoint that selected it, each with its own
-signature; payments ignores plan-fee intents it has no payment for, seller ignores everything that is not a plan fee.
+Seller plan fees (card and US bank debit) use endpoint 1: `payment_intent.processing` and `charge.dispute.funds_withdrawn`
+are on its list for them (section 1). Enable **US bank account** in Settings > Payment methods for plan fees by ACH.
 
 ### Payload style: Snapshot, never Thin
 
@@ -162,7 +162,6 @@ The signing secret is shown on the endpoint's page (**Reveal**). One endpoint, o
 |---|---|---|
 | 1 platform payments | `STRIPE_WEBHOOK_SECRET` | payments |
 | 2 seller Connect | `STRIPE_CONNECT_WEBHOOK_SECRET` | seller |
-| 3 seller plan fees | `STRIPE_BILLING_WEBHOOK_SECRET` | seller |
 
 ## 5. How the secret reaches the pod, and how to apply a change
 
@@ -195,10 +194,10 @@ HMACs. Set both keys explicitly **before** the first rotation of `STRIPE_WEBHOOK
 
 ## 6. Verify that each endpoint works
 
-1. **Route:** section 2, all three answer `400` to an unsigned `POST`.
+1. **Route:** section 2, both answer `400` to an unsigned `POST`.
 2. **Stripe sends a test event** (this is the proof that the secret is right):
    * Workbench: Developers > Webhooks > click the destination > **Send test event** (top right) > pick an event type from its
-     list (for example `payment_intent.succeeded` for endpoints 1 and 3, `account.updated` for 2) > **Send test event**.
+     list (for example `payment_intent.succeeded` for endpoint 1, `account.updated` for 2) > **Send test event**.
    * Older layout: Developers > Webhooks > click the endpoint > **Send test webhook** > pick the event type > **Send test webhook**.
    * Open the **Event deliveries** (older: **Attempts**) tab: the attempt must show **200**. A test event has no real
      payment or account behind it: the service stores and acknowledges it (`outcome` `ignored`, or `unknown account`), which is
@@ -220,7 +219,7 @@ commands, event lists and ports are in [local-development.md](../engineering/loc
 flow") and [secrets-and-configuration.md](../engineering/secrets-and-configuration.md) (Stripe, "Webhooks locally"). The
 rules are the same as here: Snapshot (never `--all-thin`), `--events` with the lists from section 4, the secret printed by each listener
 goes into the matching variable of `.local/secrets.env`, then restart the service. Locally the routes are the service ports
-directly: `localhost:8105/v1/webhooks/stripe` (payments) and `localhost:8106/v1/webhooks/stripe-connect|stripe-billing` (seller).
+directly: `localhost:8105/v1/webhooks/stripe` (payments) and `localhost:8106/v1/webhooks/stripe-connect` (seller).
 
 ## 8. Live mode (prod) differences
 
@@ -254,12 +253,13 @@ Rotate after a leak (a secret pasted in chat, a log or a screenshot) immediately
 | `404` | The route is missing or the URL is wrong: a typo, `/v1/webhooks/stripe` without the `/payments` or `/seller` prefix | Use the URLs of the checklist. The edge overlay `routes.yaml` must contain the route, then sync Argo CD (`edge-$ENV`). Run `python3 tools/ci/check_webhook_routes.py` |
 | `400` on **unsigned** curl | Expected. It is the success answer of the quick route check | nothing |
 | `400` on a **Stripe** delivery (`*.invalid-signature`) | Wrong secret (the endpoint's secret is in another variable, or an old value), wrong **mode** (test secret on a live endpoint or the reverse), the secret was changed but the pod not restarted, an empty secret, or a **Thin** payload | Reveal the endpoint's secret again and compare it with the variable of its row in section 4; section 5 step 3 (restart); check the Test/Live toggle; recreate the destination with **Snapshot** |
-| `401` / `403` | Something in front of the service demands a login: a proxy or WAF rule, or a path other than the three webhook paths (the seller service answers `401` to every other path) | Check the exact path. The api host is proxied through Cloudflare (Tunnel): a WAF or rate-limit rule must not match these paths (`infra/cloudflare/zone.tf`) |
-| `502` / `503` | The service pod is down or restarting (`CrashLoopBackOff`), or (billing endpoint) `503 retry later` while a plan-fee settlement failed transiently | `kubectl -n afrotransact-$ENV get pods`, `logs deploy/afrotransact-core`; Stripe retries automatically |
+| `401` / `403` | Something in front of the service demands a login: a proxy or WAF rule, or a path other than the two webhook paths (the seller service answers `401` to every other path) | Check the exact path. The api host is proxied through Cloudflare (Tunnel): a WAF or rate-limit rule must not match these paths (`infra/cloudflare/zone.tf`) |
+| `502` / `503` | The service pod is down or restarting (`CrashLoopBackOff`) | `kubectl -n afrotransact-$ENV get pods`, `logs deploy/afrotransact-core`; Stripe retries automatically |
 | Timeout (no answer in time) | Core overloaded or scaled to 0 | `kubectl -n afrotransact-$ENV get deploy`; scale back to 1; Stripe retries |
 | Certificate error / "could not verify the TLS certificate" in Stripe | The api host is not proxied by Cloudflare or the zone SSL mode is wrong | the `api-<env>` record must be the proxied CNAME to the tunnel (go-live section 5.6); SSL mode Full (strict) |
 | "Failed to connect" / DNS error | `api-<env>.afrotransact.com` does not resolve | the tunnel CNAME made by `infra/cloudflare` (go-live section 5.6) |
-| Same event twice | Stripe retries, and endpoints 1 and 3 both receive `payment_intent.*` | Harmless: each service stores the event id once and answers `200` with `duplicate` |
+| Same event twice | Stripe retries | Harmless: each service stores the event id once and answers `200` with `duplicate` |
+| `404` on `/seller/v1/webhooks/stripe-billing` | The plan-fee endpoint was removed (plan-fee events now arrive at endpoint 1) | Delete that destination in the Stripe dashboard; nothing replaces it |
 | Stripe says the endpoint is **failing** / **disabled** | Deliveries failed for days (Stripe retries with backoff, in live mode for up to 3 days, in test mode for a few hours), then emails you and may disable the endpoint | Fix the cause above, then in the endpoint page **Enable** it (and, for missed events, **Resend** them from the Events tab; they are idempotent) |
 | Payments stay "pending", sellers stay "verifying", but deliveries show `200` | The event type is not selected on the endpoint, or it belongs to the other "Listen to" scope (Connect events on a *Your account* endpoint) | Compare the endpoint's events and *Listen to* with section 4 |
 | Test event returns `200` but nothing changes | Test events carry fake ids, so there is nothing to update | Do the real end-to-end check in section 6 |
@@ -270,11 +270,10 @@ UAT shown; prod uses `api.afrotransact.com`.
 
 | Endpoint | URL | Listen to | Events | Secret variable | Needed |
 |---|---|---|---|---|---|
-| Payments (platform) | `https://api-uat.afrotransact.com/payments/v1/webhooks/stripe` | Your account | 15 (section 4.1) | `STRIPE_WEBHOOK_SECRET` | **Required** |
+| Payments (platform) | `https://api-uat.afrotransact.com/payments/v1/webhooks/stripe` | Your account | 17 (section 4.1) | `STRIPE_WEBHOOK_SECRET` | **Required** |
 | Seller Connect | `https://api-uat.afrotransact.com/seller/v1/webhooks/stripe-connect` | Connected accounts | 9 (section 4.2) | `STRIPE_CONNECT_WEBHOOK_SECRET` | **Required** for sellers |
-| Seller plan fees | `https://api-uat.afrotransact.com/seller/v1/webhooks/stripe-billing` | Your account | 2 (section 4.3) | `STRIPE_BILLING_WEBHOOK_SECRET` | Optional (bank-debit plan fees only) |
 
-All three: **Snapshot** payload, default API version, in the mode (Test or Live) that matches the environment.
+Both: **Snapshot** payload, default API version, in the mode (Test or Live) that matches the environment.
 
 ## Where this is defined (for maintainers)
 
@@ -284,7 +283,7 @@ All three: **Snapshot** payload, default API version, in the mode (Test or Live)
 | Route guard | `python3 tools/ci/check_webhook_routes.py` (part of `make env-check`) |
 | Signature check | payments `StripeSignatureVerifier`; seller `StripeWebhookAdapter` (stripe-java `Webhook.constructEvent`, 5 minute timestamp tolerance (payments: `at.payments.stripe.webhook-tolerance-seconds`, default 300), HMAC-SHA256) |
 | Idempotency | both store the event id once (`stripe_webhook_event` / payments inbox); duplicates answer `200` |
-| Event handlers | payments `StripeEventHandlers.SUPPORTED`; seller `ComplianceServiceImpl` (Connect) and `StripeWebhookAdapter` (plan-fee PaymentIntents) |
-| Security | `/v1/webhooks/stripe` (payments) and `/v1/webhooks/stripe-connect`, `/stripe-billing` (seller) are the only unauthenticated `POST`s of those services besides `/v1/launch-list`; signature is the authentication |
+| Event handlers | payments `StripeEventHandlers.SUPPORTED`; seller `ComplianceServiceImpl` (Connect). Plan fees: no webhook, `InvoiceCollectionServiceImpl` reads a processing PaymentIntent back |
+| Security | `/v1/webhooks/stripe` (payments) and `/v1/webhooks/stripe-connect` (seller) are the only unauthenticated `POST`s of those services besides `/v1/launch-list`; signature is the authentication |
 | Network | the chart's NetworkPolicy admits the `ingress` namespace; Cloudflare WAF/rate-limit rules in `infra/cloudflare/zone.tf` match none of these paths |
 | Smoke check | `tools/smoke/go-live.sh` (unsigned POST to each URL, expects 400) |

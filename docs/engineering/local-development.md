@@ -325,13 +325,11 @@ Stripe's test redirect pages. Orders are authorised (manual capture) and capture
 1. **Stripe Dashboard, test mode:** API keys → `.local/secrets.env` (`STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`);
    **Connect → Get started** (enables connected accounts; no platform profile is needed: sellers' accounts are
    Stripe-liable, see `payments-idempotency.md` → Seller accounts and liability).
-2. `make stripe-setup`: checks the keys, Connect and the seller account settings. It creates no plan Prices: the seller service owns the plan catalogue and syncs a Product per plan and a Price per plan version and cadence to Stripe when it starts or a plan is published (staff console › Plans & billing › Sync with Stripe); Prices an older `make stripe-setup` made are adopted.
-3. Webhooks (what each endpoint is for, and the deployed equivalent: [stripe-webhooks](../runbooks/stripe-webhooks.md)), three terminals (each prints a `whsec_…`; on one machine it is usually the same secret for all three):
+2. `make stripe-setup`: checks the keys, Connect and the seller account settings. It creates no plan Prices: plans, invoices and dunning are the seller service's own (no Stripe Billing objects); plan fees are plain PaymentIntents.
+3. Webhooks (what each endpoint is for, and the deployed equivalent: [stripe-webhooks](../runbooks/stripe-webhooks.md)), two terminals (each prints a `whsec_…`; on one machine it is usually the same secret for both). Seller plan fees (card, US bank debit) need no third: their events reach payments and are handed to seller over Kafka:
    ```bash
    stripe listen --forward-to localhost:8105/v1/webhooks/stripe                   # STRIPE_WEBHOOK_SECRET
    stripe listen --forward-connect-to localhost:8106/v1/webhooks/stripe-connect   # STRIPE_CONNECT_WEBHOOK_SECRET
-   stripe listen --events payment_intent.succeeded,payment_intent.payment_failed \
-     --forward-to localhost:8106/v1/webhooks/stripe-billing                       # STRIPE_BILLING_WEBHOOK_SECRET
    ```
    Put them in `.local/secrets.env`; `make secrets-check`; then `make up` (or `tools/dev/local.sh restart payments seller gateway-bff`).
    For a quick run add `SETTLEMENT_HOLD=2m` to `.local/secrets.env` so sellers' money is transferred minutes after
