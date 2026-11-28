@@ -138,3 +138,9 @@ variable "google_site_verification" {
     error_message = "google_site_verification is the bare token (letters, digits, - and _), without the google-site-verification= prefix."
   }
 }
+
+variable "dns_record_tags" {
+  description = "Tag the DNS records (env, managed-by). Needs a paid zone plan: on the Free plan Cloudflare refuses records with tags (error 9300, quota 0)."
+  type        = bool
+  default     = false
+}
