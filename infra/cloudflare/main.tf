@@ -66,7 +66,8 @@ locals {
   # Web origins that may call the private bucket from a browser (presigned PUT into quarantine/): the three web apps.
   web_origins = [for k in ["storefront", "seller-center", "staff-console"] : "https://${local.hosts[k]}"]
 
-  tags = ["env:${var.environment}", "managed-by:opentofu"]
+  # DNS record tags are a paid-plan feature (the Free plan quota is 0 and the API refuses the record): off unless dns_record_tags.
+  tags = var.dns_record_tags ? ["env:${var.environment}", "managed-by:opentofu"] : null
 }
 
 data "cloudflare_zone" "this" {
